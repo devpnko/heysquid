@@ -1,0 +1,47 @@
+# 환경 변수 (토큰 포함)
+.env
+telecode/.env
+
+# Python 캐시
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 가상환경
+venv/
+
+# 작업 잠금 파일
+data/working.json
+data/executor.lock
+data/new_instructions.json
+
+# 텔레그램 메시지 데이터
+data/telegram_messages.json
+
+# 워크스페이스 데이터 (로컬)
+data/workspaces.json
+
+# 작업 메모리 폴더 (로컬 데이터)
+tasks/
+
+# 워크스페이스 컨텍스트 (로컬)
+workspaces/
+
+# 로그 파일
+logs/
+*.log
+
+# IDE 설정
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS 파일
+.DS_Store
+Thumbs.db
+
+# 레거시 폴더
+mybot_ver2*/

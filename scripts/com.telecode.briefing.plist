@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.telecode.briefing</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/python3</string>
+        <string>/Users/hyuk/ohmyclawbot/telecode/briefing.py</string>
+    </array>
+
+    <!-- 매일 오전 9시 실행 -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>9</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/hyuk/ohmyclawbot</string>
+
+    <key>StandardOutPath</key>
+    <string>/Users/hyuk/ohmyclawbot/logs/briefing.stdout.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/hyuk/ohmyclawbot/logs/briefing.stderr.log</string>
+
+    <!-- 환경변수 -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin:/Users/hyuk/.local/bin</string>
+        <key>HOME</key>
+        <string>/Users/hyuk</string>
+        <key>LANG</key>
+        <string>ko_KR.UTF-8</string>
+    </dict>
+</dict>
+</plist>

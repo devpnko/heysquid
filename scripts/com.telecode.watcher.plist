@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.telecode.watcher</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/hyuk/ohmyclawbot/venv/bin/python3</string>
+        <string>/Users/hyuk/ohmyclawbot/telecode/telegram_listener.py</string>
+    </array>
+
+    <!-- listener.py를 상시 실행 데몬으로 유지 -->
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/hyuk/ohmyclawbot</string>
+
+    <key>StandardOutPath</key>
+    <string>/Users/hyuk/ohmyclawbot/logs/listener.stdout.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/hyuk/ohmyclawbot/logs/listener.stderr.log</string>
+
+    <!-- 환경변수 -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin:/Users/hyuk/.local/bin:/Users/hyuk/.npm-global/bin</string>
+        <key>HOME</key>
+        <string>/Users/hyuk</string>
+        <key>LANG</key>
+        <string>ko_KR.UTF-8</string>
+        <key>PYTHONUNBUFFERED</key>
+        <string>1</string>
+    </dict>
+</dict>
+</plist>
