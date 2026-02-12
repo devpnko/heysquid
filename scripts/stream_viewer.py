@@ -72,7 +72,9 @@ def main():
                             print(f"\033[35m[TOOL]\033[0m 📂 Glob → {pat}")
                         elif name == "Task":
                             desc = inp.get("description", "")
-                            print(f"\033[35m[TOOL]\033[0m 🤖 Task → {desc}")
+                            agent_type = inp.get("subagent_type", "")
+                            agent_name = agent_type if agent_type else "agent"
+                            print(f"\033[34m[AGENT:{agent_name}]\033[0m 🔍 시작 — \"{desc}\"")
                         else:
                             detail = str(inp)
                             if len(detail) > 80:
@@ -80,8 +82,16 @@ def main():
                             print(f"\033[35m[TOOL]\033[0m {name} → {detail}")
 
             elif t == "user":
-                # tool result (보통 길어서 생략)
-                pass
+                # tool_result에서 에이전트 완료 감지
+                content = d.get("message", {}).get("content", [])
+                for c in content:
+                    if isinstance(c, dict) and c.get("type") == "tool_result":
+                        text = c.get("content", "")
+                        if isinstance(text, str) and len(text) > 0:
+                            summary = text[:100].replace("\n", " ")
+                            if len(text) > 100:
+                                summary += "..."
+                            print(f"\033[34m[AGENT]\033[0m ✅ 완료 — {summary}")
 
             elif t == "result":
                 cost = d.get("total_cost_usd", 0)

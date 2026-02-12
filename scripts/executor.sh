@@ -143,7 +143,7 @@ VIEWER="$ROOT/scripts/stream_viewer.py"
 log "[INFO] Attempting to resume most recent session..."
 EC=0
 "$CLAUDE_EXE" -p -c --dangerously-skip-permissions \
-    --model sonnet \
+    --model opus \
     --output-format stream-json --verbose \
     --append-system-prompt-file "$SPF" \
     "$PROMPT" \
@@ -154,7 +154,7 @@ if [ "$EC" -ne 0 ]; then
     log "[INFO] No previous session found. Starting new session..."
     EC=0
     "$CLAUDE_EXE" -p --dangerously-skip-permissions \
-        --model sonnet \
+        --model opus \
         --output-format stream-json --verbose \
         --append-system-prompt-file "$SPF" \
         "$PROMPT" \
