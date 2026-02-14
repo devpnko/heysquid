@@ -10,6 +10,9 @@
 
 set -euo pipefail
 
+# Claude Code 중첩 세션 방지 해제 (executor는 독립 세션이므로)
+unset CLAUDECODE 2>/dev/null || true
+
 # 경로 설정
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(dirname "$SCRIPT_DIR")"
@@ -62,8 +65,8 @@ if pgrep -f "claude.*append-system-prompt-file" > /dev/null 2>&1; then
     # 프로세스 발견 - 로그 파일 갱신 시각 확인 (10분 이상 유휴 시 스탈)
     if [ -f "$LOG" ]; then
         LOG_AGE=$(( $(date +%s) - $(stat -f %m "$LOG" 2>/dev/null || echo 0) ))
-        if [ "$LOG_AGE" -gt 600 ]; then
-            log "[STALE] Claude idle >10min. Force-killing..."
+        if [ "$LOG_AGE" -gt 1200 ]; then
+            log "[STALE] Claude idle >20min. Force-killing..."
             pkill -f "claude.*append-system-prompt-file" 2>/dev/null || true
             rm -f "$LOCKFILE" 2>/dev/null
             log "[STALE] Cleared stale state. Proceeding..."
@@ -108,6 +111,17 @@ log "[NEW_MESSAGE] New messages found. Starting Claude Code..."
 echo "$(date '+%Y-%m-%d %H:%M:%S')" > "$LOCKFILE"
 log "Lock file created: $LOCKFILE"
 
+# 착수 알림 전송
+cd "$TELECODE_DIR"
+"$VENV_PYTHON" -c "
+from telegram_sender import send_message_sync
+from quick_check import get_first_unprocessed_chat_id
+chat_id = get_first_unprocessed_chat_id()
+if chat_id:
+    send_message_sync(chat_id, '🔧 작업 착수합니다.')
+" 2>/dev/null || true
+cd "$ROOT"
+
 # CLAUDE.md 존재 확인
 if [ ! -f "$SPF" ]; then
     log "[ERROR] CLAUDE.md not found: $SPF"
@@ -123,11 +137,20 @@ export DISABLE_AUTOUPDATER=1
 # Claude 실행 프롬프트 — PM 모드
 PROMPT="CLAUDE.md의 지침에 따라 PM으로서 행동할 것.
 1) data/identity.json을 읽어 나의 정체성(telecode)과 사용자를 확인.
-2) telecode/telegram_bot.py의 check_telegram()으로 새 메시지 확인.
-3) 메시지 내용에 따라 PM으로서 판단하고 적절히 응답.
-   - 대화(인사/질문/잡담) → reply_telegram()으로 자연스럽게 답하고 종료.
-   - 작업 요청 → 계획을 설명하고 확인 요청 후 종료.
+2) data/session_memory.md를 읽어 이전 대화 맥락, 활성 작업, 사용자 선호를 파악.
+3) telecode/telegram_bot.py의 check_telegram()으로 새 메시지 확인.
+4) 메시지 내용에 따라 PM으로서 판단하고 적절히 응답.
+   - 대화(인사/질문/잡담) → reply_telegram()으로 자연스럽게 답변.
+   - 작업 요청 → 계획을 설명하고 확인 요청.
    - 확인/승인 → 실행 모드로 전환하여 작업 수행.
+5) 작업/응답 완료 후 바로 종료하지 말고, CLAUDE.md의 '대기 모드' 지침에 따라 대기 루프를 실행할 것.
+   - sleep 30 → poll_new_messages() → 새 메시지 있으면 처리 (타이머 리셋)
+   - 5분간 무응답 시 session_memory.md 갱신 + save_session_handoff() 후 세션 종료.
+6) 세션 종료 직전, data/session_memory.md를 갱신할 것:
+   - '최근 대화'에 이번 세션 대화 요약 추가 (항목당 1줄: [날짜] 👤/🤖 요약)
+   - '활성 작업' 업데이트 (완료된 건 제거, 새 건 추가)
+   - '사용자 선호' 업데이트 (새로 파악된 선호 추가)
+   - compact_session_memory()로 50개 초과 시 자동 정리.
 모든 텔레그램 응답은 telecode/telegram_sender.py의 send_message_sync()를 사용.
 대화용 간편 응답은 telecode/telegram_bot.py의 reply_telegram()을 사용."
 
@@ -142,7 +165,7 @@ VIEWER="$ROOT/scripts/stream_viewer.py"
 # 세션 재개 시도
 log "[INFO] Attempting to resume most recent session..."
 EC=0
-"$CLAUDE_EXE" -p -c --dangerously-skip-permissions \
+caffeinate -i "$CLAUDE_EXE" -p -c --dangerously-skip-permissions \
     --model opus \
     --output-format stream-json --verbose \
     --append-system-prompt-file "$SPF" \
@@ -153,7 +176,7 @@ EC=0
 if [ "$EC" -ne 0 ]; then
     log "[INFO] No previous session found. Starting new session..."
     EC=0
-    "$CLAUDE_EXE" -p --dangerously-skip-permissions \
+    caffeinate -i "$CLAUDE_EXE" -p --dangerously-skip-permissions \
         --model opus \
         --output-format stream-json --verbose \
         --append-system-prompt-file "$SPF" \

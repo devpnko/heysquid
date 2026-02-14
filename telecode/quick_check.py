@@ -15,12 +15,37 @@ Exit Codes:
 import os
 import sys
 import json
+from datetime import datetime, timezone
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 DATA_DIR = os.path.join(PROJECT_ROOT, "data")
 MESSAGES_FILE = os.path.join(DATA_DIR, "telegram_messages.json")
 WORKING_LOCK_FILE = os.path.join(DATA_DIR, "working.json")
+
+RETRY_MAX = 3
+EXPIRE_HOURS = 24
+
+
+def get_first_unprocessed_chat_id():
+    """미처리 메시지의 첫 번째 chat_id 반환"""
+    if not os.path.exists(MESSAGES_FILE):
+        return None
+
+    try:
+        with open(MESSAGES_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        for msg in data.get("messages", []):
+            if (msg.get("type") == "user"
+                    and not msg.get("processed", False)
+                    and msg.get("retry_count", 0) < RETRY_MAX):
+                return msg.get("chat_id")
+    except Exception:
+        pass
+
+    return None
+
 
 try:
     # working lock 확인
@@ -35,21 +60,46 @@ try:
     with open(MESSAGES_FILE, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    unprocessed = [
-        msg for msg in data.get("messages", [])
-        if msg.get("type") == "user" and not msg.get("processed", False)
-    ]
+    now = datetime.now()
+    modified = False
 
-    if not unprocessed:
+    actionable = []
+    for msg in data.get("messages", []):
+        if msg.get("type") != "user" or msg.get("processed", False):
+            continue
+
+        # 24시간 초과 미처리 → 강제 완료 처리
+        try:
+            ts = datetime.strptime(msg["timestamp"], "%Y-%m-%d %H:%M:%S")
+            age_hours = (now - ts).total_seconds() / 3600
+            if age_hours > EXPIRE_HOURS:
+                print(f"[EXPIRE] 24시간 초과 메시지 강제 처리: {msg.get('message_id')}")
+                msg["processed"] = True
+                modified = True
+                continue
+        except (KeyError, ValueError):
+            pass
+
+        # retry_count >= 3 → 스킵
+        if msg.get("retry_count", 0) >= RETRY_MAX:
+            continue
+
+        actionable.append(msg)
+
+    if modified:
+        with open(MESSAGES_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
+    if not actionable:
         sys.exit(0)
 
-    for msg in unprocessed:
+    for msg in actionable:
         text = msg.get("text", "")[:50]
         name = msg.get("first_name", "?")
         ts = msg.get("timestamp", "?")
         print(f"[MSG] 새 메시지: [{ts}] {name}: {text}...")
 
-    print(f"[MSG] 새 메시지 {len(unprocessed)}개 발견!")
+    print(f"[MSG] 새 메시지 {len(actionable)}개 발견!")
     sys.exit(1)
 
 except Exception as e:

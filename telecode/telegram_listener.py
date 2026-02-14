@@ -19,6 +19,7 @@ import subprocess
 from datetime import datetime
 from dotenv import load_dotenv
 from telegram import Bot
+from telegram.request import HTTPXRequest
 import asyncio
 
 # 경로 설정 (Mac)
@@ -156,7 +157,13 @@ async def fetch_new_messages():
         print("[ERROR] TELEGRAM_BOT_TOKEN 미설정. 프로그램을 종료합니다.")
         return None
 
-    bot = Bot(token=BOT_TOKEN)
+    request = HTTPXRequest(
+        connect_timeout=10.0,
+        read_timeout=15.0,   # long-polling 5초 + 여유 10초
+        write_timeout=10.0,
+        pool_timeout=5.0
+    )
+    bot = Bot(token=BOT_TOKEN, get_updates_request=request)
     data = load_messages()
     last_update_id = data.get("last_update_id", 0)
 
@@ -300,6 +307,18 @@ async def fetch_new_messages():
                 file_info = f" + {len(msg['files'])}개 파일" if msg['files'] else ""
                 location_info = f" + 위치 정보" if msg.get('location') else ""
                 print(f"[MSG] 새 메시지: [{msg['timestamp']}] {msg['first_name']}: {text_preview}...{file_info}{location_info}")
+
+            # 수신 확인 전송
+            for msg in new_messages:
+                try:
+                    await bot.send_message(
+                        chat_id=msg['chat_id'],
+                        text="✓",
+                        reply_to_message_id=msg['message_id']
+                    )
+                except Exception:
+                    pass  # 수신 확인 실패해도 무시
+
             return len(new_messages)
 
         return 0
@@ -307,6 +326,35 @@ async def fetch_new_messages():
     except Exception as e:
         print(f"[ERROR] 오류: {e}")
         return None
+
+
+RETRY_MAX = 3
+
+
+def _retry_unprocessed():
+    """미처리 메시지 확인 + retry_count < 3이면 executor 재트리거"""
+    if not os.path.exists(MESSAGES_FILE):
+        return
+
+    data = load_messages()
+    retryable = [
+        msg for msg in data.get("messages", [])
+        if msg.get("type") == "user"
+        and not msg.get("processed", False)
+        and msg.get("retry_count", 0) < RETRY_MAX
+    ]
+
+    if not retryable:
+        return
+
+    for msg in retryable:
+        msg["retry_count"] = msg.get("retry_count", 0) + 1
+
+    save_messages(data)
+
+    retry_counts = [msg["retry_count"] for msg in retryable]
+    print(f"[RETRY] 미처리 메시지 {len(retryable)}개 재시도 (retry #{max(retry_counts)})")
+    _trigger_executor()
 
 
 TMUX_SESSION = "telecode"
@@ -349,7 +397,7 @@ def _trigger_executor():
 
     print("[TRIGGER] tmux에서 executor.sh 트리거!")
     subprocess.run(
-        ["tmux", "send-keys", "-t", TMUX_SESSION,
+        ["tmux", "send-keys", "-t", f"{TMUX_SESSION}:0.0",
          f"bash {executor}", "Enter"],
         capture_output=True
     )
@@ -386,6 +434,10 @@ async def listen_loop():
             else:
                 if cycle_count % 30 == 0:
                     print(f"[{now}] #{cycle_count} - 대기 중...")
+
+            # 60사이클(~10분)마다 미처리 메시지 재트리거
+            if cycle_count % 60 == 0:
+                _retry_unprocessed()
 
             await asyncio.sleep(POLLING_INTERVAL)
 
