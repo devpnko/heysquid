@@ -62,11 +62,11 @@ log "CWD=$(pwd)"
 
 # 1. Claude 프로세스 확인 (append-system-prompt-file는 executor 전용 플래그)
 if pgrep -f "claude.*append-system-prompt-file" > /dev/null 2>&1; then
-    # 프로세스 발견 - 로그 파일 갱신 시각 확인 (10분 이상 유휴 시 스탈)
+    # 프로세스 발견 - 로그 파일 갱신 시각 확인 (영구 세션이므로 4시간 기준)
     if [ -f "$LOG" ]; then
         LOG_AGE=$(( $(date +%s) - $(stat -f %m "$LOG" 2>/dev/null || echo 0) ))
-        if [ "$LOG_AGE" -gt 1200 ]; then
-            log "[STALE] Claude idle >20min. Force-killing..."
+        if [ "$LOG_AGE" -gt 14400 ]; then
+            log "[STALE] Claude idle >4h. Force-killing..."
             pkill -f "claude.*append-system-prompt-file" 2>/dev/null || true
             rm -f "$LOCKFILE" 2>/dev/null
             log "[STALE] Cleared stale state. Proceeding..."
@@ -137,20 +137,20 @@ export DISABLE_AUTOUPDATER=1
 # Claude 실행 프롬프트 — PM 모드
 PROMPT="CLAUDE.md의 지침에 따라 PM으로서 행동할 것.
 1) data/identity.json을 읽어 나의 정체성(telecode)과 사용자를 확인.
-2) data/session_memory.md를 읽어 이전 대화 맥락, 활성 작업, 사용자 선호를 파악.
-3) telecode/telegram_bot.py의 check_telegram()으로 새 메시지 확인.
-4) 메시지 내용에 따라 PM으로서 판단하고 적절히 응답.
+2) data/permanent_memory.md를 읽어 영구 기억(사용자 선호, 핵심 결정, 교훈)을 파악.
+3) data/session_memory.md를 읽어 최근 대화 맥락, 활성 작업을 파악.
+4) telecode/telegram_bot.py의 check_telegram()으로 새 메시지 확인.
+5) 메시지 내용에 따라 PM으로서 판단하고 적절히 응답.
    - 대화(인사/질문/잡담) → reply_telegram()으로 자연스럽게 답변.
    - 작업 요청 → 계획을 설명하고 확인 요청.
    - 확인/승인 → 실행 모드로 전환하여 작업 수행.
-5) 작업/응답 완료 후 바로 종료하지 말고, CLAUDE.md의 '대기 모드' 지침에 따라 대기 루프를 실행할 것.
-   - sleep 30 → poll_new_messages() → 새 메시지 있으면 처리 (타이머 리셋)
-   - 5분간 무응답 시 session_memory.md 갱신 + save_session_handoff() 후 세션 종료.
-6) 세션 종료 직전, data/session_memory.md를 갱신할 것:
-   - '최근 대화'에 이번 세션 대화 요약 추가 (항목당 1줄: [날짜] 👤/🤖 요약)
-   - '활성 작업' 업데이트 (완료된 건 제거, 새 건 추가)
-   - '사용자 선호' 업데이트 (새로 파악된 선호 추가)
-   - compact_session_memory()로 50개 초과 시 자동 정리.
+6) 작업/응답 완료 후 바로 종료하지 말고, CLAUDE.md의 '대기 모드' 지침에 따라 영구 대기 루프를 실행할 것.
+   - sleep 30 → poll_new_messages() → 새 메시지 있으면 처리
+   - 타임아웃 없음. 세션은 영구 유지. 절대 스스로 종료하지 말 것.
+   - 30분마다 session_memory.md 자동 갱신 (중간 저장).
+7) 세션 중 중요한 결정/교훈/선호가 생기면 data/permanent_memory.md에 기록할 것.
+   - 영구 보관할 가치가 있는 것만 (사용자 선호, 핵심 결정, 반복될 교훈)
+   - 200줄 이내 유지.
 모든 텔레그램 응답은 telecode/telegram_sender.py의 send_message_sync()를 사용.
 대화용 간편 응답은 telecode/telegram_bot.py의 reply_telegram()을 사용."
 
@@ -162,27 +162,15 @@ cd "$ROOT"
 
 VIEWER="$ROOT/scripts/stream_viewer.py"
 
-# 세션 재개 시도
-log "[INFO] Attempting to resume most recent session..."
+# 항상 새 세션 시작 (세션 재개 안 함 — 메모리 시스템으로 맥락 복구)
+log "[INFO] Starting new session (permanent memory + session memory)..."
 EC=0
-caffeinate -i "$CLAUDE_EXE" -p -c --dangerously-skip-permissions \
+caffeinate -ims "$CLAUDE_EXE" -p --dangerously-skip-permissions \
     --model opus \
     --output-format stream-json --verbose \
     --append-system-prompt-file "$SPF" \
     "$PROMPT" \
     2>> "$LOG" | tee "$STREAM_LOG" | python3 -u "$VIEWER" || EC=$?
-
-# 실패 시 새 세션
-if [ "$EC" -ne 0 ]; then
-    log "[INFO] No previous session found. Starting new session..."
-    EC=0
-    caffeinate -i "$CLAUDE_EXE" -p --dangerously-skip-permissions \
-        --model opus \
-        --output-format stream-json --verbose \
-        --append-system-prompt-file "$SPF" \
-        "$PROMPT" \
-        2>> "$LOG" | tee "$STREAM_LOG" | python3 -u "$VIEWER" || EC=$?
-fi
 
 log "EXITCODE=$EC"
 log ""

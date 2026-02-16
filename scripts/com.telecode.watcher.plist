@@ -9,7 +9,7 @@
     <array>
         <string>/bin/bash</string>
         <string>-c</string>
-        <string>caffeinate -i /Users/hyuk/ohmyclawbot/venv/bin/python3 /Users/hyuk/ohmyclawbot/telecode/telegram_listener.py</string>
+        <string>caffeinate -ims /Users/hyuk/ohmyclawbot/venv/bin/python3 /Users/hyuk/ohmyclawbot/telecode/telegram_listener.py</string>
     </array>
 
     <!-- listener.py를 상시 실행 데몬으로 유지 -->
