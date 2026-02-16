@@ -26,6 +26,9 @@ INDEX_FILE = os.path.join(TASKS_DIR, "index.json")
 MESSAGES_FILE = os.path.join(DATA_DIR, "telegram_messages.json")
 WORKING_LOCK_FILE = os.path.join(DATA_DIR, "working.json")
 NEW_INSTRUCTIONS_FILE = os.path.join(DATA_DIR, "new_instructions.json")
+SESSION_HANDOFF_FILE = os.path.join(DATA_DIR, "session_handoff.json")
+SESSION_MEMORY_FILE = os.path.join(DATA_DIR, "session_memory.md")
+SESSION_MEMORY_MAX_CONVERSATIONS = 50  # 최근 대화 최대 항목 수
 WORKING_LOCK_TIMEOUT = 1800  # 30분
 
 
@@ -943,6 +946,183 @@ def load_memory():
 
     memories.sort(key=lambda x: x["message_id"], reverse=True)
     return memories
+
+
+def poll_new_messages():
+    """대기 루프용 — 로컬 파일만 읽어 미처리 메시지 반환.
+    Telegram API 호출하지 않음 (listener가 담당).
+    working.json 체크 안 함 (대기 중이므로).
+    """
+    data = load_telegram_messages()
+    unprocessed = [
+        msg for msg in data.get("messages", [])
+        if msg.get("type") == "user" and not msg.get("processed", False)
+    ]
+    return unprocessed
+
+
+def save_session_handoff(summary):
+    """세션 종료 직전 — 대화 요약 저장."""
+    handoff = {
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "summary": summary
+    }
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with open(SESSION_HANDOFF_FILE, "w", encoding="utf-8") as f:
+        json.dump(handoff, f, ensure_ascii=False, indent=2)
+    print(f"[HANDOFF] 세션 요약 저장 완료: {SESSION_HANDOFF_FILE}")
+
+
+def check_crash_recovery():
+    """
+    세션 시작 시 — 이전 세션이 작업 중 비정상 종료되었는지 확인.
+
+    working.json이 남아있으면 이전 세션이 작업 중 죽은 것.
+    복구 정보를 반환하고, working.json을 정리한다.
+
+    Returns:
+        dict or None: 복구 정보
+        {
+            "crashed": True,
+            "instruction": "작업 내용 요약",
+            "message_ids": [...],
+            "chat_id": ...,
+            "started_at": "시작 시각",
+            "original_messages": [원본 메시지들]
+        }
+    """
+    if not os.path.exists(WORKING_LOCK_FILE):
+        return None
+
+    try:
+        with open(WORKING_LOCK_FILE, "r", encoding="utf-8") as f:
+            lock_info = json.load(f)
+    except Exception as e:
+        print(f"[WARN] working.json 읽기 오류: {e}")
+        os.remove(WORKING_LOCK_FILE)
+        return None
+
+    # 복구 정보 구성
+    message_ids = lock_info.get("message_id")
+    if not isinstance(message_ids, list):
+        message_ids = [message_ids]
+
+    instruction = lock_info.get("instruction_summary", "")
+    started_at = lock_info.get("started_at", "")
+
+    # 원본 메시지 텍스트 복원
+    data = load_telegram_messages()
+    messages = data.get("messages", [])
+    original_messages = []
+    chat_id = None
+
+    for msg in messages:
+        if msg.get("message_id") in message_ids:
+            original_messages.append({
+                "message_id": msg["message_id"],
+                "text": msg.get("text", ""),
+                "timestamp": msg.get("timestamp", ""),
+                "files": msg.get("files", [])
+            })
+            if not chat_id:
+                chat_id = msg.get("chat_id")
+
+    # working.json 정리
+    os.remove(WORKING_LOCK_FILE)
+    print(f"[RECOVERY] 이전 세션 비정상 종료 감지!")
+    print(f"  작업: {instruction}")
+    print(f"  시작: {started_at}")
+    print(f"  메시지 {len(message_ids)}개 복구")
+
+    return {
+        "crashed": True,
+        "instruction": instruction,
+        "message_ids": message_ids,
+        "chat_id": chat_id,
+        "started_at": started_at,
+        "original_messages": original_messages
+    }
+
+
+def load_session_handoff():
+    """세션 시작 시 — 이전 세션 핸드오프 확인."""
+    if not os.path.exists(SESSION_HANDOFF_FILE):
+        return None
+    try:
+        with open(SESSION_HANDOFF_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"[WARN] session_handoff.json 읽기 오류: {e}")
+        return None
+
+
+def load_session_memory():
+    """세션 시작 시 — session_memory.md 내용 반환."""
+    if not os.path.exists(SESSION_MEMORY_FILE):
+        return None
+    try:
+        with open(SESSION_MEMORY_FILE, "r", encoding="utf-8") as f:
+            content = f.read().strip()
+        if content:
+            print(f"[MEMORY] 세션 메모리 로드 완료 ({len(content)} chars)")
+            return content
+        return None
+    except Exception as e:
+        print(f"[WARN] session_memory.md 읽기 오류: {e}")
+        return None
+
+
+def compact_session_memory():
+    """session_memory.md의 '최근 대화' 섹션이 50개를 초과하면 오래된 것부터 삭제."""
+    if not os.path.exists(SESSION_MEMORY_FILE):
+        return
+
+    try:
+        with open(SESSION_MEMORY_FILE, "r", encoding="utf-8") as f:
+            content = f.read()
+    except Exception as e:
+        print(f"[WARN] session_memory.md 읽기 오류: {e}")
+        return
+
+    lines = content.split("\n")
+
+    # '최근 대화' 섹션 찾기
+    conv_start = None
+    conv_end = None
+    for i, line in enumerate(lines):
+        if line.strip().startswith("## 최근 대화"):
+            conv_start = i + 1
+        elif conv_start is not None and line.strip().startswith("## "):
+            conv_end = i
+            break
+
+    if conv_start is None:
+        return
+
+    if conv_end is None:
+        conv_end = len(lines)
+
+    # 대화 항목 추출 (- 로 시작하는 줄)
+    conv_lines = [l for l in lines[conv_start:conv_end] if l.strip().startswith("- ")]
+    other_lines = [l for l in lines[conv_start:conv_end] if not l.strip().startswith("- ") and l.strip()]
+
+    if len(conv_lines) <= SESSION_MEMORY_MAX_CONVERSATIONS:
+        return  # 정리 불필요
+
+    # 오래된 것 삭제 (앞에서부터)
+    trimmed = len(conv_lines) - SESSION_MEMORY_MAX_CONVERSATIONS
+    conv_lines = conv_lines[trimmed:]
+    print(f"[COMPACT] 세션 메모리 정리: {trimmed}개 오래된 대화 삭제")
+
+    # 재조립
+    new_section = other_lines + conv_lines
+    new_lines = lines[:conv_start] + new_section + lines[conv_end:]
+    new_content = "\n".join(new_lines)
+
+    with open(SESSION_MEMORY_FILE, "w", encoding="utf-8") as f:
+        f.write(new_content)
+
+    print(f"[COMPACT] session_memory.md 정리 완료 (대화 {len(conv_lines)}개 유지)")
 
 
 # 테스트 코드

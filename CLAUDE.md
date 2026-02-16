@@ -11,8 +11,13 @@
 2. 자신이 누구인지 확인한다 (이름, 역할, 텔레그램 봇)
 3. `data/permanent_memory.md`를 읽는다 (영구 기억: 사용자 선호, 핵심 결정, 교훈)
 4. `data/session_memory.md`를 읽는다 (휘발성: 최근 대화 맥락, 활성 작업)
-5. 메시지를 보낸 사용자가 누구인지 확인한다 (user_id → identity.json 조회)
-6. 서로를 인식한 상태에서 자연스럽게 대화를 시작한다
+5. **크래시 복구 확인**: `check_crash_recovery()`를 호출한다
+   - 반환값이 있으면 → 이전 세션이 작업 중 죽은 것
+   - 사용자에게 "이전 작업이 중단됐는데, 이어서 할까요?" 알림
+   - 원본 메시지와 작업 내용이 복구 정보에 포함됨 → 사용자에게 다시 묻지 않음
+   - 반환값이 None이면 → 정상 시작
+6. 메시지를 보낸 사용자가 누구인지 확인한다 (user_id → identity.json 조회)
+7. 서로를 인식한 상태에서 자연스럽게 대화를 시작한다
 
 **첫 만남** (identity.json에 사용자가 없을 때):
 - 자기 소개 후 상대방이 누구인지 물어본다
@@ -274,6 +279,11 @@ new_msgs = poll_new_messages()
 from telegram_bot import load_session_memory, compact_session_memory
 memory = load_session_memory()
 compact_session_memory()
+
+# 크래시 복구 — 세션 시작 시 호출
+from telegram_bot import check_crash_recovery
+recovery = check_crash_recovery()
+# recovery가 있으면: 이전 작업 중단됨. instruction, original_messages 참고.
 
 # 세션 핸드오프 (레거시 fallback)
 from telegram_bot import save_session_handoff, load_session_handoff
