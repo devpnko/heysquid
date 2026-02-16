@@ -1,5 +1,5 @@
 """
-텔레그램 봇 통합 로직 — telecode Mac 포팅
+텔레그램 봇 통합 로직 — heysquid Mac 포팅
 
 주요 기능:
 - check_telegram() - 새로운 명령 확인 (최근 24시간 대화 내역 포함)
@@ -428,7 +428,7 @@ def get_24h_context(messages, current_message_id):
             text_preview = text[:150] + "..." if len(text) > 150 else text
             files = msg.get("files", [])
             file_info = f" [전송: {', '.join(files)}]" if files else ""
-            context_lines.append(f"[{msg['timestamp']}] telecode: {text_preview}{file_info}")
+            context_lines.append(f"[{msg['timestamp']}] heysquid: {text_preview}{file_info}")
 
     if len(context_lines) == 1:
         return "최근 24시간 이내 대화 내역이 없습니다."
@@ -445,6 +445,14 @@ def _poll_telegram_once():
         print(f"[WARN] 폴링 중 오류: {e}")
 
 
+def _safe_parse_timestamp(ts):
+    """타임스탬프 파싱. 실패 시 None 반환."""
+    try:
+        return datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
+    except (ValueError, TypeError):
+        return None
+
+
 def _cleanup_old_messages():
     """30일 초과 처리된 메시지 정리"""
     data = load_telegram_messages()
@@ -455,7 +463,7 @@ def _cleanup_old_messages():
     cleaned = [
         msg for msg in messages
         if not msg.get("processed", False)
-        or datetime.strptime(msg["timestamp"], "%Y-%m-%d %H:%M:%S") > cutoff
+        or (_safe_parse_timestamp(msg.get("timestamp", "")) or datetime.now()) > cutoff
     ]
 
     removed = len(messages) - len(cleaned)
@@ -798,18 +806,14 @@ def report_telegram(instruction, result_text, chat_id, timestamp, message_id, fi
         main_message_id = message_id
         timestamps = [timestamp]
 
-    message = f"""**telecode 작업 완료**
-
-**결과:**
-{result_text}
-"""
+    message = result_text
 
     if files:
         file_names = [os.path.basename(f) for f in files]
-        message += f"\n**첨부 파일:** {', '.join(file_names)}"
+        message += f"\n\n📎 {', '.join(file_names)}"
 
     if len(message_ids) > 1:
-        message += f"\n\n_합산 처리: {len(message_ids)}개 메시지_"
+        message += f"\n\n_{len(message_ids)}개 메시지 합산 처리_"
 
     print(f"\n[SEND] 텔레그램으로 결과 전송 중... (chat_id: {chat_id})")
     success = send_files_sync(chat_id, message, files or [])
@@ -1128,7 +1132,7 @@ def compact_session_memory():
 # 테스트 코드
 if __name__ == "__main__":
     print("=" * 60)
-    print("telecode - 대기 중인 명령 확인")
+    print("heysquid - 대기 중인 명령 확인")
     print("=" * 60)
 
     pending = check_telegram()

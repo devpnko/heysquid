@@ -195,45 +195,61 @@ async def reply_to_user(username, reply_text, post_index=0, expected_text=None):
                     "actual_text": None,
                 }
 
-            if post_index >= len(post_containers):
-                return {
-                    "success": False,
-                    "error": f"게시물 인덱스 {post_index}가 범위 초과 (총 {len(post_containers)}개)",
-                    "actual_text": None,
-                }
-
-            target = post_containers[post_index]
-
-            # 게시물 텍스트 추출 후 expected_text와 대조 검증
+            # expected_text가 있으면 프로필 게시물 중 매칭되는 글을 자동 검색
+            import re
+            target = None
             actual_text = ""
-            text_spans = await target.query_selector_all('div[dir="auto"] > span')
-            if text_spans:
-                parts = []
-                for span in text_spans:
-                    t = await span.inner_text()
-                    if t.strip():
-                        parts.append(t.strip())
-                actual_text = " ".join(parts)
-            if not actual_text:
-                actual_text = (await target.inner_text()).strip()
 
             if expected_text:
-                # 앞 30자로 매칭 (피드와 프로필 텍스트 포맷이 약간 다를 수 있음)
-                expected_clean = expected_text.strip()[:30].lower()
-                actual_clean = actual_text.strip()[:30].lower()
+                expected_norm = re.sub(r'\s+', '', expected_text.strip()[:30].lower())
+                for idx, container in enumerate(post_containers[:10]):
+                    # 각 게시물 텍스트 추출
+                    candidate_text = ""
+                    text_spans = await container.query_selector_all('div[dir="auto"] > span')
+                    if text_spans:
+                        parts = []
+                        for span in text_spans:
+                            t = await span.inner_text()
+                            if t.strip():
+                                parts.append(t.strip())
+                        candidate_text = " ".join(parts)
+                    if not candidate_text:
+                        candidate_text = (await container.inner_text()).strip()
 
-                # 공백/특수문자 제거 후 비교
-                import re
-                expected_norm = re.sub(r'\s+', '', expected_clean)
-                actual_norm = re.sub(r'\s+', '', actual_clean)
+                    # 전체 텍스트에서 expected_text 키워드 검색 (유저네임/시간 prefix 무시)
+                    candidate_norm = re.sub(r'\s+', '', candidate_text.strip().lower())
+                    if expected_norm and candidate_norm and expected_norm[:15] in candidate_norm:
+                        target = container
+                        actual_text = candidate_text
+                        print(f"[THREADS] 프로필 게시물 {idx}번에서 매칭 발견: '{candidate_text[:50]}'")
+                        break
 
-                if expected_norm and actual_norm and expected_norm[:15] not in actual_norm and actual_norm[:15] not in expected_norm:
-                    print(f"[THREADS] 텍스트 불일치! 예상: '{expected_text[:50]}...' / 실제: '{actual_text[:50]}...'")
+                if target is None:
+                    print(f"[THREADS] @{username} 프로필에서 매칭 글 못 찾음. 예상: '{expected_text[:50]}'")
                     return {
                         "success": False,
-                        "error": f"게시물 텍스트 불일치 — 예상과 다른 글입니다. 예상: '{expected_text[:40]}' / 실제: '{actual_text[:40]}'",
-                        "actual_text": actual_text[:200],
+                        "error": f"프로필에서 해당 글을 찾을 수 없음. 예상: '{expected_text[:40]}'",
+                        "actual_text": None,
                     }
+            else:
+                # expected_text 없으면 기존 방식 (post_index 사용)
+                if post_index >= len(post_containers):
+                    return {
+                        "success": False,
+                        "error": f"게시물 인덱스 {post_index}가 범위 초과 (총 {len(post_containers)}개)",
+                        "actual_text": None,
+                    }
+                target = post_containers[post_index]
+                text_spans = await target.query_selector_all('div[dir="auto"] > span')
+                if text_spans:
+                    parts = []
+                    for span in text_spans:
+                        t = await span.inner_text()
+                        if t.strip():
+                            parts.append(t.strip())
+                    actual_text = " ".join(parts)
+                if not actual_text:
+                    actual_text = (await target.inner_text()).strip()
 
             # 게시물 컨테이너 안에서 답글 아이콘 찾기
             # (프로필 상단 탭의 "답글"과 겹치므로 반드시 컨테이너 안에서 찾아야 함)
@@ -262,11 +278,11 @@ async def reply_to_user(username, reply_text, post_index=0, expected_text=None):
             await page.keyboard.type(reply_text, delay=30)
             await page.wait_for_timeout(500)
 
-            # 게시 버튼 클릭
-            post_button = page.get_by_role("button", name="게시")
+            # 게시 버튼 클릭 (exact=True로 "게시물이 페디버스에..." 등과 구분)
+            post_button = page.get_by_role("button", name="게시", exact=True)
             if not await post_button.is_visible():
                 # 영어 UI fallback
-                post_button = page.get_by_role("button", name="Post")
+                post_button = page.get_by_role("button", name="Post", exact=True)
             await post_button.click()
             await page.wait_for_timeout(3000)
 
@@ -354,8 +370,13 @@ async def safe_reply_batch(replies):
         results.append(result)
 
         if not result["success"]:
-            print(f"[THREADS] 에러 발생, 배치 중단: {result['error']}")
-            # 나머지는 스킵 처리
+            error_msg = result.get("error", "")
+            # 텍스트 불일치/글 못 찾음은 스킵 (배치 계속)
+            if "불일치" in error_msg or "찾을 수 없음" in error_msg:
+                print(f"[THREADS] 스킵: {error_msg}")
+                continue
+            # 그 외 에러는 배치 중단
+            print(f"[THREADS] 에러 발생, 배치 중단: {error_msg}")
             for _ in range(len(replies) - i - 1):
                 results.append({"success": False, "error": "이전 에러로 중단됨"})
             break

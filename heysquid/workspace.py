@@ -1,5 +1,5 @@
 """
-멀티 프로젝트 워크스페이스 관리 — telecode
+멀티 프로젝트 워크스페이스 관리 — heysquid
 
 핵심 기능:
 - list_workspaces() - 등록된 프로젝트 목록
@@ -207,16 +207,16 @@ def init_default_workspaces():
             "오픈성지 - 휴대폰 시세 플랫폼"
         )
         register_workspace(
-            "telecode",
+            "heysquid",
             "/Users/hyuk/ohmyclawbot",
-            "telecode - 텔레그램 원격 제어"
+            "heysquid - 텔레그램 원격 제어"
         )
         print("[WORKSPACE] 기본 워크스페이스 초기화 완료")
 
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("telecode 워크스페이스 관리")
+    print("heysquid 워크스페이스 관리")
     print("=" * 60)
 
     # 기본 워크스페이스 초기화

@@ -1,5 +1,5 @@
 """
-텔레그램 응답 전송기 (Sender) — telecode Mac 포팅
+텔레그램 응답 전송기 (Sender) — heysquid Mac 포팅
 
 역할:
 - Claude Code 작업 결과를 텔레그램으로 전송
@@ -26,6 +26,17 @@ load_dotenv(os.path.join(BASE_DIR, ".env"))
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
+# Bot 싱글턴
+_bot = None
+
+
+def _get_bot():
+    """Bot 인스턴스 재사용 (매 호출마다 생성 방지)"""
+    global _bot
+    if _bot is None:
+        _bot = Bot(token=BOT_TOKEN)
+    return _bot
+
 
 async def send_message(chat_id, text, parse_mode="Markdown"):
     """
@@ -45,7 +56,7 @@ async def send_message(chat_id, text, parse_mode="Markdown"):
         return False
 
     try:
-        bot = Bot(token=BOT_TOKEN)
+        bot = _get_bot()
 
         # 텔레그램 메시지 길이 제한 (4096자)
         if len(text) > 4000:
@@ -53,17 +64,37 @@ async def send_message(chat_id, text, parse_mode="Markdown"):
             for i, chunk in enumerate(chunks):
                 if i > 0:
                     await asyncio.sleep(0.5)
+                try:
+                    await bot.send_message(
+                        chat_id=chat_id,
+                        text=chunk,
+                        parse_mode=parse_mode
+                    )
+                except Exception as e:
+                    if parse_mode and "parse" in str(e).lower():
+                        await bot.send_message(
+                            chat_id=chat_id,
+                            text=chunk,
+                            parse_mode=None
+                        )
+                    else:
+                        raise
+        else:
+            try:
                 await bot.send_message(
                     chat_id=chat_id,
-                    text=chunk,
+                    text=text,
                     parse_mode=parse_mode
                 )
-        else:
-            await bot.send_message(
-                chat_id=chat_id,
-                text=text,
-                parse_mode=parse_mode
-            )
+            except Exception as e:
+                if parse_mode and "parse" in str(e).lower():
+                    await bot.send_message(
+                        chat_id=chat_id,
+                        text=text,
+                        parse_mode=None
+                    )
+                else:
+                    raise
 
         return True
 
@@ -93,7 +124,7 @@ async def send_file(chat_id, file_path, caption=None):
         return False
 
     try:
-        bot = Bot(token=BOT_TOKEN)
+        bot = _get_bot()
 
         file_size = os.path.getsize(file_path)
         if file_size > 50 * 1024 * 1024:

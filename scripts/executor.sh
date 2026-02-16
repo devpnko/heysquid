@@ -1,5 +1,5 @@
 #!/bin/bash
-# telecode executor — Mac 포팅 (mybot_autoexecutor.bat → executor.sh)
+# heysquid executor — Mac 포팅 (mybot_autoexecutor.bat → executor.sh)
 #
 # 핵심 로직:
 # 1. Claude CLI 설치 확인
@@ -16,7 +16,7 @@ unset CLAUDECODE 2>/dev/null || true
 # 경로 설정
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(dirname "$SCRIPT_DIR")"
-TELECODE_DIR="$ROOT/telecode"
+HEYSQUID_DIR="$ROOT/heysquid"
 SPF="$ROOT/CLAUDE.md"
 LOG_DIR="$ROOT/logs"
 LOG="$LOG_DIR/executor.log"
@@ -89,7 +89,7 @@ fi
 
 # 3. 빠른 메시지 확인 (Python으로 먼저 확인)
 log "[QUICK_CHECK] Checking for new messages..."
-cd "$TELECODE_DIR"
+cd "$HEYSQUID_DIR"
 
 VENV_PYTHON="$ROOT/venv/bin/python3"
 if [ ! -f "$VENV_PYTHON" ]; then
@@ -112,7 +112,7 @@ echo "$(date '+%Y-%m-%d %H:%M:%S')" > "$LOCKFILE"
 log "Lock file created: $LOCKFILE"
 
 # 착수 알림 전송
-cd "$TELECODE_DIR"
+cd "$HEYSQUID_DIR"
 "$VENV_PYTHON" -c "
 from telegram_sender import send_message_sync
 from quick_check import get_first_unprocessed_chat_id
@@ -136,14 +136,14 @@ export DISABLE_AUTOUPDATER=1
 
 # Claude 실행 프롬프트 — PM 모드
 PROMPT="CLAUDE.md의 지침에 따라 PM으로서 행동할 것.
-1) data/identity.json을 읽어 나의 정체성(telecode)과 사용자를 확인.
+1) data/identity.json을 읽어 나의 정체성(heysquid)과 사용자를 확인.
 2) data/permanent_memory.md를 읽어 영구 기억(사용자 선호, 핵심 결정, 교훈)을 파악.
 3) data/session_memory.md를 읽어 최근 대화 맥락, 활성 작업을 파악.
 4) check_crash_recovery()로 이전 세션 비정상 종료 확인.
    - 반환값 있으면: 이전 작업이 중단된 것. 사용자에게 알리고 이어서 처리.
      복구 정보에 원본 메시지와 작업 내용이 있으므로 사용자에게 다시 묻지 말 것.
    - None이면: 정상 시작.
-5) telecode/telegram_bot.py의 check_telegram()으로 새 메시지 확인.
+5) heysquid/telegram_bot.py의 check_telegram()으로 새 메시지 확인.
 6) 메시지 내용에 따라 PM으로서 판단하고 적절히 응답.
    - 대화(인사/질문/잡담) → reply_telegram()으로 자연스럽게 답변.
    - 작업 요청 → 계획을 설명하고 확인 요청.
@@ -155,8 +155,8 @@ PROMPT="CLAUDE.md의 지침에 따라 PM으로서 행동할 것.
 8) 세션 중 중요한 결정/교훈/선호가 생기면 data/permanent_memory.md에 기록할 것.
    - 영구 보관할 가치가 있는 것만 (사용자 선호, 핵심 결정, 반복될 교훈)
    - 200줄 이내 유지.
-모든 텔레그램 응답은 telecode/telegram_sender.py의 send_message_sync()를 사용.
-대화용 간편 응답은 telecode/telegram_bot.py의 reply_telegram()을 사용."
+모든 텔레그램 응답은 heysquid/telegram_sender.py의 send_message_sync()를 사용.
+대화용 간편 응답은 heysquid/telegram_bot.py의 reply_telegram()을 사용."
 
 # 작업 디렉토리를 프로젝트 루트로 설정
 cd "$ROOT"

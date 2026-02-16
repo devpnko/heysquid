@@ -1,5 +1,5 @@
 """
-텔레그램 메시지 수집기 (Listener) — telecode Mac 포팅
+텔레그램 메시지 수집기 (Listener) — heysquid Mac 포팅
 
 역할:
 - 텔레그램 봇 API를 통해 새로운 메시지 수신
@@ -13,6 +13,7 @@
 """
 
 import os
+import sys
 import json
 import time
 import subprocess
@@ -38,6 +39,8 @@ POLLING_INTERVAL = int(os.getenv("TELEGRAM_POLLING_INTERVAL", "10"))
 MESSAGES_FILE = os.path.join(DATA_DIR, "telegram_messages.json")
 ENV_PATH = os.path.join(BASE_DIR, ".env")
 
+from telegram_bot import load_telegram_messages as load_messages, save_telegram_messages as save_messages
+
 
 def setup_bot_token():
     """토큰이 .env에 없으면 사용자에게 입력받아 저장"""
@@ -58,6 +61,10 @@ def setup_bot_token():
     print("   예시: 1234567890:ABCdefGHIjklMNOpqrSTUvwxYZ")
     print()
 
+    if not sys.stdin.isatty():
+        print("[ERROR] 대화형 환경이 아닙니다. .env 파일에 TELEGRAM_BOT_TOKEN을 직접 설정해주세요.")
+        return False
+
     token = input("봇 토큰 입력: ").strip()
 
     if not token:
@@ -77,28 +84,6 @@ def setup_bot_token():
     print(f"[OK] .env에 TELEGRAM_BOT_TOKEN 저장 완료!")
     print()
     return True
-
-
-def load_messages():
-    """저장된 메시지 로드"""
-    if os.path.exists(MESSAGES_FILE):
-        try:
-            with open(MESSAGES_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception as e:
-            print(f"[WARN] telegram_messages.json 읽기 오류: {e}")
-
-    return {
-        "messages": [],
-        "last_update_id": 0
-    }
-
-
-def save_messages(data):
-    """메시지 저장"""
-    os.makedirs(DATA_DIR, exist_ok=True)
-    with open(MESSAGES_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
 
 
 async def download_file(bot, file_id, message_id, file_type, file_name=None):
@@ -357,7 +342,7 @@ def _retry_unprocessed():
     _trigger_executor()
 
 
-TMUX_SESSION = "telecode"
+TMUX_SESSION = "heysquid"
 
 
 def _ensure_tmux_session():
@@ -406,7 +391,7 @@ def _trigger_executor():
 async def listen_loop():
     """메시지 수신 루프 — 새 메시지 감지 시 executor.sh 즉시 트리거"""
     print("=" * 60)
-    print("telecode - 텔레그램 메시지 수집기 시작")
+    print("heysquid - 텔레그램 메시지 수집기 시작")
     print("=" * 60)
 
     if not setup_bot_token():

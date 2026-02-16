@@ -1,6 +1,6 @@
 # 환경 변수 (토큰 포함)
 .env
-telecode/.env
+heysquid/.env
 
 # Python 캐시
 __pycache__/

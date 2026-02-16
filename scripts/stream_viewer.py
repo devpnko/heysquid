@@ -20,8 +20,8 @@ import threading
 import queue
 from datetime import datetime
 
-# .env 로드 (telecode/.env)
-ENV_PATH = os.path.join(os.path.dirname(__file__), "..", "telecode", ".env")
+# .env 로드 (heysquid/.env)
+ENV_PATH = os.path.join(os.path.dirname(__file__), "..", "heysquid", ".env")
 if os.path.exists(ENV_PATH):
     with open(ENV_PATH) as f:
         for line in f:

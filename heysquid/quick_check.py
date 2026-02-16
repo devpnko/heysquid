@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-빠른 텔레그램 메시지 확인 (Claude Code 실행 전) — telecode v2
+빠른 텔레그램 메시지 확인 (Claude Code 실행 전) — heysquid v2
 
 listener.py가 이미 폴링하고 있으므로, API 호출 없이
 telegram_messages.json에서 미처리 메시지만 확인.
@@ -15,7 +15,7 @@ Exit Codes:
 import os
 import sys
 import json
-from datetime import datetime, timezone
+from datetime import datetime
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)

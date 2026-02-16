@@ -1,5 +1,5 @@
 #!/bin/bash
-# telecode 데몬 관리 스크립트
+# heysquid 데몬 관리 스크립트
 #
 # 사용법:
 #   bash scripts/run.sh start     # 데몬 시작
@@ -12,8 +12,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(dirname "$SCRIPT_DIR")"
 LAUNCH_AGENTS="$HOME/Library/LaunchAgents"
 
-WATCHER_PLIST="com.telecode.watcher.plist"
-BRIEFING_PLIST="com.telecode.briefing.plist"
+WATCHER_PLIST="com.heysquid.watcher.plist"
+BRIEFING_PLIST="com.heysquid.briefing.plist"
 
 WATCHER_SRC="$SCRIPT_DIR/$WATCHER_PLIST"
 BRIEFING_SRC="$SCRIPT_DIR/$BRIEFING_PLIST"
@@ -23,14 +23,23 @@ BRIEFING_DST="$LAUNCH_AGENTS/$BRIEFING_PLIST"
 
 case "${1:-}" in
     start)
-        echo "telecode 데몬 시작..."
+        echo "heysquid 데몬 시작..."
 
-        # tmux 세션 생성 (executor 출력용)
-        if ! tmux has-session -t telecode 2>/dev/null; then
-            tmux new-session -d -s telecode -x 200 -y 50
-            echo "[OK] tmux 세션 'telecode' 생성"
+        # tmux 세션 생성 (2분할: 상단=executor 실행, 하단=실시간 로그)
+        if ! tmux has-session -t heysquid 2>/dev/null; then
+            tmux new-session -d -s heysquid -x 200 -y 50
+
+            # 하단 패널: 실시간 로그 모니터 (20% 높이)
+            tmux split-window -t heysquid -v -l 12
+            tmux send-keys -t heysquid:0.1 \
+                "echo '📡 heysquid 로그 모니터 시작...' && tail -f $ROOT/logs/executor.log 2>/dev/null || echo '(로그 파일 대기 중)'" Enter
+
+            # 상단 패널을 활성 패널으로 (executor가 여기서 실행됨)
+            tmux select-pane -t heysquid:0.0
+
+            echo "[OK] tmux 세션 'heysquid' 생성 (2분할: 실행 + 로그)"
         else
-            echo "[OK] tmux 세션 'telecode' 이미 존재"
+            echo "[OK] tmux 세션 'heysquid' 이미 존재"
         fi
 
         # LaunchAgents 디렉토리 확인
@@ -47,20 +56,27 @@ case "${1:-}" in
         echo "[OK] listener 데몬 시작 (10초 폴링 + 즉시 executor 트리거)"
         echo "[OK] briefing 스케줄 등록 (매일 09:00)"
         echo ""
-        echo "실시간 모니터: tmux attach -t telecode"
+        echo "실시간 모니터: tmux attach -t heysquid"
         echo "상태 확인: bash scripts/run.sh status"
         ;;
 
     stop)
-        echo "telecode 데몬 중지..."
+        echo "heysquid 데몬 중지..."
 
         launchctl unload "$WATCHER_DST" 2>/dev/null || true
         launchctl unload "$BRIEFING_DST" 2>/dev/null || true
 
-        # tmux 세션 종료
-        tmux kill-session -t telecode 2>/dev/null || true
+        # Claude 프로세스 종료 (대기 루프 중일 수 있음)
+        pkill -f "claude.*append-system-prompt-file" 2>/dev/null || true
 
-        echo "[OK] 데몬 + tmux 세션 중지 완료"
+        # tmux 세션 종료
+        tmux kill-session -t heysquid 2>/dev/null || true
+
+        # 잠금 파일 정리 (대기 루프 중 executor.lock이 남을 수 있음)
+        rm -f "$ROOT/data/executor.lock" 2>/dev/null
+        rm -f "$ROOT/data/working.json" 2>/dev/null
+
+        echo "[OK] 데몬 + tmux 세션 + 잠금 파일 정리 완료"
         ;;
 
     restart)
@@ -70,32 +86,32 @@ case "${1:-}" in
         ;;
 
     status)
-        echo "=== telecode 데몬 상태 ==="
+        echo "=== heysquid 데몬 상태 ==="
         echo ""
 
         echo "--- listener (메시지 감시 + executor 트리거) ---"
-        if launchctl list 2>/dev/null | grep -q "com.telecode.watcher"; then
+        if launchctl list 2>/dev/null | grep -q "com.heysquid.watcher"; then
             echo "  상태: 실행 중"
-            launchctl list | grep "com.telecode.watcher"
+            launchctl list | grep "com.heysquid.watcher"
         else
             echo "  상태: 중지됨"
         fi
 
         echo ""
         echo "--- briefing (일일 브리핑) ---"
-        if launchctl list 2>/dev/null | grep -q "com.telecode.briefing"; then
+        if launchctl list 2>/dev/null | grep -q "com.heysquid.briefing"; then
             echo "  상태: 등록됨"
-            launchctl list | grep "com.telecode.briefing"
+            launchctl list | grep "com.heysquid.briefing"
         else
             echo "  상태: 미등록"
         fi
 
         echo ""
         echo "--- tmux ---"
-        if tmux has-session -t telecode 2>/dev/null; then
-            echo "  telecode 세션: 활성 (tmux attach -t telecode)"
+        if tmux has-session -t heysquid 2>/dev/null; then
+            echo "  heysquid 세션: 활성 (tmux attach -t heysquid)"
         else
-            echo "  telecode 세션: 없음"
+            echo "  heysquid 세션: 없음"
         fi
 
         echo ""
