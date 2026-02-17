@@ -15,7 +15,7 @@
 
 import os
 from dotenv import load_dotenv
-from telegram import Bot
+from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
 import asyncio
 
 # 경로 설정 (Mac)
@@ -235,6 +235,61 @@ def send_message_sync(chat_id, text, parse_mode="Markdown"):
 def send_files_sync(chat_id, text, file_paths):
     """동기 방식 파일 전송"""
     return run_async_safe(send_files(chat_id, text, file_paths))
+
+
+async def send_message_with_stop_button(chat_id, text, parse_mode="Markdown"):
+    """메시지 + '중단' 인라인 버튼 전송"""
+    try:
+        bot = _get_bot()
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("중단", callback_data="stop")]
+        ])
+        try:
+            await bot.send_message(
+                chat_id=chat_id,
+                text=text,
+                parse_mode=parse_mode,
+                reply_markup=keyboard
+            )
+        except Exception as e:
+            if parse_mode and "parse" in str(e).lower():
+                await bot.send_message(
+                    chat_id=chat_id,
+                    text=text,
+                    parse_mode=None,
+                    reply_markup=keyboard
+                )
+            else:
+                raise
+        return True
+    except Exception as e:
+        print(f"[ERROR] 버튼 메시지 전송 실패: {e}")
+        return False
+
+
+def send_message_with_stop_button_sync(chat_id, text, parse_mode="Markdown"):
+    """동기 방식 메시지 + 중단 버튼 전송"""
+    return run_async_safe(send_message_with_stop_button(chat_id, text, parse_mode))
+
+
+async def register_bot_commands():
+    """봇 커맨드 메뉴 등록 (/ 메뉴)"""
+    try:
+        bot = _get_bot()
+        commands = [
+            BotCommand("stop", "진행 중인 작업 중단"),
+        ]
+        await bot.set_my_commands(commands)
+        print("[CMD] 봇 커맨드 메뉴 등록 완료: /stop")
+        return True
+    except Exception as e:
+        print(f"[ERROR] 봇 커맨드 등록 실패: {e}")
+        return False
+
+
+def register_bot_commands_sync():
+    """동기 방식 봇 커맨드 등록"""
+    return run_async_safe(register_bot_commands())
 
 
 if __name__ == "__main__":

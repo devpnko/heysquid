@@ -37,9 +37,121 @@ ALLOWED_USERS = [int(uid.strip()) for uid in os.getenv("TELEGRAM_ALLOWED_USERS",
 POLLING_INTERVAL = int(os.getenv("TELEGRAM_POLLING_INTERVAL", "10"))
 
 MESSAGES_FILE = os.path.join(DATA_DIR, "telegram_messages.json")
+INTERRUPTED_FILE = os.path.join(DATA_DIR, "interrupted.json")
+WORKING_LOCK_FILE = os.path.join(DATA_DIR, "working.json")
+EXECUTOR_LOCK_FILE = os.path.join(DATA_DIR, "executor.lock")
 ENV_PATH = os.path.join(BASE_DIR, ".env")
 
+# 중단 명령어 — 이 중 하나가 메시지 전체와 일치하면 중단
+STOP_KEYWORDS = ["멈춰", "스탑", "중단", "/stop", "잠깐만", "스톱", "그만", "취소"]
+
 from telegram_bot import load_telegram_messages as load_messages, save_telegram_messages as save_messages
+
+
+def _is_stop_command(text):
+    """메시지가 중단 명령어인지 확인"""
+    return text.strip().lower() in [kw.lower() for kw in STOP_KEYWORDS]
+
+
+def _kill_executor():
+    """실행 중인 executor Claude 프로세스를 종료"""
+    killed = False
+
+    # 1. Claude executor 프로세스 kill
+    try:
+        result = subprocess.run(
+            ["pgrep", "-f", "claude.*append-system-prompt-file"],
+            capture_output=True, text=True
+        )
+        if result.returncode == 0:
+            pids = result.stdout.strip().split("\n")
+            for pid in pids:
+                if pid.strip():
+                    subprocess.run(["kill", pid.strip()], capture_output=True)
+                    print(f"[STOP] Claude executor 프로세스 종료: PID {pid.strip()}")
+                    killed = True
+    except Exception as e:
+        print(f"[WARN] 프로세스 kill 실패: {e}")
+
+    # 2. executor.lock 삭제
+    if os.path.exists(EXECUTOR_LOCK_FILE):
+        try:
+            os.remove(EXECUTOR_LOCK_FILE)
+            print("[STOP] executor.lock 삭제")
+        except OSError:
+            pass
+
+    # 3. working.json 읽고 삭제
+    working_info = None
+    if os.path.exists(WORKING_LOCK_FILE):
+        try:
+            with open(WORKING_LOCK_FILE, "r", encoding="utf-8") as f:
+                working_info = json.load(f)
+            os.remove(WORKING_LOCK_FILE)
+            print("[STOP] working.json 삭제")
+        except Exception:
+            pass
+
+    return killed, working_info
+
+
+async def _handle_stop_command(msg_data):
+    """
+    중단 명령어 처리 (async — fetch_new_messages 안에서 호출):
+    1. executor kill
+    2. interrupted.json 저장
+    3. 사용자에게 알림
+    4. 중단 명령 메시지를 processed로 표시
+    """
+    chat_id = msg_data["chat_id"]
+    message_id = msg_data["message_id"]
+
+    print(f"[STOP] 중단 명령 감지: '{msg_data['text']}' from {msg_data['first_name']}")
+
+    killed, working_info = _kill_executor()
+
+    # interrupted.json 저장
+    interrupted_data = {
+        "interrupted_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "reason": msg_data["text"],
+        "by_user": msg_data["first_name"],
+        "chat_id": chat_id,
+        "previous_work": None
+    }
+
+    if working_info:
+        interrupted_data["previous_work"] = {
+            "instruction": working_info.get("instruction_summary", ""),
+            "started_at": working_info.get("started_at", ""),
+            "message_id": working_info.get("message_id")
+        }
+
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with open(INTERRUPTED_FILE, "w", encoding="utf-8") as f:
+        json.dump(interrupted_data, f, ensure_ascii=False, indent=2)
+    print(f"[STOP] interrupted.json 저장")
+
+    # 중단 명령 메시지 processed 표시
+    data = load_messages()
+    for m in data.get("messages", []):
+        if m["message_id"] == message_id:
+            m["processed"] = True
+            break
+    save_messages(data)
+
+    # 사용자에게 알림 (async — event loop 충돌 방지)
+    from telegram_sender import send_message
+
+    if working_info:
+        task_name = working_info.get("instruction_summary", "알 수 없음")
+        reply = f"작업 중단했어요.\n\n중단된 작업: {task_name}\n\n새로운 지시를 보내주세요."
+    elif killed:
+        reply = "작업 중단했어요. 새로운 지시를 보내주세요."
+    else:
+        reply = "현재 실행 중인 작업이 없어요."
+
+    await send_message(chat_id, reply)
+    print(f"[STOP] 중단 알림 전송 완료")
 
 
 def setup_bot_token():
@@ -156,12 +268,38 @@ async def fetch_new_messages():
         updates = await bot.get_updates(
             offset=last_update_id + 1,
             timeout=5,
-            allowed_updates=["message"]
+            allowed_updates=["message", "callback_query"]
         )
 
         new_messages = []
 
         for update in updates:
+            # 인라인 버튼 콜백 처리 (중단 버튼)
+            if update.callback_query:
+                cq = update.callback_query
+                if cq.data == "stop":
+                    user = cq.from_user
+                    if ALLOWED_USERS and user.id not in ALLOWED_USERS:
+                        continue
+                    # 콜백 응답 (버튼 로딩 해제)
+                    try:
+                        await bot.answer_callback_query(cq.id, text="중단 처리 중...")
+                    except Exception:
+                        pass
+                    # 중단 처리
+                    stop_data = {
+                        "chat_id": cq.message.chat_id,
+                        "message_id": cq.message.message_id,
+                        "text": "중단",
+                        "first_name": user.first_name or "",
+                    }
+                    await _handle_stop_command(stop_data)
+                    if update.update_id > data["last_update_id"]:
+                        data["last_update_id"] = update.update_id
+                        save_messages(data)
+                    return 0
+                continue
+
             if not update.message:
                 continue
 
@@ -293,6 +431,13 @@ async def fetch_new_messages():
                 location_info = f" + 위치 정보" if msg.get('location') else ""
                 print(f"[MSG] 새 메시지: [{msg['timestamp']}] {msg['first_name']}: {text_preview}...{file_info}{location_info}")
 
+            # 중단 명령어 감지 — 일반 메시지보다 먼저 처리
+            stop_messages = [m for m in new_messages if m['text'] and _is_stop_command(m['text'])]
+            if stop_messages:
+                await _handle_stop_command(stop_messages[0])
+                # 중단 명령은 executor 트리거 안 함 — 0 반환
+                return 0
+
             # 수신 확인 전송
             for msg in new_messages:
                 try:
@@ -396,6 +541,10 @@ async def listen_loop():
 
     if not setup_bot_token():
         return
+
+    # 봇 커맨드 메뉴 등록 (/stop)
+    from telegram_sender import register_bot_commands_sync
+    register_bot_commands_sync()
 
     print(f"폴링 간격: {POLLING_INTERVAL}초")
     print(f"허용된 사용자: {ALLOWED_USERS}")

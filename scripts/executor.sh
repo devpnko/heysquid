@@ -111,14 +111,14 @@ log "[NEW_MESSAGE] New messages found. Starting Claude Code..."
 echo "$(date '+%Y-%m-%d %H:%M:%S')" > "$LOCKFILE"
 log "Lock file created: $LOCKFILE"
 
-# 착수 알림 전송
+# 착수 알림 전송 (중단 버튼 포함)
 cd "$HEYSQUID_DIR"
 "$VENV_PYTHON" -c "
-from telegram_sender import send_message_sync
+from telegram_sender import send_message_with_stop_button_sync
 from quick_check import get_first_unprocessed_chat_id
 chat_id = get_first_unprocessed_chat_id()
 if chat_id:
-    send_message_sync(chat_id, '🔧 작업 착수합니다.')
+    send_message_with_stop_button_sync(chat_id, '🔧 작업 착수합니다.')
 " 2>/dev/null || true
 cd "$ROOT"
 
@@ -143,6 +143,10 @@ PROMPT="CLAUDE.md의 지침에 따라 PM으로서 행동할 것.
    - 반환값 있으면: 이전 작업이 중단된 것. 사용자에게 알리고 이어서 처리.
      복구 정보에 원본 메시지와 작업 내용이 있으므로 사용자에게 다시 묻지 말 것.
    - None이면: 정상 시작.
+4.5) check_interrupted()로 사용자 의도적 중단 확인.
+   - 반환값 있으면: 사용자가 '멈춰' 등으로 이전 작업을 중단한 것.
+     이전 작업을 이어서 하지 말고, 새 메시지를 확인할 것.
+   - None이면: 중단 없음.
 5) heysquid/telegram_bot.py의 check_telegram()으로 새 메시지 확인.
 6) 메시지 내용에 따라 PM으로서 판단하고 적절히 응답.
    - 대화(인사/질문/잡담) → reply_telegram()으로 자연스럽게 답변.
