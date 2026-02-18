@@ -16,6 +16,16 @@ import time
 from datetime import datetime, timedelta
 from telegram_sender import send_files_sync, run_async_safe
 
+def _dashboard_log(agent, message):
+    """Add mission log entry to dashboard (silent fail)."""
+    try:
+        from agent_dashboard import add_mission_log, update_agent_status, set_pm_speech
+        add_mission_log(agent, message)
+        if agent == 'pm':
+            set_pm_speech(message)
+    except Exception:
+        pass
+
 # 경로 설정 (Mac)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(BASE_DIR)
@@ -179,6 +189,7 @@ def create_working_lock(message_id, instruction):
         with open(WORKING_LOCK_FILE, "x", encoding="utf-8") as f:
             json.dump(lock_data, f, ensure_ascii=False, indent=2)
         print(f"[LOCK] 작업 잠금 생성: message_id={msg_id_str}")
+        _dashboard_log('pm', f'Starting: {summary}')
         return True
     except FileExistsError:
         print(f"[WARN] 잠금 파일 이미 존재. 다른 작업이 진행 중입니다.")
@@ -306,6 +317,12 @@ def remove_working_lock():
     if os.path.exists(WORKING_LOCK_FILE):
         os.remove(WORKING_LOCK_FILE)
         print("[UNLOCK] 작업 잠금 해제")
+        _dashboard_log('pm', 'Standing by...')
+        try:
+            from agent_dashboard import set_pm_speech
+            set_pm_speech('')  # Clear pm.speech so idle lines can play
+        except Exception:
+            pass
 
 
 def load_index():
@@ -603,6 +620,9 @@ def check_telegram():
             "workspace": workspace_name
         })
 
+    if pending:
+        _dashboard_log('pm', f'Message received ({len(pending)} pending)')
+
     return pending
 
 
@@ -816,6 +836,7 @@ def report_telegram(instruction, result_text, chat_id, timestamp, message_id, fi
         message += f"\n\n_{len(message_ids)}개 메시지 합산 처리_"
 
     print(f"\n[SEND] 텔레그램으로 결과 전송 중... (chat_id: {chat_id})")
+    _dashboard_log('pm', 'Mission complete — sending report')
     success = send_files_sync(chat_id, message, files or [])
 
     if success:

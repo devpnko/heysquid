@@ -129,6 +129,15 @@ def update_external_ai(name: str, status: str, task: str = ''):
     _save_status(data)
 
 
+def set_pm_speech(text: str):
+    """Set PM speech bubble text (shown for ~5s on dashboard)."""
+    data = _load_status()
+    if 'pm' not in data:
+        data['pm'] = {"status": "idle", "task": "", "hp": 100}
+    data['pm']['speech'] = text
+    _save_status(data)
+
+
 def dispatch_agent(agent: str, desk: str, task: str, hp: int = None):
     """Dispatch agent to a desk with a task."""
     update_agent_status(agent, 'working', task, hp, assignment=desk)
