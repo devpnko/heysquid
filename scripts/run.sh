@@ -53,10 +53,19 @@ case "${1:-}" in
         launchctl load "$WATCHER_DST" 2>/dev/null || true
         launchctl load "$BRIEFING_DST" 2>/dev/null || true
 
+        # 대시보드 HTTP 서버
+        if ! lsof -i :8420 > /dev/null 2>&1; then
+            nohup bash "$SCRIPT_DIR/serve_dashboard.sh" > "$ROOT/logs/dashboard_server.log" 2>&1 &
+            echo "[OK] 대시보드 서버 (http://localhost:8420/dashboard_v4.html)"
+        else
+            echo "[OK] 대시보드 서버 이미 실행 중"
+        fi
+
         echo "[OK] listener 데몬 시작 (10초 폴링 + 즉시 executor 트리거)"
         echo "[OK] briefing 스케줄 등록 (매일 09:00)"
         echo ""
         echo "실시간 모니터: tmux attach -t heysquid"
+        echo "대시보드: http://localhost:8420/dashboard_v4.html"
         echo "상태 확인: bash scripts/run.sh status"
         ;;
 
@@ -65,6 +74,9 @@ case "${1:-}" in
 
         launchctl unload "$WATCHER_DST" 2>/dev/null || true
         launchctl unload "$BRIEFING_DST" 2>/dev/null || true
+
+        # 대시보드 서버 종료
+        pkill -f "http.server 8420" 2>/dev/null || true
 
         # Claude 프로세스 종료 (대기 루프 중일 수 있음)
         pkill -f "claude.*append-system-prompt-file" 2>/dev/null || true
@@ -132,6 +144,14 @@ case "${1:-}" in
             echo "  Claude Code: 작업 중"
         else
             echo "  Claude Code: 대기"
+        fi
+
+        echo ""
+        echo "--- 대시보드 서버 ---"
+        if lsof -i :8420 > /dev/null 2>&1; then
+            echo "  상태: 실행 중 (http://localhost:8420/dashboard_v4.html)"
+        else
+            echo "  상태: 중지됨"
         fi
 
         # Lock 파일 확인

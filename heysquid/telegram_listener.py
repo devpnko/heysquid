@@ -131,13 +131,17 @@ async def _handle_stop_command(msg_data):
         json.dump(interrupted_data, f, ensure_ascii=False, indent=2)
     print(f"[STOP] interrupted.json 저장")
 
-    # 중단 명령 메시지 processed 표시
+    # 모든 미처리 메시지 processed 처리 (이전 메시지가 다시 실행되지 않도록)
+    # 이전 작업 맥락은 interrupted.json에 보존됨
     data = load_messages()
+    cleared = 0
     for m in data.get("messages", []):
-        if m["message_id"] == message_id:
+        if not m.get("processed", False):
             m["processed"] = True
-            break
+            cleared += 1
     save_messages(data)
+    if cleared:
+        print(f"[STOP] 미처리 메시지 {cleared}개 정리 완료")
 
     # 사용자에게 알림 (async — event loop 충돌 방지)
     from telegram_sender import send_message

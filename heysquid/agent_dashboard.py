@@ -12,9 +12,9 @@ from datetime import datetime
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
 STATUS_FILE = os.path.join(DATA_DIR, 'agent_status.json')
-GAMEBOARD_HTML = os.path.join(DATA_DIR, 'gameboard_ocean_pixel.html')
+GAMEBOARD_HTML = os.path.join(DATA_DIR, 'dashboard_v4.html')
 
-VALID_AGENTS = ['pm', 'researcher', 'developer', 'reviewer', 'tester']
+VALID_AGENTS = ['pm', 'researcher', 'developer', 'verifier', 'writer']
 VALID_STATUSES = ['idle', 'working', 'complete', 'error']
 
 
@@ -42,22 +42,23 @@ def _default_status():
         "pm": {"status": "idle", "task": "", "hp": 100},
         "researcher": {"status": "idle", "task": "", "hp": 100},
         "developer": {"status": "idle", "task": "", "hp": 100},
-        "reviewer": {"status": "idle", "task": "", "hp": 100},
-        "tester": {"status": "idle", "task": "", "hp": 100},
+        "verifier": {"status": "idle", "task": "", "hp": 100},
+        "writer": {"status": "idle", "task": "", "hp": 100},
         "mission_log": [
             {"time": datetime.now().strftime('%H:%M:%S'), "agent": "system", "message": "시스템 대기중..."}
         ]
     }
 
 
-def update_agent_status(agent: str, status: str, task: str = '', hp: int = None):
+def update_agent_status(agent: str, status: str, task: str = '', hp: int = None, assignment: str = None):
     """Update a single agent's status.
 
     Args:
-        agent: 'pm', 'researcher', 'developer', 'reviewer', 'tester'
+        agent: 'pm', 'researcher', 'developer', 'verifier', 'writer'
         status: 'idle', 'working', 'complete', 'error'
         task: description of what the agent is doing
         hp: 0-100, auto-set based on status if omitted
+        assignment: desk name (e.g. 'thread', 'briefing') or None for pool
     """
     if agent not in VALID_AGENTS:
         return
@@ -65,8 +66,15 @@ def update_agent_status(agent: str, status: str, task: str = '', hp: int = None)
         return
 
     data = _load_status()
+    if agent not in data:
+        data[agent] = {"status": "idle", "task": "", "hp": 100}
     data[agent]['status'] = status
     data[agent]['task'] = task
+
+    if assignment is not None:
+        data[agent]['assignment'] = assignment
+    elif status == 'idle':
+        data[agent]['assignment'] = None
 
     if hp is not None:
         data[agent]['hp'] = max(0, min(100, hp))
@@ -110,6 +118,27 @@ def reset_all():
     now = datetime.now().strftime('%H:%M:%S')
     data['mission_log'] = [{"time": now, "agent": "system", "message": "시스템 초기화 완료."}]
     _save_status(data)
+
+
+def update_external_ai(name: str, status: str, task: str = ''):
+    """Update external AI character status (shown on dashboard)."""
+    data = _load_status()
+    if 'external_ai' not in data:
+        data['external_ai'] = {}
+    data['external_ai'][name] = {'status': status, 'task': task}
+    _save_status(data)
+
+
+def dispatch_agent(agent: str, desk: str, task: str, hp: int = None):
+    """Dispatch agent to a desk with a task."""
+    update_agent_status(agent, 'working', task, hp, assignment=desk)
+    add_mission_log(agent, task)
+
+
+def recall_agent(agent: str, message: str = 'Task complete'):
+    """Return agent to idle pool."""
+    update_agent_status(agent, 'idle', '', 100, assignment=None)
+    add_mission_log(agent, message)
 
 
 def take_dashboard_screenshot(output_path: str = None) -> str:
