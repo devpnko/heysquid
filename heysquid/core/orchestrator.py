@@ -6,7 +6,7 @@ Orchestration functions (check_telegram, combine_tasks, poll_new_messages,
 reply_telegram, get_24h_context, _detect_workspace) remain here.
 
 주요 기능:
-- check_telegram() - 새로운 명령 확인 (최근 24시간 대화 내역 포함)
+- check_telegram() - 새로운 명령 확인 (최근 48시간 대화 내역 포함)
 - report_telegram() - 결과 전송 및 메모리 저장
 - mark_done_telegram() - 처리 완료 표시
 - load_memory() - 기존 메모리 로드
@@ -129,11 +129,11 @@ def reply_telegram(chat_id, message_id, text):
 
 
 def get_24h_context(messages, current_message_id):
-    """최근 24시간 대화 내역 생성"""
+    """최근 48시간 대화 내역 생성"""
     now = datetime.now()
-    cutoff_time = now - timedelta(hours=24)
+    cutoff_time = now - timedelta(hours=48)
 
-    context_lines = ["=== 최근 24시간 대화 내역 ===\n"]
+    context_lines = ["=== 최근 48시간 대화 내역 ===\n"]
 
     for msg in messages:
         if msg.get("type") == "user" and msg["message_id"] == current_message_id:
@@ -162,7 +162,7 @@ def get_24h_context(messages, current_message_id):
             context_lines.append(f"[{msg['timestamp']}] heysquid: {text_preview}{file_info}")
 
     if len(context_lines) == 1:
-        return "최근 24시간 이내 대화 내역이 없습니다."
+        return "최근 48시간 이내 대화 내역이 없습니다."
 
     return "\n".join(context_lines)
 
@@ -223,6 +223,7 @@ def check_telegram():
                     "처음부터 다시 시작합니다."
                 )
                 send_message_sync(chat_id, alert_msg)
+                save_bot_response(chat_id, alert_msg, message_ids, channel="system")
 
             try:
                 os.remove(WORKING_LOCK_FILE)
@@ -393,7 +394,7 @@ def combine_tasks(pending_tasks):
     combined_instruction = "\n".join(combined_parts).strip()
 
     context_24h = sorted_tasks[0]['context_24h']
-    if context_24h and context_24h != "최근 24시간 이내 대화 내역이 없습니다.":
+    if context_24h and context_24h != "최근 48시간 이내 대화 내역이 없습니다.":
         combined_instruction = combined_instruction + "\n\n---\n\n[참고사항]\n" + context_24h
 
     return {
@@ -444,6 +445,6 @@ if __name__ == "__main__":
             print(f"명령: {task['instruction']}")
             if task.get('workspace'):
                 print(f"워크스페이스: {task['workspace']}")
-            print(f"\n[참고사항 - 최근 24시간 대화]")
+            print(f"\n[참고사항 - 최근 48시간 대화]")
             print(task['context_24h'])
             print()

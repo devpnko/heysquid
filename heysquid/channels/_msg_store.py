@@ -1,5 +1,5 @@
 """
-heysquid.channels._msg_store — telegram_messages.json I/O.
+heysquid.channels._msg_store — messages.json I/O.
 
 Functions:
 - load_telegram_messages / save_telegram_messages
@@ -16,7 +16,7 @@ from ..paths import MESSAGES_FILE, DATA_DIR
 
 
 def load_telegram_messages():
-    """telegram_messages.json 로드"""
+    """messages.json 로드"""
     if not os.path.exists(MESSAGES_FILE):
         return {"messages": [], "last_update_id": 0}
 
@@ -24,24 +24,25 @@ def load_telegram_messages():
         with open(MESSAGES_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception as e:
-        print(f"[WARN] telegram_messages.json 읽기 오류: {e}")
+        print(f"[WARN] messages.json 읽기 오류: {e}")
         return {"messages": [], "last_update_id": 0}
 
 
 def save_telegram_messages(data):
-    """telegram_messages.json 저장"""
+    """messages.json 저장"""
     os.makedirs(DATA_DIR, exist_ok=True)
     with open(MESSAGES_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
-def save_bot_response(chat_id, text, reply_to_message_ids, files=None):
-    """봇 응답을 telegram_messages.json에 저장 (대화 컨텍스트 유지)"""
+def save_bot_response(chat_id, text, reply_to_message_ids, files=None, channel="system"):
+    """봇 응답을 messages.json에 저장 (대화 컨텍스트 유지)"""
     data = load_telegram_messages()
 
     bot_message = {
         "message_id": f"bot_{reply_to_message_ids[0]}",
         "type": "bot",
+        "channel": channel,
         "chat_id": chat_id,
         "text": text,
         "files": files or [],

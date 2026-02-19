@@ -10,7 +10,7 @@ import os
 from .config import DATA_DIR_STR as DATA_DIR, TASKS_DIR_STR as TASKS_DIR
 
 # --- Data files ---
-MESSAGES_FILE = os.path.join(DATA_DIR, "telegram_messages.json")
+MESSAGES_FILE = os.path.join(DATA_DIR, "messages.json")
 WORKING_LOCK_FILE = os.path.join(DATA_DIR, "working.json")
 NEW_INSTRUCTIONS_FILE = os.path.join(DATA_DIR, "new_instructions.json")
 INTERRUPTED_FILE = os.path.join(DATA_DIR, "interrupted.json")

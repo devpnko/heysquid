@@ -325,9 +325,11 @@ def send_briefing():
 
     try:
         from ...channels.telegram import send_message_sync
+        from ...channels._msg_store import save_bot_response
         success = send_message_sync(int(CHAT_ID), briefing)
 
         if success:
+            save_bot_response(int(CHAT_ID), briefing, [-1], channel="system")
             print("[OK] 브리핑 전송 완료!")
         else:
             print("[ERROR] 브리핑 전송 실패!")

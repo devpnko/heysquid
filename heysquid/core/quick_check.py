@@ -4,7 +4,7 @@
 빠른 텔레그램 메시지 확인 (Claude Code 실행 전) — heysquid v2
 
 listener.py가 이미 폴링하고 있으므로, API 호출 없이
-telegram_messages.json에서 미처리 메시지만 확인.
+messages.json에서 미처리 메시지만 확인.
 
 Exit Codes:
   0: 새 메시지 없음 (즉시 종료)
@@ -51,7 +51,7 @@ def _main():
             print("[LOCK] 다른 작업 진행 중")
             sys.exit(2)
 
-        # telegram_messages.json에서 미처리 메시지 확인
+        # messages.json에서 미처리 메시지 확인
         if not os.path.exists(MESSAGES_FILE):
             sys.exit(0)
 

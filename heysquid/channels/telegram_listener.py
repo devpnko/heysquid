@@ -3,7 +3,7 @@
 
 역할:
 - 텔레그램 봇 API를 통해 새로운 메시지 수신
-- telegram_messages.json에 메시지 저장
+- messages.json에 메시지 저장
 - 허용된 사용자만 처리
 - 중복 메시지 방지
 
@@ -402,6 +402,7 @@ async def fetch_new_messages():
                 "message_id": msg.message_id,
                 "update_id": update.update_id,
                 "type": "user",
+                "channel": "telegram",
                 "user_id": user.id,
                 "username": user.username or "",
                 "first_name": user.first_name or "",
