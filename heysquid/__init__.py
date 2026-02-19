@@ -2,4 +2,4 @@
 
 __version__ = "0.1.0"
 
-from .config import PROJECT_ROOT, DATA_DIR, TASKS_DIR
+from .core.config import PROJECT_ROOT, DATA_DIR, TASKS_DIR
