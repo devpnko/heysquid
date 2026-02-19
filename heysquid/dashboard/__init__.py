@@ -231,6 +231,74 @@ print("OK")
     return None
 
 
+def init_party(topic, participants, mode="squid", virtual_experts=None):
+    """party_log 초기화. mode: 'squid' or 'kraken'."""
+    data = _load_status()
+    data['party_log'] = {
+        "topic": topic,
+        "mode": mode,
+        "participants": participants,
+        "virtual_experts": virtual_experts or [],
+        "status": "active",
+        "started_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "entries": [],
+    }
+    _save_status(data)
+    return data['party_log']
+
+
+def add_party_entry(agent, entry_type, message):
+    """party_log.entries에 토론 엔트리 추가.
+
+    Args:
+        agent: 기존 에이전트명 or 'kraken:name' 형태
+        entry_type: opinion | agree | disagree | proposal | conclusion
+        message: 발언 내용
+    """
+    data = _load_status()
+    party = data.get('party_log')
+    if not party or party.get('status') != 'active':
+        return None
+    entry = {
+        "time": datetime.now().strftime("%H:%M"),
+        "agent": agent,
+        "type": entry_type,
+        "message": message,
+    }
+    party['entries'].append(entry)
+    _save_status(data)
+    return entry
+
+
+def conclude_party(conclusion):
+    """party_log.status = 'concluded', 결론 메시지 추가."""
+    data = _load_status()
+    party = data.get('party_log')
+    if not party:
+        return
+    party['status'] = 'concluded'
+    party['entries'].append({
+        "time": datetime.now().strftime("%H:%M"),
+        "agent": "pm",
+        "type": "conclusion",
+        "message": conclusion,
+    })
+    _save_status(data)
+
+
+def get_party_log():
+    """현재 party_log dict 반환. 없으면 None."""
+    data = _load_status()
+    return data.get('party_log')
+
+
+def clear_party():
+    """party_log 제거."""
+    data = _load_status()
+    data.pop('party_log', None)
+    _save_status(data)
+
+
 def update_workspace(name, status=None, department=None, description=None):
     """Update workspace status in agent_status.json for dashboard visualization."""
     data = _load_status()

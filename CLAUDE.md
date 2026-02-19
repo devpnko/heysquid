@@ -522,3 +522,63 @@ set_current_task('Dashboard v5 — flinch fix')
 | 대기 진입 | 자동 (remove_working_lock) |
 
 **핵심**: 사용자가 대시보드를 볼 때, PM과 에이전트가 뭘 하고 있는지 실시간으로 알 수 있어야 한다.
+
+---
+
+## Party Mode (Squid / Kraken)
+
+PM은 TUI에서 사용자가 파티를 시작하면 토론을 진행한다.
+에이전트 관점을 PM이 직접 시뮬레이션하며, API 추가 호출 없이 비용을 절약한다.
+
+### Squid Mode — 지정 에이전트 토론
+
+사용자가 `:squid @researcher @developer 인증 방식 결정` 또는 `/squid @researcher @developer 인증 방식` 명령 시:
+1. `party_log`가 초기화됨 (mode: squid)
+2. PM은 지정된 에이전트(researcher, developer)의 관점에서 토론을 시뮬레이션
+3. 각 발언을 `add_party_entry(agent, entry_type, message)` 로 기록
+   - entry_type: opinion | agree | disagree | proposal | conclusion
+4. PM이 최종 결론을 `conclude_party(conclusion)`으로 기록
+
+```python
+from heysquid.dashboard import add_party_entry, conclude_party
+
+# 에이전트 관점 시뮬레이션
+add_party_entry("researcher", "opinion", "OAuth2가 표준이고 라이브러리 지원이 좋아요")
+add_party_entry("developer", "disagree", "JWT가 서버 부하가 적어요, 스케일링에 유리")
+add_party_entry("researcher", "agree", "맞아요, 우리 규모에서는 JWT가 더 적합하네요")
+
+# 결론
+conclude_party("JWT 기반 인증으로 결정. 리프레시 토큰은 Redis에 저장.")
+```
+
+### Kraken Mode — 전원 + Kraken Crew 총동원
+
+사용자가 `:kraken 프로젝트 방향성` 또는 `/kraken 프로젝트 방향성` 명령 시:
+1. `party_log`가 초기화됨 (mode: kraken, 전체 에이전트 + Kraken Crew)
+2. PM은 모든 참가자의 관점에서 종합 평가를 시뮬레이션
+3. 기존 에이전트: agent 이름 그대로 (예: "researcher")
+4. Kraken Crew: `kraken:name` 형태 (예: "kraken:whale", "kraken:dolphin")
+5. **각 크루의 `style` 필드를 참고**하여 발언 톤/관점 결정
+
+```python
+from heysquid.core.agents import KRAKEN_CREW
+from heysquid.dashboard import add_party_entry
+
+# 크루별 style 확인
+# KRAKEN_CREW["whale"]["style"] = "거시적 시각, 실용적 아키텍처, 확장성 트레이드오프, 검증된 기술"
+
+add_party_entry("kraken:whale", "opinion", "마이크로서비스보다 모놀리스가 현재 팀 규모에 적합합니다")
+add_party_entry("kraken:dolphin", "proposal", "MVP를 먼저 검증하고, 트래픽 증가 시 분리합시다")
+add_party_entry("kraken:crab", "opinion", "모놀리스라도 도메인 경계는 명확히 해야 합니다")
+```
+
+### Kraken Crew 레지스트리
+
+`heysquid/core/agents.py`의 `KRAKEN_CREW` 딕셔너리에 13명의 가상 크루가 정의되어 있다.
+크라켄이 소환하는 심해 전문가들 — 해양생물 습성이 역할과 매칭.
+
+**Builders (개발/비즈니스 — 8명):**
+🦭 seal(Analyst) / 🐋 whale(Architect) / 🦀 crab(Developer) / 🐬 dolphin(PM) / 🐟 sailfish(Solo Dev) / 🦦 otter(Scrum Master) / 🐚 nautilus(Tech Writer) / 🪸 coral(UX Designer)
+
+**Dreamers (창의/혁신 — 5명):**
+🐠 clownfish(Brainstorm Coach) / 🪼 jellyfish(Problem Solver) / 🦐 shrimp(Design Thinking) / 🐟 flyingfish(Innovation) / 🦑 cuttlefish(Presentation)

@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-🦑 SQUID TUI Monitor — curses 기반 채팅 + 에이전트 모니터 + 끼어들기
+🦑 SQUID TUI Monitor — curses 기반 채팅 + 파티 + 통합 로그
 
 사용법:
     python3 scripts/tui_monitor.py
     bash scripts/monitor.sh
 
 모드 (Tab/Shift+Tab 순환):
-    Chat      — 텔레그램 채팅 인터페이스 (기본)
-    Dashboard — 에이전트 상태 + 미션 로그
-    Stream    — Raw Claude 이벤트 로그
+    Chat  — 텔레그램 채팅 인터페이스 (기본)
+    Party — 에이전트 상태 + 토론 뷰 (Squid/Kraken 모드)
+    Log   — SQUID LOG + Stream LOG 통합
 
 Chat 모드:
     아무 문자  — 직접 타이핑
@@ -21,8 +21,11 @@ Chat 모드:
     q         — 버퍼 비어있으면 종료
     /stop     — 작업 중단
     /resume   — executor 재시작
+    /squid @a1 @a2 주제 — Squid 모드 파티 시작
+    /kraken [주제]      — Kraken 모드 (전원+Kraken Crew)
+    /endparty           — 파티 종료
 
-Dashboard/Stream 모드:
+Party/Log 모드:
     :         — 커맨드 모드 진입
     q         — TUI 종료
     Tab       — 다음 모드
@@ -44,7 +47,7 @@ from datetime import datetime
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-from heysquid.core.agents import AGENTS, TOOL_EMOJI, SUBAGENT_MAP
+from heysquid.core.agents import AGENTS, TOOL_EMOJI, SUBAGENT_MAP, KRAKEN_CREW
 from heysquid.core.config import get_env_path
 
 # .env에서 BOT_TOKEN 로드
@@ -74,10 +77,10 @@ AGENT_SHORT = {"pm": "PM", "researcher": "researcher", "developer": "developer",
 
 # --- 모드 ---
 MODE_CHAT = 0
-MODE_DASHBOARD = 1
-MODE_STREAM = 2
+MODE_PARTY = 1
+MODE_LOG = 2
 MODE_COUNT = 3
-MODE_NAMES = {MODE_CHAT: "CHAT", MODE_DASHBOARD: "DASHBOARD", MODE_STREAM: "STREAM"}
+MODE_NAMES = {MODE_CHAT: "CHAT", MODE_PARTY: "PARTY", MODE_LOG: "LOG"}
 
 # --- 채널 이모지 ---
 CHANNEL_TAG = {
@@ -247,7 +250,10 @@ def load_stream_lines(last_pos, buffer):
                 try:
                     parsed = _parse_stream_event(json.loads(line))
                     if parsed:
-                        buffer.append(parsed)
+                        if isinstance(parsed, list):
+                            buffer.extend(parsed)
+                        else:
+                            buffer.append(parsed)
                 except json.JSONDecodeError:
                     pass
             return f.tell()
@@ -256,7 +262,7 @@ def load_stream_lines(last_pos, buffer):
 
 
 def _parse_stream_event(d):
-    """JSONL 이벤트 → 표시용 (time, emoji, agent, text) 튜플"""
+    """JSONL 이벤트 → 표시용 [(time, emoji, agent, text), ...] 리스트"""
     t = d.get("type", "")
     now = datetime.now().strftime("%H:%M")
 
@@ -264,7 +270,7 @@ def _parse_stream_event(d):
         subtype = d.get("subtype", "")
         if subtype == "init":
             model = d.get("model", "?")
-            return (now, "🚀", "system", f"Session start ({model})")
+            return [(now, "🚀", "system", f"Session start ({model})")]
 
     elif t == "assistant":
         content = d.get("message", {}).get("content", [])
@@ -285,8 +291,26 @@ def _parse_stream_event(d):
                     emoji = AGENTS[da]["emoji"] if da and da in AGENTS else "🎯"
                     label = agent_type or "agent"
                     model_str = f" ({model})" if model else ""
-                    results.append((now, emoji, da or "pm",
-                                    f"[{label}]{model_str} {desc}"))
+                    # tool_use id로 active agent 추적
+                    tool_id = c.get("id", "")
+                    if tool_id:
+                        _stream_active_agents[tool_id] = {
+                            "type": label, "agent": da, "model": model_str.strip(" ()"),
+                            "start": datetime.now(),
+                        }
+                    # 여러 줄 박스 포맷
+                    lines = [
+                        (now, "┌─", da or "pm", f"{emoji} [{label}]{model_str}"),
+                        ("", "│", da or "pm", f"  임무: {desc}"),
+                    ]
+                    prompt = inp.get("prompt", "")
+                    if prompt:
+                        for pl in prompt.strip().split("\n")[:3]:
+                            pl = pl.strip()
+                            if pl:
+                                lines.append(("", "│", da or "pm", f"  > {_trunc(pl, 70)}"))
+                    lines.append(("", "│", da or "pm", ""))
+                    results.extend(lines)
                 else:
                     emoji = TOOL_EMOJI.get(name, "🔧")
                     detail = ""
@@ -306,14 +330,38 @@ def _parse_stream_event(d):
                         detail = str(inp)[:80]
                     results.append((now, emoji, "pm",
                                     f"{name} → {_trunc(detail, 90)}"))
-        return results[0] if results else None
+        return results if results else None
+
+    elif t == "user":
+        content = d.get("message", {}).get("content", [])
+        for c in content:
+            if isinstance(c, dict) and c.get("type") == "tool_result":
+                tool_id = c.get("tool_use_id", "")
+                if tool_id in _stream_active_agents:
+                    agent = _stream_active_agents.pop(tool_id)
+                    elapsed = (datetime.now() - agent["start"]).total_seconds()
+                    da = agent.get("agent") or "pm"
+                    emoji = AGENTS[da]["emoji"] if da in AGENTS else "✅"
+                    model_str = f" [{agent['model']}]" if agent.get("model") else ""
+                    text = c.get("content", "")
+                    lines = [
+                        ("", "│", da, ""),
+                        (now, "✅", da, f"└─ [{agent['type']}] 완료 ({elapsed:.1f}초){model_str}"),
+                    ]
+                    if isinstance(text, str) and text:
+                        for rl in _trunc(text, 150).split(". ")[:2]:
+                            if rl.strip():
+                                lines.append(("", " ", da, f"  → {rl.strip()}"))
+                    return lines
+        return None
 
     elif t == "result":
         cost = d.get("total_cost_usd", 0)
         dur = d.get("duration_ms", 0) / 1000
         turns = d.get("num_turns", 0)
-        return (now, "✨", "system",
-                f"Session end  ${cost:.4f} | {dur:.0f}s | {turns}턴")
+        _stream_active_agents.clear()
+        return [(now, "✨", "system",
+                f"Session end  ${cost:.4f} | {dur:.0f}s | {turns}턴")]
 
     return None
 
@@ -321,6 +369,10 @@ def _parse_stream_event(d):
 def _trunc(text, maxlen=120):
     text = text.replace("\n", " ").strip()
     return text[:maxlen] + "..." if len(text) > maxlen else text
+
+
+# --- Stream 에이전트 추적 ---
+_stream_active_agents = {}  # tool_use id → {type, agent, model, start}
 
 
 # --- Chat 데이터 폴링 ---
@@ -758,36 +810,11 @@ def render_chat(win, chat_lines, input_buf, flash_msg, status):
                  curses.color_pair(7) | curses.A_BOLD)
 
 
-def render_dashboard(win, status):
-    """Dashboard 모드 렌더링"""
-    h, w = win.getmaxyx()
-    if h < 10 or w < 40:
-        _safe_addstr(win, 0, 0, "Terminal too small")
-        return
-
-    quest = status.get("current_task", "")
-    _safe_addstr(win, 0, 1, "🦑 SQUID Agent Monitor", curses.A_BOLD)
-    _safe_addstr(win, 0, 25, "[DASHBOARD]",
-                 COLOR_PAIRS.get("pm", curses.A_NORMAL) | curses.A_BOLD)
-
-    if quest:
-        _safe_addstr(win, 1, 1, f"Quest: {_trunc(quest, w - 12)}", curses.A_DIM)
-
-    _safe_addstr(win, 2, 0, "─" * (w - 1))
-
-    left_w = 18
-    sep_x = left_w
-
-    _safe_addstr(win, 3, 1, "AGENTS", curses.A_BOLD)
-
-    for row in range(3, h - 2):
-        _safe_addstr(win, row, sep_x, "│")
-
-    _safe_addstr(win, 3, sep_x + 2, "SQUID LOG", curses.A_BOLD)
-
-    row = 5
+def _render_agent_panel(win, status, start_row, left_w, max_rows):
+    """에이전트 상태 패널 (Party 모드 왼쪽)"""
+    row = start_row
     for agent_name in AGENT_ORDER:
-        if row >= h - 3:
+        if row >= start_row + max_rows:
             break
         info = AGENTS.get(agent_name, {})
         emoji = info.get("emoji", "🤖")
@@ -807,65 +834,223 @@ def render_dashboard(win, status):
             status_str = f"▶ {_trunc(task, left_w - 5)}" if task else f"▶ {agent_status}"
             _safe_addstr(win, row, 3, status_str, curses.color_pair(10))
         row += 2
+    return row
 
-    logs = status.get("mission_log", [])
-    log_start_row = 5
-    max_log_rows = h - log_start_row - 2
+
+def _get_party_agent_info(agent_key):
+    """party entry의 agent 키 → (emoji, name, color, is_crew)"""
+    if agent_key.startswith("kraken:"):
+        expert_name = agent_key[7:]  # len("kraken:") == 7
+        expert = KRAKEN_CREW.get(expert_name, {})
+        emoji = expert.get("emoji", "🤖")
+        role = expert.get("role", "Expert")
+        display = f"{expert.get('name', expert_name)} ({role})"
+        return emoji, display, curses.A_DIM, True
+    elif agent_key in AGENTS:
+        info = AGENTS[agent_key]
+        emoji = info.get("emoji", "🤖")
+        display = AGENT_SHORT.get(agent_key, agent_key)
+        color = COLOR_PAIRS.get(agent_key, curses.A_NORMAL)
+        return emoji, display, color, False
+    else:
+        return "🤖", agent_key, curses.A_NORMAL, False
+
+
+ENTRY_TYPE_LABELS = {
+    "opinion": "의견",
+    "agree": "동의",
+    "disagree": "반대",
+    "proposal": "제안",
+    "conclusion": "결론",
+}
+
+
+def render_party(win, status):
+    """Party 모드 렌더링 — 왼쪽 에이전트 상태 + 오른쪽 토론 뷰"""
+    h, w = win.getmaxyx()
+    if h < 10 or w < 40:
+        _safe_addstr(win, 0, 0, "Terminal too small")
+        return
+
+    party = status.get("party_log")
+
+    # 헤더
+    _safe_addstr(win, 0, 1, "🦑 SQUID", curses.A_BOLD)
+    _safe_addstr(win, 0, 11, "[PARTY]",
+                 COLOR_PAIRS.get("pm", curses.A_NORMAL) | curses.A_BOLD)
+
+    now = datetime.now().strftime("%H:%M:%S")
+    is_live = os.path.exists(EXECUTOR_LOCK)
+    indicator = "● LIVE" if is_live else "○ IDLE"
+    right_info = f"{indicator}  {now}"
+    _safe_addstr(win, 0, w - len(right_info) - 2, right_info,
+                 curses.color_pair(10) | curses.A_BOLD if is_live else curses.A_DIM)
+
+    if party:
+        mode_str = party.get("mode", "squid")
+        topic = party.get("topic", "")
+        if mode_str == "kraken":
+            _safe_addstr(win, 1, 1, "── 🦑 Kraken Mode ──",
+                         COLOR_PAIRS.get("pm", curses.A_NORMAL) | curses.A_BOLD)
+        else:
+            _safe_addstr(win, 1, 1, "── 🦑 Squid Mode ──",
+                         COLOR_PAIRS.get("pm", curses.A_NORMAL) | curses.A_BOLD)
+        if topic:
+            _safe_addstr(win, 1, 24, _trunc(topic, w - 28), curses.A_DIM)
+    else:
+        _safe_addstr(win, 1, 1, "", curses.A_DIM)
+
+    _safe_addstr(win, 2, 0, "─" * (w - 1))
+
+    left_w = 18
+    sep_x = left_w
+
+    _safe_addstr(win, 3, 1, "AGENTS", curses.A_BOLD)
+
+    for row in range(3, h - 2):
+        _safe_addstr(win, row, sep_x, "│")
+
+    # 왼쪽: 에이전트 패널
+    _render_agent_panel(win, status, 5, left_w, h - 7)
+
+    # 오른쪽: 토론 뷰
     right_x = sep_x + 2
     right_w = w - right_x - 1
 
-    visible_logs = logs[-max_log_rows:] if len(logs) > max_log_rows else logs
-    visible_logs = list(reversed(visible_logs))
+    if not party:
+        # 토론 없음 안내
+        _safe_addstr(win, 3, right_x, "DISCUSSION", curses.A_BOLD)
+        _safe_addstr(win, 5, right_x, "토론이 없습니다.", curses.A_DIM)
+        _safe_addstr(win, 7, right_x, ":squid @agent1 @agent2 주제", curses.A_DIM)
+        _safe_addstr(win, 8, right_x, "  → Squid 모드 파티 시작", curses.A_DIM)
+        _safe_addstr(win, 10, right_x, ":kraken [주제]", curses.A_DIM)
+        _safe_addstr(win, 11, right_x, "  → Kraken 모드 (전원+Crew)", curses.A_DIM)
+        return
 
-    for i, entry in enumerate(visible_logs):
-        if i >= max_log_rows:
+    # 토론 헤더
+    party_status = party.get("status", "active")
+    status_label = "● ACTIVE" if party_status == "active" else "○ CONCLUDED"
+    _safe_addstr(win, 3, right_x, "DISCUSSION", curses.A_BOLD)
+    _safe_addstr(win, 3, right_x + 12, status_label,
+                 curses.color_pair(10) if party_status == "active" else curses.A_DIM)
+
+    # Kraken 모드: 참가자 아이콘 라인
+    entry_start = 5
+    if party.get("mode") == "kraken":
+        icons = ""
+        for p in party.get("participants", []):
+            emoji = AGENTS.get(p, {}).get("emoji", "")
+            if emoji:
+                icons += emoji
+        for ve in party.get("virtual_experts", []):
+            expert = KRAKEN_CREW.get(ve, {})
+            icons += expert.get("emoji", "")
+        if icons:
+            _safe_addstr(win, 4, right_x, _trunc(icons, right_w), curses.A_DIM)
+            entry_start = 5
+
+    # 엔트리 렌더링
+    entries = party.get("entries", [])
+    max_entry_rows = h - entry_start - 2
+    # 최신 엔트리가 하단에 오도록 (역순 아닌 정순, overflow 시 tail)
+    visible_entries = entries[-max_entry_rows:] if len(entries) > max_entry_rows else entries
+
+    row = entry_start
+    for entry in visible_entries:
+        if row >= h - 2:
             break
-        t = entry.get("time", "")
-        agent = entry.get("agent", "")
+        agent_key = entry.get("agent", "")
+        etype = entry.get("type", "opinion")
         msg = entry.get("message", "")
+        etime = entry.get("time", "")
 
-        emoji = ""
-        color = curses.A_NORMAL
-        if agent in AGENTS:
-            emoji = AGENTS[agent]["emoji"]
-            color = COLOR_PAIRS.get(agent, curses.A_NORMAL)
-        elif agent == "commander":
-            emoji = "🎖️"
-            color = COLOR_PAIRS.get("commander", curses.A_BOLD)
-        elif agent == "system":
-            emoji = "⚙️"
+        emoji, display, color, is_crew = _get_party_agent_info(agent_key)
+        type_label = ENTRY_TYPE_LABELS.get(etype, etype)
 
-        line = f"{t} {emoji} {msg}"
-        _safe_addstr(win, log_start_row + i, right_x, _trunc(line, right_w),
-                     color if i == 0 else curses.A_DIM)
+        header = f"{etime} {emoji} {display} [{type_label}]"
+        _safe_addstr(win, row, right_x, _trunc(header, right_w),
+                     curses.A_DIM if is_crew else color)
+        row += 1
+
+        # 메시지 줄바꿈
+        if msg and row < h - 2:
+            for wl in _wrap_text(msg, right_w - 2):
+                if row >= h - 2:
+                    break
+                _safe_addstr(win, row, right_x + 2, _trunc(wl, right_w - 2),
+                             curses.A_DIM if is_crew else curses.A_NORMAL)
+                row += 1
 
 
-def render_stream(win, stream_buffer):
-    """Stream 모드 렌더링"""
+def render_log(win, stream_buffer, status):
+    """Unified Log 모드 — stream_buffer + mission_log 통합"""
     h, w = win.getmaxyx()
     if h < 5 or w < 40:
         _safe_addstr(win, 0, 0, "Terminal too small")
         return
 
-    _safe_addstr(win, 0, 1, "🦑 SQUID Stream Log", curses.A_BOLD)
-    _safe_addstr(win, 0, 22, "[STREAM]",
+    _safe_addstr(win, 0, 1, "🦑 SQUID", curses.A_BOLD)
+    _safe_addstr(win, 0, 11, "[LOG]",
                  COLOR_PAIRS.get("pm", curses.A_NORMAL) | curses.A_BOLD)
+
+    now = datetime.now().strftime("%H:%M:%S")
+    is_live = os.path.exists(EXECUTOR_LOCK)
+    indicator = "● LIVE" if is_live else "○ IDLE"
+    right_info = f"{indicator}  {now}"
+    _safe_addstr(win, 0, w - len(right_info) - 2, right_info,
+                 curses.color_pair(10) | curses.A_BOLD if is_live else curses.A_DIM)
 
     _safe_addstr(win, 1, 0, "─" * (w - 1))
 
-    max_rows = h - 4
-    visible = list(stream_buffer)[-max_rows:] if len(stream_buffer) > max_rows else list(stream_buffer)
-    visible = list(reversed(visible))
+    # 상단: MISSION LOG / 하단: STREAM LOG (반반 분할)
+    total_rows = h - 4  # 헤더(2) + 하단바(2) 제외
+    mission_rows = total_rows // 2
+    stream_rows = total_rows - mission_rows
 
-    for i, entry in enumerate(visible):
-        if i >= max_rows:
+    # ── MISSION LOG ──
+    _safe_addstr(win, 2, 1, "▸ MISSION", curses.A_BOLD)
+    mission_entries = []
+    for entry in status.get("mission_log", []):
+        agent = entry.get("agent", "")
+        t = entry.get("time", "")
+        msg = entry.get("message", "")
+        if agent == "commander":
+            mission_entries.append((t, "🎖️", "commander", msg))
+        elif agent == "system":
+            mission_entries.append((t, "⚙️", "system", msg))
+        elif agent in AGENTS:
+            emoji = AGENTS[agent].get("emoji", "🤖")
+            mission_entries.append((t, emoji, agent, msg))
+        else:
+            mission_entries.append((t, "🔧", agent or "system", msg))
+
+    m_visible = mission_entries[-(mission_rows - 1):] if len(mission_entries) > mission_rows - 1 else mission_entries
+    m_visible = list(reversed(m_visible))
+
+    for i, (tm, emoji, agent, text) in enumerate(m_visible):
+        if i >= mission_rows - 1:
             break
-        tm, emoji, agent, text = entry
         color = COLOR_PAIRS.get(agent, curses.A_NORMAL)
+        line = f"[{tm}] {emoji} {text}" if tm else f"       {emoji} {text}"
+        attr = color | curses.A_BOLD if i == 0 else color
+        _safe_addstr(win, 3 + i, 1, _trunc(line, w - 3), attr)
 
-        line = f"[{tm}] {emoji} {text}"
-        attr = color if i == 0 else curses.A_DIM
-        _safe_addstr(win, 2 + i, 1, _trunc(line, w - 3), attr)
+    # ── 구분선 ──
+    sep_row = 2 + mission_rows
+    _safe_addstr(win, sep_row, 0, "─" * (w - 1))
+
+    # ── STREAM LOG ──
+    _safe_addstr(win, sep_row + 1, 1, "│ STREAM", curses.A_BOLD | curses.A_DIM)
+    s_list = list(stream_buffer)
+    s_visible = s_list[-(stream_rows - 1):] if len(s_list) > stream_rows - 1 else s_list
+    s_visible = list(reversed(s_visible))
+
+    for i, (tm, emoji, agent, text) in enumerate(s_visible):
+        if i >= stream_rows - 1:
+            break
+        color = COLOR_PAIRS.get(agent, curses.A_NORMAL)
+        line = f"[{tm}] {emoji} {text}" if tm else f"       {emoji} {text}"
+        _safe_addstr(win, sep_row + 2 + i, 1, _trunc(line, w - 3), curses.A_DIM)
 
 
 def render_status_bar_legacy(win, mode, cmd_mode, cmd_buf, flash_msg):
@@ -923,6 +1108,17 @@ def _send_chat_message(text, stream_buffer):
         ok, msg = _resume_executor()
         return msg
 
+    if text.startswith("/squid "):
+        return _start_squid_party(text[7:], stream_buffer)
+
+    if text.startswith("/kraken"):
+        return _start_kraken_party(text[7:], stream_buffer)
+
+    if text == "/endparty":
+        from heysquid.dashboard import clear_party
+        clear_party()
+        return "Party 종료"
+
     # 일반 메시지
     mid = inject_local_message(text)
     mentions = _parse_mentions(text)
@@ -938,6 +1134,37 @@ def _send_chat_message(text, stream_buffer):
 
 # --- 커맨드 실행 (Dashboard/Stream) ---
 
+def _start_squid_party(args_str, stream_buffer):
+    """Squid 모드 파티 시작. args: '@agent1 @agent2 주제'"""
+    from heysquid.dashboard import init_party
+    parts = args_str.strip().split()
+    participants = []
+    topic_parts = []
+    for p in parts:
+        if p.startswith("@") and p[1:] in [a for a in AGENT_ORDER if a != "pm"]:
+            participants.append(p[1:])
+        else:
+            topic_parts.append(p)
+    topic = " ".join(topic_parts) or "자유 토론"
+    if not participants:
+        return "참가 에이전트를 지정하세요: :squid @agent1 @agent2 주제"
+    init_party(topic, participants, mode="squid")
+    names = " ".join(f"@{p}" for p in participants)
+    _log_commander_message(f"[Party] Squid 모드: {names} — {topic}", stream_buffer)
+    return f"Squid Party 시작: {names}"
+
+
+def _start_kraken_party(args_str, stream_buffer):
+    """Kraken 모드 파티 시작. args: '[주제]'"""
+    from heysquid.dashboard import init_party
+    from heysquid.core.agents import KRAKEN_CREW_NAMES
+    topic = args_str.strip() or "프로젝트 종합 평가"
+    participants = [a for a in AGENT_ORDER if a != "pm"]
+    init_party(topic, participants, mode="kraken", virtual_experts=KRAKEN_CREW_NAMES)
+    _log_commander_message(f"[Party] Kraken 모드: 전원+Crew — {topic}", stream_buffer)
+    return f"Kraken Party 시작: 전원+Kraken Crew"
+
+
 def _execute_command(cmd, stream_buffer):
     """커맨드 파싱 및 실행 (: 접두사 모드)"""
     cmd = cmd.strip()
@@ -951,6 +1178,17 @@ def _execute_command(cmd, stream_buffer):
     elif cmd == "resume":
         ok, msg = _resume_executor()
         return msg
+
+    elif cmd.startswith("squid "):
+        return _start_squid_party(cmd[6:], stream_buffer)
+
+    elif cmd.startswith("kraken"):
+        return _start_kraken_party(cmd[6:], stream_buffer)
+
+    elif cmd == "endparty":
+        from heysquid.dashboard import clear_party
+        clear_party()
+        return "Party 종료"
 
     elif cmd.startswith("msg "):
         text = cmd[4:].strip()
@@ -1022,9 +1260,9 @@ def tui_main(stdscr):
             else:
                 curses.curs_set(0)
 
-        elif mode == MODE_DASHBOARD:
+        elif mode == MODE_PARTY:
             status = load_agent_status()
-            render_dashboard(stdscr, status)
+            render_party(stdscr, status)
             if h > 2:
                 _safe_addstr(stdscr, h - 2, 0, "─" * (w - 1))
             render_status_bar_legacy(stdscr, mode, cmd_mode, cmd_buf, flash_msg)
@@ -1033,9 +1271,10 @@ def tui_main(stdscr):
             else:
                 curses.curs_set(0)
 
-        else:  # MODE_STREAM
+        else:  # MODE_LOG
             stream_pos = load_stream_lines(stream_pos, stream_buffer)
-            render_stream(stdscr, stream_buffer)
+            status = load_agent_status()
+            render_log(stdscr, stream_buffer, status)
             if h > 2:
                 _safe_addstr(stdscr, h - 2, 0, "─" * (w - 1))
             render_status_bar_legacy(stdscr, mode, cmd_mode, cmd_buf, flash_msg)
@@ -1071,11 +1310,11 @@ def tui_main(stdscr):
                         tab_index += 1
                 else:
                     # 다음 모드
-                    mode = MODE_DASHBOARD
+                    mode = MODE_PARTY
                     chat_buf = ""
                     tab_index = 0
             elif ch_ord == curses.KEY_BTAB:  # Shift+Tab
-                mode = MODE_STREAM
+                mode = MODE_LOG
                 chat_buf = ""
                 tab_index = 0
             elif ch_ord in (curses.KEY_ENTER, 10, 13):
