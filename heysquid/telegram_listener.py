@@ -33,14 +33,11 @@ BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 ALLOWED_USERS = [int(uid.strip()) for uid in os.getenv("TELEGRAM_ALLOWED_USERS", "").split(",") if uid.strip()]
 POLLING_INTERVAL = int(os.getenv("TELEGRAM_POLLING_INTERVAL", "10"))
 
-MESSAGES_FILE = os.path.join(DATA_DIR, "telegram_messages.json")
-INTERRUPTED_FILE = os.path.join(DATA_DIR, "interrupted.json")
-WORKING_LOCK_FILE = os.path.join(DATA_DIR, "working.json")
-EXECUTOR_LOCK_FILE = os.path.join(DATA_DIR, "executor.lock")
+from .paths import MESSAGES_FILE, INTERRUPTED_FILE, WORKING_LOCK_FILE, EXECUTOR_LOCK_FILE
 # 중단 명령어 — 이 중 하나가 메시지 전체와 일치하면 중단
 STOP_KEYWORDS = ["멈춰", "스탑", "중단", "/stop", "잠깐만", "스톱", "그만", "취소"]
 
-from .telegram_bot import load_telegram_messages as load_messages, save_telegram_messages as save_messages
+from ._msg_store import load_telegram_messages as load_messages, save_telegram_messages as save_messages
 
 
 def _is_stop_command(text):
@@ -512,7 +509,7 @@ def _ensure_tmux_session():
 
 def _trigger_executor():
     """tmux 세션에서 executor.sh 실행 (실시간 모니터링 + 개입 가능)"""
-    lockfile = os.path.join(PROJECT_ROOT, "data", "executor.lock")
+    lockfile = EXECUTOR_LOCK_FILE
     if os.path.exists(lockfile):
         print("[TRIGGER] executor 이미 실행 중 — 스킵")
         return

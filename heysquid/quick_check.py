@@ -17,10 +17,7 @@ import sys
 import json
 from datetime import datetime
 
-from .config import DATA_DIR_STR as DATA_DIR
-
-MESSAGES_FILE = os.path.join(DATA_DIR, "telegram_messages.json")
-WORKING_LOCK_FILE = os.path.join(DATA_DIR, "working.json")
+from .paths import MESSAGES_FILE, WORKING_LOCK_FILE
 
 RETRY_MAX = 3
 EXPIRE_HOURS = 24

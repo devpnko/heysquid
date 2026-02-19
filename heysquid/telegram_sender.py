@@ -206,7 +206,7 @@ def send_message_sync(chat_id, text, parse_mode="Markdown"):
 
     if result:
         try:
-            from .telegram_bot import (
+            from ._working_lock import (
                 update_working_activity,
                 check_new_messages_during_work,
                 save_new_instructions

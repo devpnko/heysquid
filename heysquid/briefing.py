@@ -16,7 +16,6 @@
 """
 
 import os
-import sys
 import json
 import re
 import subprocess
@@ -28,7 +27,8 @@ from urllib.error import URLError
 from dotenv import load_dotenv
 
 # 경로 설정
-from .config import PROJECT_ROOT_STR as PROJECT_ROOT, get_env_path
+from .config import PROJECT_ROOT_STR as PROJECT_ROOT, TASKS_DIR_STR as TASKS_DIR, WORKSPACES_DIR, get_env_path
+from .paths import MESSAGES_FILE
 
 # .env 로드
 load_dotenv(get_env_path())
@@ -78,7 +78,7 @@ def get_git_summary(repo_path):
 
 def get_pending_tasks():
     """미처리 텔레그램 메시지 수 확인"""
-    messages_file = os.path.join(PROJECT_ROOT, "data", "telegram_messages.json")
+    messages_file = MESSAGES_FILE
 
     if not os.path.exists(messages_file):
         return 0
@@ -97,7 +97,7 @@ def get_pending_tasks():
 
 def get_recent_progress(name):
     """최근 진행 기록 (마지막 3개 항목)"""
-    progress_file = os.path.join(PROJECT_ROOT, "workspaces", name, "progress.md")
+    progress_file = os.path.join(str(WORKSPACES_DIR), name, "progress.md")
 
     if not os.path.exists(progress_file):
         return "진행 기록 없음"
@@ -947,7 +947,7 @@ def save_thread_drafts(drafts):
         return ""
 
     today = datetime.now().strftime("%Y%m%d")
-    dir_path = os.path.join(PROJECT_ROOT, "tasks", f"briefing_{today}")
+    dir_path = os.path.join(TASKS_DIR, f"briefing_{today}")
     os.makedirs(dir_path, exist_ok=True)
 
     file_path = os.path.join(dir_path, "threads_drafts.md")
@@ -1007,7 +1007,7 @@ def generate_briefing():
     briefing_parts.append("")
 
     # 워크스페이스별 상태
-    workspaces_file = os.path.join(PROJECT_ROOT, "data", "workspaces.json")
+    workspaces_file = os.path.join(PROJECT_ROOT, "data", "workspaces.json")  # TODO: move to paths.py when workspaces refactored
 
     if os.path.exists(workspaces_file):
         try:
