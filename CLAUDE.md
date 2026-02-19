@@ -243,7 +243,7 @@ save_session_summary()  # 세션 종료 직전 또는 중요 작업 완료 후
 ## 프로젝트 구조
 
 ```
-/Users/hyuk/ohmyclawbot/
+/Users/hyuk/heysquid/
 ├── heysquid/                # 핵심 코드
 │   ├── telegram_listener.py # 메시지 수신 + executor 트리거
 │   ├── telegram_sender.py   # 메시지 발신

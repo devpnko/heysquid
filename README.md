@@ -71,7 +71,7 @@ heysquid/
 ## 디렉토리
 
 ```
-ohmyclawbot/
+heysquid/
 ├── heysquid/        # 핵심 패키지 (위 참조)
 ├── scripts/         # 실행 스크립트 (run.sh, setup.sh, executor.sh 등)
 ├── data/            # 런타임 데이터 (.gitignore)
