@@ -24,13 +24,10 @@ from telegram.request import HTTPXRequest
 import asyncio
 
 # 경로 설정 (Mac)
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.dirname(BASE_DIR)
-DATA_DIR = os.path.join(PROJECT_ROOT, "data")
-TASKS_DIR = os.path.join(PROJECT_ROOT, "tasks")
+from .config import DATA_DIR_STR as DATA_DIR, TASKS_DIR_STR as TASKS_DIR, PROJECT_ROOT_STR as PROJECT_ROOT, get_env_path
 
 # .env 파일 로드
-load_dotenv(os.path.join(BASE_DIR, ".env"))
+load_dotenv(get_env_path())
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 ALLOWED_USERS = [int(uid.strip()) for uid in os.getenv("TELEGRAM_ALLOWED_USERS", "").split(",") if uid.strip()]
@@ -40,12 +37,10 @@ MESSAGES_FILE = os.path.join(DATA_DIR, "telegram_messages.json")
 INTERRUPTED_FILE = os.path.join(DATA_DIR, "interrupted.json")
 WORKING_LOCK_FILE = os.path.join(DATA_DIR, "working.json")
 EXECUTOR_LOCK_FILE = os.path.join(DATA_DIR, "executor.lock")
-ENV_PATH = os.path.join(BASE_DIR, ".env")
-
 # 중단 명령어 — 이 중 하나가 메시지 전체와 일치하면 중단
 STOP_KEYWORDS = ["멈춰", "스탑", "중단", "/stop", "잠깐만", "스톱", "그만", "취소"]
 
-from telegram_bot import load_telegram_messages as load_messages, save_telegram_messages as save_messages
+from .telegram_bot import load_telegram_messages as load_messages, save_telegram_messages as save_messages
 
 
 def _is_stop_command(text):
@@ -144,7 +139,7 @@ async def _handle_stop_command(msg_data):
         print(f"[STOP] 미처리 메시지 {cleared}개 정리 완료")
 
     # 사용자에게 알림 (async — event loop 충돌 방지)
-    from telegram_sender import send_message
+    from .telegram_sender import send_message
 
     if working_info:
         task_name = working_info.get("instruction_summary", "알 수 없음")
@@ -189,11 +184,12 @@ def setup_bot_token():
 
     from dotenv import set_key
 
-    if not os.path.exists(ENV_PATH):
-        with open(ENV_PATH, "w", encoding="utf-8") as f:
+    env_path = get_env_path()
+    if not os.path.exists(env_path):
+        with open(env_path, "w", encoding="utf-8") as f:
             f.write("")
 
-    set_key(ENV_PATH, "TELEGRAM_BOT_TOKEN", token)
+    set_key(env_path, "TELEGRAM_BOT_TOKEN", token)
     BOT_TOKEN = token
     os.environ["TELEGRAM_BOT_TOKEN"] = token
 
@@ -547,7 +543,7 @@ async def listen_loop():
         return
 
     # 봇 커맨드 메뉴 등록 (/stop)
-    from telegram_sender import register_bot_commands_sync
+    from .telegram_sender import register_bot_commands_sync
     register_bot_commands_sync()
 
     print(f"폴링 간격: {POLLING_INTERVAL}초")

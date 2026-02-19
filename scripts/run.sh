@@ -78,8 +78,10 @@ case "${1:-}" in
         # 대시보드 서버 종료
         pkill -f "http.server 8420" 2>/dev/null || true
 
-        # Claude 프로세스 종료 (대기 루프 중일 수 있음)
+        # executor + Claude 프로세스 전부 종료 (대기 루프 중일 수 있음)
+        pkill -f "bash.*executor.sh" 2>/dev/null || true
         pkill -f "claude.*append-system-prompt-file" 2>/dev/null || true
+        pkill -f "tee.*executor.stream" 2>/dev/null || true
 
         # tmux 세션 종료
         tmux kill-session -t heysquid 2>/dev/null || true
@@ -128,7 +130,7 @@ case "${1:-}" in
 
         echo ""
         echo "--- 프로세스 ---"
-        if pgrep -f "telegram_listener.py" > /dev/null 2>&1; then
+        if pgrep -f "telegram_listener" > /dev/null 2>&1; then
             echo "  listener: 실행 중"
         else
             echo "  listener: 중지됨"

@@ -14,23 +14,19 @@ import os
 import json
 import time
 from datetime import datetime, timedelta
-from telegram_sender import send_files_sync, run_async_safe
+from .telegram_sender import send_files_sync, run_async_safe
+from .config import DATA_DIR_STR as DATA_DIR, TASKS_DIR_STR as TASKS_DIR
 
 def _dashboard_log(agent, message):
     """Add mission log entry to dashboard (silent fail)."""
     try:
-        from agent_dashboard import add_mission_log, update_agent_status, set_pm_speech
+        from .agent_dashboard import add_mission_log, update_agent_status, set_pm_speech
         add_mission_log(agent, message)
         if agent == 'pm':
             set_pm_speech(message)
     except Exception:
         pass
 
-# 경로 설정 (Mac)
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.dirname(BASE_DIR)
-DATA_DIR = os.path.join(PROJECT_ROOT, "data")
-TASKS_DIR = os.path.join(PROJECT_ROOT, "tasks")
 INDEX_FILE = os.path.join(TASKS_DIR, "index.json")
 
 MESSAGES_FILE = os.path.join(DATA_DIR, "telegram_messages.json")
@@ -98,7 +94,7 @@ def reply_telegram(chat_id, message_id, text):
     Returns:
         bool: 전송 성공 여부
     """
-    from telegram_sender import send_message_sync
+    from .telegram_sender import send_message_sync
 
     success = send_message_sync(chat_id, text)
 
@@ -319,7 +315,7 @@ def remove_working_lock():
         print("[UNLOCK] 작업 잠금 해제")
         _dashboard_log('pm', 'Standing by...')
         try:
-            from agent_dashboard import set_pm_speech
+            from .agent_dashboard import set_pm_speech
             set_pm_speech('')  # Clear pm.speech so idle lines can play
         except Exception:
             pass
@@ -455,7 +451,7 @@ def get_24h_context(messages, current_message_id):
 
 def _poll_telegram_once():
     """Telegram API에서 새 메시지를 한 번 가져와서 json 업데이트"""
-    from telegram_listener import fetch_new_messages
+    from .telegram_listener import fetch_new_messages
     try:
         run_async_safe(fetch_new_messages())
     except Exception as e:
@@ -498,7 +494,7 @@ def _detect_workspace(instruction):
         str or None: 감지된 워크스페이스 이름
     """
     try:
-        from workspace import list_workspaces
+        from .workspace import list_workspaces
         workspaces = list_workspaces()
 
         instruction_lower = instruction.lower()
@@ -524,7 +520,7 @@ def check_telegram():
         if lock_info.get("stale"):
             print("[RESTART] 스탈 작업 재시작")
 
-            from telegram_sender import send_message_sync
+            from .telegram_sender import send_message_sync
             message_ids = lock_info.get("message_id")
             if not isinstance(message_ids, list):
                 message_ids = [message_ids]
@@ -667,7 +663,7 @@ def combine_tasks(pending_tasks):
     # 워크스페이스 정보 추가
     if detected_workspace:
         try:
-            from workspace import get_workspace, switch_workspace
+            from .workspace import get_workspace, switch_workspace
             ws_info = get_workspace(detected_workspace)
             if ws_info:
                 context_md = switch_workspace(detected_workspace)

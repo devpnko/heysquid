@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "heysquid"
+version = "0.1.0"
+description = "Your personal PM agent — Telegram-connected project manager"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10"
+dependencies = [
+    "python-telegram-bot>=20.0",
+    "python-dotenv>=1.0.0",
+    "requests>=2.28.0",
+]
+
+[project.optional-dependencies]
+dashboard = ["playwright>=1.40.0"]
+trading = ["ccxt>=4.0.0", "pandas>=2.0.0", "ta>=0.10.0"]
+
+[project.scripts]
+heysquid = "heysquid.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["heysquid*"]
+exclude = ["private*", "tests*"]
+
+[tool.setuptools.package-data]
+heysquid = ["templates/**/*"]

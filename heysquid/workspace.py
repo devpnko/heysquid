@@ -14,10 +14,9 @@ import json
 from datetime import datetime
 
 # 경로 설정
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.dirname(BASE_DIR)
-DATA_DIR = os.path.join(PROJECT_ROOT, "data")
-WORKSPACES_DIR = os.path.join(PROJECT_ROOT, "workspaces")
+from .config import DATA_DIR_STR as DATA_DIR, WORKSPACES_DIR as _WS_DIR
+
+WORKSPACES_DIR = str(_WS_DIR)
 WORKSPACES_FILE = os.path.join(DATA_DIR, "workspaces.json")
 
 
@@ -197,21 +196,8 @@ def get_progress(name):
 
 
 def init_default_workspaces():
-    """기본 워크스페이스 등록 (첫 실행 시)"""
-    workspaces = _load_workspaces()
-
-    if not workspaces:
-        register_workspace(
-            "terabot",
-            "/Users/hyuk/TERABOT",
-            "오픈성지 - 휴대폰 시세 플랫폼"
-        )
-        register_workspace(
-            "heysquid",
-            "/Users/hyuk/ohmyclawbot",
-            "heysquid - 텔레그램 원격 제어"
-        )
-        print("[WORKSPACE] 기본 워크스페이스 초기화 완료")
+    """기본 워크스페이스 등록 (첫 실행 시) — no-op for pip installs."""
+    pass
 
 
 if __name__ == "__main__":

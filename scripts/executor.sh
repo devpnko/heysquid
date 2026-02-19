@@ -60,36 +60,45 @@ log "CWD=$(pwd)"
 # 프로세스 중복 실행 방지 (3중 안전장치)
 # ========================================
 
-# 1. Claude 프로세스 확인 (append-system-prompt-file는 executor 전용 플래그)
-if pgrep -f "claude.*append-system-prompt-file" > /dev/null 2>&1; then
-    # 프로세스 발견 - 로그 파일 갱신 시각 확인 (영구 세션이므로 4시간 기준)
-    if [ -f "$LOG" ]; then
-        LOG_AGE=$(( $(date +%s) - $(stat -f %m "$LOG" 2>/dev/null || echo 0) ))
+# 1. executor.sh 중복 실행 방지 (자기 자신 제외)
+#    - Claude 프로세스 OR executor.sh 프로세스가 이미 있으면 차단
+#    - executor.sh는 Claude 대기 루프 중에도 살아있으므로 이걸로 체크
+SELF_PID=$$
+# executor.lock이 더 신뢰성 높은 중복 방지 (pgrep은 zsh 래퍼에 오탐)
+# Claude PM 세션은 append-system-prompt-file 플래그로 정확히 식별 가능
+HAS_CLAUDE_PM=false
+pgrep -f "claude.*append-system-prompt-file" > /dev/null 2>&1 && HAS_CLAUDE_PM=true
+
+if [ "$HAS_CLAUDE_PM" = true ]; then
+    # Claude PM 세션이 돌고 있으면 — stale 체크
+    if [ -f "$STREAM_LOG" ]; then
+        LOG_AGE=$(( $(date +%s) - $(stat -f %m "$STREAM_LOG" 2>/dev/null || echo 0) ))
         if [ "$LOG_AGE" -gt 14400 ]; then
-            log "[STALE] Claude idle >4h. Force-killing..."
+            log "[STALE] Claude PM idle >4h. Force-killing..."
             pkill -f "claude.*append-system-prompt-file" 2>/dev/null || true
+            sleep 2
             rm -f "$LOCKFILE" 2>/dev/null
             log "[STALE] Cleared stale state. Proceeding..."
         else
-            log "[BLOCKED] Executor Claude already running."
+            log "[BLOCKED] Claude PM session active."
             exit 98
         fi
     else
-        log "[BLOCKED] Executor Claude already running."
+        log "[BLOCKED] Claude PM session active."
         exit 98
     fi
 fi
 
-# 2. Lock 파일 확인 (프로세스 없는데 Lock 있으면 오류 중단)
+# 2. Lock 파일 확인 (Claude 프로세스 없는데 Lock 있으면 크래시 복구)
 if [ -f "$LOCKFILE" ]; then
-    log "[RECOVERY] Lock file exists but no process running - recovering from error."
+    log "[RECOVERY] Lock file exists but no Claude PM running - recovering from crash."
     rm -f "$LOCKFILE" 2>/dev/null
     log "[INFO] Stale lock removed."
 fi
 
 # 3. 빠른 메시지 확인 (Python으로 먼저 확인)
 log "[QUICK_CHECK] Checking for new messages..."
-cd "$HEYSQUID_DIR"
+cd "$ROOT"
 
 VENV_PYTHON="$ROOT/venv/bin/python3"
 if [ ! -f "$VENV_PYTHON" ]; then
@@ -97,7 +106,7 @@ if [ ! -f "$VENV_PYTHON" ]; then
 fi
 
 CHECK_RESULT=0
-"$VENV_PYTHON" quick_check.py >> "$LOG" 2>&1 || CHECK_RESULT=$?
+"$VENV_PYTHON" -m heysquid.quick_check >> "$LOG" 2>&1 || CHECK_RESULT=$?
 
 if [ "$CHECK_RESULT" -eq 0 ]; then
     log "[NO_MESSAGE] No new messages. Exiting."
@@ -112,10 +121,10 @@ echo "$(date '+%Y-%m-%d %H:%M:%S')" > "$LOCKFILE"
 log "Lock file created: $LOCKFILE"
 
 # 착수 알림 전송 (중단 버튼 포함)
-cd "$HEYSQUID_DIR"
+cd "$ROOT"
 "$VENV_PYTHON" -c "
-from telegram_sender import send_message_with_stop_button_sync
-from quick_check import get_first_unprocessed_chat_id
+from heysquid.telegram_sender import send_message_with_stop_button_sync
+from heysquid.quick_check import get_first_unprocessed_chat_id
 chat_id = get_first_unprocessed_chat_id()
 if chat_id:
     send_message_with_stop_button_sync(chat_id, '🔧 작업 착수합니다.')
@@ -136,7 +145,7 @@ export DISABLE_AUTOUPDATER=1
 
 # Claude 실행 프롬프트 — PM 모드
 PROMPT="CLAUDE.md의 지침에 따라 PM으로서 행동할 것.
-1) data/identity.json을 읽어 나의 정체성(heysquid)과 사용자를 확인.
+1) data/identity.json을 읽어 나의 정체성(display_name이 내 이름)과 사용자를 확인.
 2) data/permanent_memory.md를 읽어 영구 기억(사용자 선호, 핵심 결정, 교훈)을 파악.
 3) data/session_memory.md를 읽어 최근 대화 맥락, 활성 작업을 파악.
 4) check_crash_recovery()로 이전 세션 비정상 종료 확인.

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-🦑 squid agent box — 실시간 스트림 뷰어 + Telegram 브로드캐스트
+🦑 squid agent box — 실시간 스트림 뷰어 + Telegram 브로드캐스트 + Dashboard 동기화
 
 사용법:
     tail -f logs/executor.stream.jsonl | python3 scripts/stream_viewer.py
@@ -20,6 +20,9 @@ import threading
 import queue
 from datetime import datetime
 
+# heysquid 패키지 import를 위한 경로 설정
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
 # .env 로드 (heysquid/.env)
 ENV_PATH = os.path.join(os.path.dirname(__file__), "..", "heysquid", ".env")
 if os.path.exists(ENV_PATH):
@@ -30,6 +33,19 @@ if os.path.exists(ENV_PATH):
                 key, _, val = line.partition("=")
                 os.environ.setdefault(key.strip(), val.strip())
 
+# agents.py — Single Source of Truth
+from heysquid.agents import AGENTS, SUBAGENT_MAP, TOOL_EMOJI, get_emoji, get_role_emoji
+
+# Dashboard 연동 (graceful fallback)
+try:
+    from heysquid.agent_dashboard import (
+        add_mission_log, dispatch_agent, recall_agent,
+        update_agent_status, set_pm_speech, set_current_task
+    )
+    DASHBOARD_ENABLED = True
+except ImportError:
+    DASHBOARD_ENABLED = False
+
 # 모델 별명
 MODEL_NAMES = {
     "haiku": "Haiku",
@@ -37,16 +53,54 @@ MODEL_NAMES = {
     "opus": "Opus",
 }
 
-# 에이전트 역할 이모지
-AGENT_EMOJI = {
-    "Explore": "🔭",
-    "general-purpose": "🧠",
-    "Bash": "💻",
-    "Plan": "📐",
-}
-
 # 활성 에이전트 추적 (tool_use id → info)
 active_agents = {}
+
+# desk 추론 키워드
+DESK_KEYWORDS = {
+    "thread": ["thread", "스레드", "threads"],
+    "news": ["news", "뉴스", "briefing", "브리핑"],
+    "trading": ["trading", "트레이딩", "trade"],
+    "marketing": ["marketing", "마케팅"],
+    "shorts": ["shorts", "숏츠", "short"],
+}
+
+
+def infer_desk(prompt):
+    """prompt 키워드 → desk 자동 매핑"""
+    prompt_lower = prompt.lower()
+    for desk, keywords in DESK_KEYWORDS.items():
+        for kw in keywords:
+            if kw in prompt_lower:
+                return desk
+    return "thread"  # 기본값
+
+
+def dashboard_log(agent, message):
+    """대시보드 mission_log에 기록 (비활성이면 무시)"""
+    if DASHBOARD_ENABLED:
+        try:
+            add_mission_log(agent, message)
+        except Exception:
+            pass
+
+
+def dashboard_dispatch(agent_name, desk, task):
+    """대시보드에 에이전트 배치 반영"""
+    if DASHBOARD_ENABLED:
+        try:
+            dispatch_agent(agent_name, desk, task)
+        except Exception:
+            pass
+
+
+def dashboard_recall(agent_name, message='Task complete'):
+    """대시보드에 에이전트 복귀 반영"""
+    if DASHBOARD_ENABLED:
+        try:
+            recall_agent(agent_name, message)
+        except Exception:
+            pass
 
 
 # ─── Telegram Broadcaster ────────────────────────────────
@@ -142,6 +196,7 @@ def main():
         print("  📡 Telegram broadcast: ON")
     else:
         print("  📡 Telegram broadcast: OFF")
+    print(f"  🖥️  Dashboard sync: {'ON' if DASHBOARD_ENABLED else 'OFF'}")
     print("  Ctrl+C로 종료")
     print("=" * 55)
     print()
@@ -165,6 +220,7 @@ def main():
                     model = d.get("model", "?")
                     print(f"\033[36m[{fmt_time()}] [SESSION]\033[0m {sid}... ({model})")
                     broadcaster.send(f"🚀 *Session Start* {model}")
+                    dashboard_log('system', f'🚀 Session start ({model})')
 
             elif t == "assistant":
                 content = d.get("message", {}).get("content", [])
@@ -175,9 +231,11 @@ def main():
                             if is_standby(text):
                                 print(f"\033[90m[{fmt_time()}] 🦑 ⏳ {truncate(text, 60)}\033[0m")
                                 broadcaster.send(f"⏳ {truncate(text, 100)}")
+                                dashboard_log('pm', f'💤 {truncate(text, 40)}')
                             else:
                                 print(f"\033[33m[{fmt_time()}] 🦑\033[0m {text}")
                                 broadcaster.send(f"🦑 {truncate(text, 200)}")
+                                dashboard_log('pm', f'🦑 {truncate(text, 40)}')
 
                     elif c["type"] == "tool_use":
                         name = c.get("name", "?")
@@ -191,15 +249,25 @@ def main():
                             prompt = inp.get("prompt", "")
 
                             model_label = MODEL_NAMES.get(model, model) if model else ""
-                            emoji = AGENT_EMOJI.get(agent_type, "🤖")
+
+                            # agents.py 기반 이모지 매핑
+                            dashboard_agent = SUBAGENT_MAP.get(agent_type)
+                            if dashboard_agent:
+                                emoji = get_emoji(dashboard_agent)
+                                role_emoji = get_role_emoji(dashboard_agent)
+                            else:
+                                emoji = TOOL_EMOJI.get(agent_type, "🤖")
+                                role_emoji = ""
                             role_label = agent_type if agent_type else "agent"
 
                             # 에이전트 추적
                             active_agents[tool_id] = {
                                 "type": role_label,
+                                "dashboard_agent": dashboard_agent,
                                 "model": model_label,
                                 "desc": desc,
                                 "start": datetime.now(),
+                                "prompt": prompt,
                             }
 
                             print()
@@ -221,10 +289,18 @@ def main():
                             model_str = f" ({model_label})" if model_label else ""
                             broadcaster.send(f"{emoji} *{role_label}*{model_str} {desc}")
 
+                            # dashboard: 에이전트 배치
+                            if dashboard_agent:
+                                desk = infer_desk(prompt or desc)
+                                log_msg = f"{emoji}{role_emoji} {truncate(desc, 35)}"
+                                dashboard_dispatch(dashboard_agent, desk, desc)
+                                dashboard_log(dashboard_agent, log_msg)
+
                         elif name == "Read":
                             detail = inp.get("file_path", "")
                             print(f"\033[35m[{fmt_time()}] [TOOL]\033[0m 📖 Read → {detail}")
                             broadcaster.send(f"📖 Read → {truncate(detail, 80)}")
+                            dashboard_log('pm', f'📖 Reading {os.path.basename(detail)}')
                         elif name == "Bash":
                             cmd = inp.get("command", "")
                             if cmd.strip().startswith("sleep"):
@@ -233,31 +309,38 @@ def main():
                             else:
                                 print(f"\033[35m[{fmt_time()}] [TOOL]\033[0m 💻 Bash → {truncate(cmd, 80)}")
                                 broadcaster.send(f"💻 Bash → {truncate(cmd, 80)}")
+                                dashboard_log('pm', f'💻 {truncate(cmd, 35)}')
                         elif name == "Edit":
                             fp = inp.get("file_path", "")
                             print(f"\033[35m[{fmt_time()}] [TOOL]\033[0m ✏️  Edit → {fp}")
                             broadcaster.send(f"✏️ Edit → {truncate(fp, 80)}")
+                            dashboard_log('pm', f'✏️ Editing {os.path.basename(fp)}')
                         elif name == "Write":
                             fp = inp.get("file_path", "")
                             print(f"\033[35m[{fmt_time()}] [TOOL]\033[0m 📝 Write → {fp}")
                             broadcaster.send(f"📝 Write → {truncate(fp, 80)}")
+                            dashboard_log('pm', f'📝 Writing {os.path.basename(fp)}')
                         elif name == "Grep":
                             pat = inp.get("pattern", "")
                             path = inp.get("path", "")
                             print(f"\033[35m[{fmt_time()}] [TOOL]\033[0m 🔍 Grep → \"{pat}\" in {path}")
                             broadcaster.send(f"🔍 Grep → \"{pat}\" in {path}")
+                            dashboard_log('pm', f'🔍 Searching "{truncate(pat, 20)}"')
                         elif name == "Glob":
                             pat = inp.get("pattern", "")
                             print(f"\033[35m[{fmt_time()}] [TOOL]\033[0m 📂 Glob → {pat}")
                             broadcaster.send(f"📂 Glob → {pat}")
+                            dashboard_log('pm', f'📂 Scanning {truncate(pat, 25)}')
                         elif name == "WebSearch":
-                            query = inp.get("query", "")
-                            print(f"\033[35m[{fmt_time()}] [TOOL]\033[0m 🌐 WebSearch → \"{query}\"")
-                            broadcaster.send(f"🌐 WebSearch → \"{query}\"")
+                            q = inp.get("query", "")
+                            print(f"\033[35m[{fmt_time()}] [TOOL]\033[0m 🌐 WebSearch → \"{q}\"")
+                            broadcaster.send(f"🌐 WebSearch → \"{q}\"")
+                            dashboard_log('pm', f'🌐 Searching "{truncate(q, 25)}"')
                         elif name == "WebFetch":
                             url = inp.get("url", "")
                             print(f"\033[35m[{fmt_time()}] [TOOL]\033[0m 🌐 WebFetch → {url}")
                             broadcaster.send(f"🌐 WebFetch → {url}")
+                            dashboard_log('pm', f'🌐 Fetching web content')
                         else:
                             detail = str(inp)
                             print(f"\033[35m[{fmt_time()}] [TOOL]\033[0m {name} → {truncate(detail, 80)}")
@@ -274,7 +357,8 @@ def main():
                         if tool_id in active_agents:
                             agent = active_agents.pop(tool_id)
                             elapsed = (datetime.now() - agent["start"]).total_seconds()
-                            emoji = AGENT_EMOJI.get(agent["type"], "🤖")
+                            da = agent.get("dashboard_agent")
+                            emoji = get_emoji(da) if da else "🤖"
 
                             result_preview = ""
                             if isinstance(text, str) and text:
@@ -295,6 +379,10 @@ def main():
                             # broadcast: 에이전트 완료
                             model_str = f" [{agent['model']}]" if agent.get("model") else ""
                             broadcaster.send(f"✅ *{agent['type']}* 완료 {elapsed:.1f}s{model_str}")
+
+                            # dashboard: 에이전트 복귀
+                            if da:
+                                dashboard_recall(da, f'✅ Complete ({elapsed:.1f}s)')
 
                         elif isinstance(text, str) and len(text) > 0:
                             summary = truncate(text, 100)
@@ -319,6 +407,14 @@ def main():
                 print()
 
                 broadcaster.send(f"✨ *Session Complete* ${cost:.4f} {dur:.0f}s {turns}턴")
+                dashboard_log('system', f'✨ Session complete (${cost:.4f})')
+
+                # 모든 에이전트 복귀
+                for agent_name in active_agents.values():
+                    da = agent_name.get("dashboard_agent")
+                    if da:
+                        dashboard_recall(da, '✨ Session ended')
+                active_agents.clear()
 
     except KeyboardInterrupt:
         print("\n\n종료.")

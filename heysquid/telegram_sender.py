@@ -18,11 +18,10 @@ from dotenv import load_dotenv
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
 import asyncio
 
-# 경로 설정 (Mac)
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+from .config import get_env_path
 
 # .env 파일 로드
-load_dotenv(os.path.join(BASE_DIR, ".env"))
+load_dotenv(get_env_path())
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
@@ -207,7 +206,7 @@ def send_message_sync(chat_id, text, parse_mode="Markdown"):
 
     if result:
         try:
-            from telegram_bot import (
+            from .telegram_bot import (
                 update_working_activity,
                 check_new_messages_during_work,
                 save_new_instructions

@@ -28,15 +28,10 @@ from urllib.error import URLError
 from dotenv import load_dotenv
 
 # 경로 설정
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.dirname(BASE_DIR)
-
-# sys.path에 heysquid/ 추가
-if BASE_DIR not in sys.path:
-    sys.path.insert(0, BASE_DIR)
+from .config import PROJECT_ROOT_STR as PROJECT_ROOT, get_env_path
 
 # .env 로드
-load_dotenv(os.path.join(BASE_DIR, ".env"))
+load_dotenv(get_env_path())
 
 CHAT_ID = os.getenv("TELEGRAM_ALLOWED_USERS", "").split(",")[0].strip()
 
@@ -1112,7 +1107,7 @@ def send_briefing():
     print()
 
     try:
-        from telegram_sender import send_message_sync
+        from .telegram_sender import send_message_sync
         success = send_message_sync(int(CHAT_ID), briefing)
 
         if success:

@@ -1,0 +1,10 @@
+{
+  "bot": {
+    "name": "heysquid",
+    "display_name": "SQUID",
+    "role": "PM 겸 팀 리더",
+    "team": ["researcher", "developer", "reviewer", "tester", "writer"],
+    "platform": "telegram"
+  },
+  "users": {}
+}

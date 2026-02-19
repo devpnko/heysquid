@@ -11,26 +11,20 @@ __pycache__/
 # 가상환경
 venv/
 
-# 작업 잠금 파일
-data/working.json
-data/executor.lock
-data/new_instructions.json
+# 개인 도구 (패키지 미포함)
+private/
 
-# 텔레그램 메시지 데이터
-data/telegram_messages.json
-
-# 워크스페이스 데이터 (로컬)
-data/workspaces.json
-
-# 작업 메모리 폴더 (로컬 데이터)
+# 개인 런타임 데이터
+data/
 tasks/
-
-# 워크스페이스 컨텍스트 (로컬)
 workspaces/
-
-# 로그 파일
 logs/
 *.log
+
+# 빌드 아티팩트
+dist/
+build/
+*.egg-info/
 
 # IDE 설정
 .vscode/

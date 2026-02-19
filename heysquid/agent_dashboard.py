@@ -7,14 +7,18 @@ The gameboard HTML reads this file every 3 seconds for live updates.
 
 import json
 import os
+import sys
 import subprocess
 from datetime import datetime
 
-DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
-STATUS_FILE = os.path.join(DATA_DIR, 'agent_status.json')
-GAMEBOARD_HTML = os.path.join(DATA_DIR, 'dashboard_v4.html')
+from .config import DATA_DIR_STR as DATA_DIR, get_template_path
+from .agents import VALID_AGENTS, AGENTS, AGENT_NAMES
 
-VALID_AGENTS = ['pm', 'researcher', 'developer', 'verifier', 'writer']
+STATUS_FILE = os.path.join(DATA_DIR, 'agent_status.json')
+# User's data/ copy takes priority; fall back to bundled template
+_user_html = os.path.join(DATA_DIR, 'dashboard_v4.html')
+GAMEBOARD_HTML = _user_html if os.path.exists(_user_html) else get_template_path('dashboard_v4.html')
+
 VALID_STATUSES = ['idle', 'working', 'complete', 'error']
 
 
@@ -30,31 +34,53 @@ def _load_status():
 def _save_status(data):
     """Save status JSON with updated timestamp"""
     data['last_updated'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    # Ensure _registry is always present for dashboard HTML
+    if '_registry' not in data:
+        data['_registry'] = {
+            name: {
+                "emoji": info["emoji"], "animal": info["animal"],
+                "color": info["color"], "color_hex": info["color_hex"],
+                "label": info["label"], "css_class": info["css_class"],
+            }
+            for name, info in AGENTS.items()
+        }
     with open(STATUS_FILE, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
 def _default_status():
-    """Default idle state for all agents"""
-    return {
+    """Default idle state for all agents (dynamically built from registry)"""
+    status = {
         "last_updated": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         "current_task": "",
-        "pm": {"status": "idle", "task": "", "hp": 100},
-        "researcher": {"status": "idle", "task": "", "hp": 100},
-        "developer": {"status": "idle", "task": "", "hp": 100},
-        "verifier": {"status": "idle", "task": "", "hp": 100},
-        "writer": {"status": "idle", "task": "", "hp": 100},
         "mission_log": [
             {"time": datetime.now().strftime('%H:%M:%S'), "agent": "system", "message": "시스템 대기중..."}
-        ]
+        ],
     }
+    for name, info in AGENTS.items():
+        agent_data = {"status": "idle", "task": "", "hp": 100}
+        if name == "pm":
+            agent_data["speech"] = ""
+        else:
+            agent_data["assignment"] = None
+        status[name] = agent_data
+    # _registry: dashboard HTML이 읽어서 동적 렌더링에 사용
+    status["_registry"] = {
+        name: {
+            "emoji": info["emoji"], "animal": info["animal"],
+            "color": info["color"], "color_hex": info["color_hex"],
+            "label": info["label"], "css_class": info["css_class"],
+        }
+        for name, info in AGENTS.items()
+    }
+    return status
 
 
 def update_agent_status(agent: str, status: str, task: str = '', hp: int = None, assignment: str = None):
     """Update a single agent's status.
 
     Args:
-        agent: 'pm', 'researcher', 'developer', 'verifier', 'writer'
+        agent: 'pm', 'researcher', 'developer', 'reviewer', 'tester', 'writer'
         status: 'idle', 'working', 'complete', 'error'
         task: description of what the agent is doing
         hp: 0-100, auto-set based on status if omitted
@@ -193,7 +219,7 @@ print("OK")
 
     try:
         result = subprocess.run(
-            ['/Users/hyuk/ohmyclawbot/venv/bin/python3', script_path],
+            [sys.executable, script_path],
             capture_output=True, text=True, timeout=30
         )
         if 'OK' in result.stdout:
@@ -205,10 +231,51 @@ print("OK")
     return None
 
 
+def update_workspace(name, status=None, department=None, description=None):
+    """Update workspace status in agent_status.json for dashboard visualization."""
+    data = _load_status()
+    if 'workspaces' not in data:
+        data['workspaces'] = {}
+    if name not in data['workspaces']:
+        data['workspaces'][name] = {
+            'status': 'standby', 'department': None,
+            'last_active': '', 'description': '',
+        }
+    ws = data['workspaces'][name]
+    if status is not None:
+        ws['status'] = status
+    if department is not None:
+        ws['department'] = department
+    if description is not None:
+        ws['description'] = description
+    ws['last_active'] = datetime.now().strftime('%Y-%m-%d')
+    _save_status(data)
+
+
+def sync_workspaces():
+    """Sync workspace data from workspaces/ directory to agent_status.json."""
+    from .config import WORKSPACES_DIR
+    data = _load_status()
+    if 'workspaces' not in data:
+        data['workspaces'] = {}
+
+    ws_dir = str(WORKSPACES_DIR)
+    if os.path.isdir(ws_dir):
+        for name in os.listdir(ws_dir):
+            ws_path = os.path.join(ws_dir, name)
+            if os.path.isdir(ws_path) and name not in data['workspaces']:
+                data['workspaces'][name] = {
+                    'status': 'standby', 'department': None,
+                    'last_active': '', 'description': name,
+                }
+    _save_status(data)
+
+
 def send_dashboard_photo(chat_id):
     """Take a screenshot and send it via Telegram."""
     from dotenv import load_dotenv
-    load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
+    from .config import get_env_path
+    load_dotenv(get_env_path())
     bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
 
     screenshot = take_dashboard_screenshot()

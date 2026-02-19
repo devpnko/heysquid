@@ -1,0 +1,2831 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>heysquid HQ</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --pink: #ff6b9d; --pink-dark: #cc4477; --pink-light: #ffaac4;
+  --cyan: #00d4ff; --cyan-dark: #009abb; --cyan-light: #77eeff;
+  --orange: #ff9f43; --orange-dark: #cc7a22; --orange-light: #ffcf99;
+  --green: #26de81; --green-dark: #1aaa60; --green-light: #77ffbb;
+  --yellow: #ffd32a; --yellow-dark: #ccaa00; --yellow-light: #ffee88;
+  --purple: #cc66ff; --purple-dark: #9944cc; --purple-light: #dd99ff;
+  --red: #ff4444; --red-dark: #cc2222; --red-light: #ff8888;
+  --lavender: #bb88ff; --lavender-dark: #8855cc; --lavender-light: #ddbbff;
+  --blue: #4488ff; --blue-dark: #2266cc; --blue-light: #88bbff;
+  --coral: #ff7744; --coral-dark: #cc5522; --coral-light: #ffaa88;
+}
+
+body {
+  background: #0a0e1a;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  font-family: 'Press Start 2P', monospace;
+  overflow: hidden;
+  image-rendering: pixelated;
+}
+
+.viewport {
+  width: 1200px;
+  height: 900px;
+  position: relative;
+  background: #0b1628;
+  border: 4px solid #1a3a5c;
+  overflow: hidden;
+}
+
+/* === OCEAN BACKGROUND === */
+.ocean-bg {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 50%, #0a2a4a 0%, #051530 50%, #020a1a 100%);
+  z-index: 0;
+}
+
+/* === GLASS DOME === */
+.glass-dome {
+  position: absolute;
+  left: 80px; top: 60px;
+  width: 1040px; height: 740px;
+  border-radius: 50px;
+  background: radial-gradient(ellipse at 50% 40%, rgba(20,50,80,0.6) 0%, rgba(10,30,55,0.8) 100%);
+  border: 4px solid rgba(100,180,255,0.15);
+  box-shadow:
+    inset 0 0 60px rgba(80,160,255,0.08),
+    0 0 40px rgba(60,140,220,0.15),
+    inset 4px 4px 0 rgba(120,200,255,0.1);
+  z-index: 1;
+  overflow: hidden;
+}
+.glass-dome::before {
+  content: '';
+  position: absolute;
+  top: 10px; left: 60px;
+  width: 200px; height: 8px;
+  background: rgba(120,200,255,0.05);
+  border-radius: 4px;
+  transform: rotate(-5deg);
+}
+.glass-dome::after {
+  content: '';
+  position: absolute;
+  top: 30px; left: 100px;
+  width: 120px; height: 6px;
+  background: rgba(120,200,255,0.04);
+  border-radius: 4px;
+  transform: rotate(-5deg);
+}
+
+/* === FLOOR TILES === */
+.floor {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background-image:
+    linear-gradient(rgba(60,100,140,0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(60,100,140,0.1) 1px, transparent 1px);
+  background-size: 40px 40px;
+  background-position: 20px 20px;
+}
+
+/* === TITLE BAR === */
+.title-bar {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 65px;
+  background: linear-gradient(180deg, rgba(0,10,30,0.95) 0%, rgba(0,10,30,0.7) 80%, transparent 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding-top: 6px;
+}
+.title-bar h1 {
+  font-size: 18px;
+  background: linear-gradient(90deg, var(--pink), var(--cyan));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: none;
+  letter-spacing: 4px;
+  margin-bottom: 4px;
+}
+.title-bar .subtitle {
+  font-size: 9px;
+  color: #5599aa;
+  letter-spacing: 4px;
+}
+
+/* === BUBBLES === */
+.bubble {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, rgba(150,220,255,0.3), rgba(100,180,255,0.05));
+  border: 1px solid rgba(120,200,255,0.2);
+  z-index: 0;
+  animation: float-up linear infinite;
+}
+@keyframes float-up {
+  0% { transform: translateY(0) translateX(0); opacity: 0.3; }
+  50% { transform: translateY(-200px) translateX(15px); opacity: 0.15; }
+  100% { transform: translateY(-450px) translateX(-10px); opacity: 0; }
+}
+
+/* === FISH SILHOUETTES === */
+.fish-sil {
+  position: absolute;
+  z-index: 0;
+  opacity: 0.12;
+}
+
+/* === DEPARTMENT ZONES === */
+.dept-zone {
+  position: absolute;
+  z-index: 5;
+  border-radius: 12px;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+.dept-zone.highlighted {
+  border-color: var(--pink) !important;
+  box-shadow: inset 0 0 30px rgba(255,107,157,0.1), 0 0 15px rgba(255,107,157,0.15) !important;
+}
+.dept-label {
+  position: absolute;
+  top: 8px; left: 12px;
+  font-size: 11px;
+  z-index: 6;
+}
+.dept-sublabel {
+  position: absolute;
+  top: 24px; left: 12px;
+  font-size: 9px;
+  z-index: 6;
+}
+.dept-eye {
+  display: none;
+  font-size: 10px;
+  margin-left: 6px;
+}
+.dept-zone.highlighted .dept-eye { display: inline; }
+
+/* === DESK STATION === */
+.desk-station {
+  position: absolute;
+  z-index: 10;
+}
+.desk-assignment-label {
+  font-size: 8px;
+  position: absolute;
+  white-space: nowrap;
+  text-shadow: 1px 1px 0 #0a1a2e;
+  z-index: 11;
+}
+.context-icon {
+  position: absolute; z-index: 17;
+  width: 8px; height: 10px;
+  background: rgba(200,220,240,0.3);
+  border: 1px solid rgba(150,200,230,0.4);
+  border-radius: 1px;
+}
+.context-icon::after {
+  content: '';
+  position: absolute;
+  top: -3px; left: 1px;
+  width: 6px; height: 3px;
+  background: rgba(150,200,230,0.3);
+  border-radius: 1px;
+}
+.agent-slot {
+  position: absolute;
+  z-index: 20;
+}
+.desk-station.occupied .agent-slot { display: block; }
+.desk-station:not(.occupied) .agent-slot { display: none; }
+
+/* === AGENT POOL === */
+.agent-pool {
+  position: absolute;
+  z-index: 20;
+  display: flex;
+  gap: 30px;
+  justify-content: center;
+}
+.pool-agent {
+  position: relative;
+  text-align: center;
+  transition: opacity 0.5s;
+}
+.pool-agent.dispatched { opacity: 0; pointer-events: none; }
+.pool-agent-label {
+  font-size: 9px;
+  color: #6699aa;
+  white-space: nowrap;
+  text-shadow: 1px 1px 0 #0a1a2e;
+  margin-top: 2px;
+}
+
+/* === DESK === */
+.desk { position: absolute; z-index: 15; }
+.desk-surface {
+  width: 120px;
+  height: 60px;
+  background: linear-gradient(180deg, #3d2b1a 0%, #2a1e12 100%);
+  border: 2px solid #4a3520;
+  border-radius: 4px;
+  image-rendering: pixelated;
+  box-shadow: 0 4px 0 #1a1008;
+}
+
+/* === MONITOR === */
+.monitor { position: absolute; z-index: 16; }
+.monitor-frame {
+  width: 36px; height: 28px;
+  background: #1a1a2e;
+  border: 3px solid #333348;
+  border-radius: 2px;
+  position: relative;
+  overflow: hidden;
+}
+.monitor-screen {
+  position: absolute;
+  inset: 2px;
+  background: #0a1a0a;
+  overflow: hidden;
+}
+.monitor-stand {
+  width: 12px; height: 6px;
+  background: #333348;
+  margin: 0 auto;
+  border-radius: 0 0 2px 2px;
+}
+.screen-line {
+  width: 80%;
+  height: 2px;
+  margin: 3px auto 0;
+  border-radius: 1px;
+  animation: type-line 3s ease-in-out infinite;
+}
+@keyframes type-line {
+  0%, 100% { width: 80%; }
+  50% { width: 40%; }
+}
+@keyframes type-line-fast {
+  0%, 100% { width: 90%; }
+  50% { width: 30%; }
+}
+
+/* === COFFEE MUG === */
+.mug {
+  width: 10px; height: 12px;
+  background: #e8e0d0;
+  border: 2px solid #c0b8a0;
+  border-radius: 0 0 2px 2px;
+  position: absolute;
+  z-index: 17;
+}
+.mug::after {
+  content: '';
+  position: absolute;
+  right: -6px; top: 2px;
+  width: 5px; height: 6px;
+  border: 2px solid #c0b8a0;
+  border-left: none;
+  border-radius: 0 4px 4px 0;
+}
+.mug-steam {
+  position: absolute;
+  top: -10px; left: 2px;
+  width: 2px; height: 8px;
+  background: rgba(200,220,240,0.3);
+  animation: steam 2s ease-in-out infinite;
+  border-radius: 2px;
+}
+@keyframes steam {
+  0%, 100% { height: 8px; opacity: 0.3; transform: translateX(0); }
+  50% { height: 12px; opacity: 0.1; transform: translateX(3px); }
+}
+
+/* === BOOKS === */
+.book { position: absolute; border-radius: 1px; z-index: 17; }
+
+/* === PLANTS === */
+.plant { position: absolute; z-index: 18; }
+
+/* === WATER COOLER === */
+.water-cooler { position: absolute; z-index: 18; }
+
+/* === HP BAR === */
+.hp-bar-wrap {
+  position: absolute;
+  width: 40px; height: 3px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 2px;
+  overflow: hidden;
+  z-index: 22;
+}
+.hp-bar {
+  height: 100%;
+  width: 100%;
+  border-radius: 2px;
+  transition: width 0.5s ease, background 0.3s;
+  background: #26de81;
+}
+
+/* === ANIMATIONS === */
+@keyframes bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+@keyframes bob-slow {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+@keyframes bob-work {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+@keyframes crown-shine {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.4) drop-shadow(0 0 4px rgba(255,204,0,0.5)); }
+}
+@keyframes typing {
+  0%, 100% { transform: translateY(0); }
+  25% { transform: translateY(-2px); }
+  75% { transform: translateY(-2px); }
+}
+@keyframes inflate {
+  0%, 80%, 100% { transform: scale(1); }
+  90% { transform: scale(1.1); }
+}
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-2px) translateY(1px); }
+  40% { transform: translateX(2px) translateY(-1px); }
+  60% { transform: translateX(-1px) translateY(1px); }
+  80% { transform: translateX(1px) translateY(-1px); }
+}
+@keyframes coffee-lift {
+  0%, 70%, 100% { transform: translateY(0); }
+  75% { transform: translateY(-5px); }
+  85% { transform: translateY(-3px); }
+}
+@keyframes dashFlow {
+  to { stroke-dashoffset: -28; }
+}
+@keyframes blink-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* === CONNECTION SVG === */
+.conn-svg {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  z-index: 4;
+  pointer-events: none;
+}
+.conn-line {
+  stroke: rgba(0,212,255,0.15);
+  stroke-width: 1.5;
+  stroke-dasharray: 6 8;
+  fill: none;
+  animation: dashFlow 3s linear infinite;
+}
+.conn-line.active {
+  stroke: rgba(0,212,255,0.5);
+  stroke-width: 2;
+  filter: drop-shadow(0 0 4px rgba(0,212,255,0.4));
+}
+
+/* === PIXEL CHARACTER BASE === */
+.pixel-char {
+  width: 1px;
+  height: 1px;
+  image-rendering: pixelated;
+}
+
+/* === SQUID PM (scale 4, 64x64) === */
+.squid-pixel-lg {
+  transform: scale(4);
+  transform-origin: top left;
+  margin-right: 63px;
+  margin-bottom: 63px;
+  color: var(--pink);
+  box-shadow:
+    6px 0 0 #ffdd44, 9px 0 0 #ffdd44,
+    5px 1px 0 #ffdd44, 6px 1px 0 #ffee66, 7px 1px 0 #ffdd44, 8px 1px 0 #ffdd44, 9px 1px 0 #ffee66, 10px 1px 0 #ffdd44,
+    6px 2px 0 #ffcc22, 7px 2px 0 #ffcc22, 8px 2px 0 #ffcc22, 9px 2px 0 #ffcc22,
+    5px 3px 0 #ff6b9d, 6px 3px 0 #ff6b9d, 7px 3px 0 #ffaac4, 8px 3px 0 #ffaac4, 9px 3px 0 #ff6b9d, 10px 3px 0 #ff6b9d,
+    4px 4px 0 #ff6b9d, 5px 4px 0 #ffaac4, 6px 4px 0 #ffaac4, 7px 4px 0 #ffaac4, 8px 4px 0 #ffaac4, 9px 4px 0 #ffaac4, 10px 4px 0 #ffaac4, 11px 4px 0 #ff6b9d,
+    4px 5px 0 #ff6b9d, 5px 5px 0 #ffaac4, 6px 5px 0 #ffffff, 7px 5px 0 #ffffff, 8px 5px 0 #ffaac4, 9px 5px 0 #ffffff, 10px 5px 0 #ffffff, 11px 5px 0 #ff6b9d,
+    4px 6px 0 #ff6b9d, 5px 6px 0 #ffaac4, 6px 6px 0 #ffffff, 7px 6px 0 #2244aa, 8px 6px 0 #ffaac4, 9px 6px 0 #ffffff, 10px 6px 0 #2244aa, 11px 6px 0 #ff6b9d,
+    4px 7px 0 #ff6b9d, 5px 7px 0 #ffaac4, 6px 7px 0 #ffffff, 7px 7px 0 #4466cc, 8px 7px 0 #ffaac4, 9px 7px 0 #ffffff, 10px 7px 0 #4466cc, 11px 7px 0 #ff6b9d,
+    4px 8px 0 #ff6b9d, 5px 8px 0 #ff5588, 6px 8px 0 #ffaac4, 7px 8px 0 #ffaac4, 8px 8px 0 #ff6b9d, 9px 8px 0 #ffaac4, 10px 8px 0 #ff5588, 11px 8px 0 #ff6b9d,
+    4px 9px 0 #ff6b9d, 5px 9px 0 #ff6b9d, 6px 9px 0 #ffaac4, 7px 9px 0 #cc4477, 8px 9px 0 #cc4477, 9px 9px 0 #ffaac4, 10px 9px 0 #ff6b9d, 11px 9px 0 #ff6b9d,
+    5px 10px 0 #ff6b9d, 6px 10px 0 #ff6b9d, 7px 10px 0 #ffaac4, 8px 10px 0 #ffaac4, 9px 10px 0 #ff6b9d, 10px 10px 0 #ff6b9d,
+    4px 11px 0 #ff6b9d, 5px 11px 0 #cc4477, 6px 11px 0 #ff6b9d, 7px 11px 0 #cc4477, 8px 11px 0 #cc4477, 9px 11px 0 #ff6b9d, 10px 11px 0 #cc4477, 11px 11px 0 #ff6b9d,
+    3px 12px 0 #ff6b9d, 4px 12px 0 #cc4477, 6px 12px 0 #ff6b9d, 7px 12px 0 #cc4477, 8px 12px 0 #cc4477, 9px 12px 0 #ff6b9d, 11px 12px 0 #cc4477, 12px 12px 0 #ff6b9d,
+    3px 13px 0 #cc4477, 5px 13px 0 #ff6b9d, 6px 13px 0 #cc4477, 9px 13px 0 #cc4477, 10px 13px 0 #ff6b9d, 12px 13px 0 #cc4477,
+    2px 14px 0 #cc4477, 5px 14px 0 #cc4477, 10px 14px 0 #cc4477, 13px 14px 0 #cc4477,
+    2px 15px 0 #993366, 5px 15px 0 #993366, 10px 15px 0 #993366, 13px 15px 0 #993366;
+}
+
+/* === OCTOPUS Researcher (scale 2.5 for pool, scale 3 for desk) === */
+.octopus-pixel {
+  transform: scale(2.5);
+  transform-origin: top left;
+  margin-right: 39px;
+  margin-bottom: 39px;
+  color: var(--cyan);
+  box-shadow:
+    6px 0 0 #00d4ff, 7px 0 0 #00d4ff, 8px 0 0 #00d4ff, 9px 0 0 #00d4ff,
+    5px 1px 0 #00d4ff, 6px 1px 0 #77eeff, 7px 1px 0 #77eeff, 8px 1px 0 #77eeff, 9px 1px 0 #77eeff, 10px 1px 0 #00d4ff,
+    4px 2px 0 #00d4ff, 5px 2px 0 #77eeff, 6px 2px 0 #77eeff, 7px 2px 0 #aaf4ff, 8px 2px 0 #aaf4ff, 9px 2px 0 #77eeff, 10px 2px 0 #77eeff, 11px 2px 0 #00d4ff,
+    3px 3px 0 #00d4ff, 4px 3px 0 #77eeff, 5px 3px 0 #77eeff, 6px 3px 0 #aaf4ff, 7px 3px 0 #aaf4ff, 8px 3px 0 #aaf4ff, 9px 3px 0 #aaf4ff, 10px 3px 0 #77eeff, 11px 3px 0 #77eeff, 12px 3px 0 #00d4ff,
+    3px 4px 0 #00d4ff, 4px 4px 0 #77eeff, 5px 4px 0 #aaf4ff, 6px 4px 0 #aaf4ff, 7px 4px 0 #aaf4ff, 8px 4px 0 #aaf4ff, 9px 4px 0 #aaf4ff, 10px 4px 0 #aaf4ff, 11px 4px 0 #77eeff, 12px 4px 0 #00d4ff,
+    3px 5px 0 #00d4ff, 4px 5px 0 #77eeff, 5px 5px 0 #ffffff, 6px 5px 0 #ffffff, 7px 5px 0 #aaf4ff, 8px 5px 0 #aaf4ff, 9px 5px 0 #ffffff, 10px 5px 0 #ffffff, 11px 5px 0 #77eeff, 12px 5px 0 #00d4ff,
+    3px 6px 0 #00d4ff, 4px 6px 0 #77eeff, 5px 6px 0 #ffffff, 6px 6px 0 #113355, 7px 6px 0 #77eeff, 8px 6px 0 #77eeff, 9px 6px 0 #ffffff, 10px 6px 0 #113355, 11px 6px 0 #77eeff, 12px 6px 0 #00d4ff,
+    3px 7px 0 #00d4ff, 4px 7px 0 #77eeff, 5px 7px 0 #ffffff, 6px 7px 0 #335577, 7px 7px 0 #77eeff, 8px 7px 0 #77eeff, 9px 7px 0 #ffffff, 10px 7px 0 #335577, 11px 7px 0 #77eeff, 12px 7px 0 #00d4ff,
+    4px 8px 0 #009abb, 5px 8px 0 #77eeff, 6px 8px 0 #77eeff, 7px 8px 0 #009abb, 8px 8px 0 #009abb, 9px 8px 0 #77eeff, 10px 8px 0 #77eeff, 11px 8px 0 #009abb,
+    4px 9px 0 #00d4ff, 5px 9px 0 #00d4ff, 6px 9px 0 #77eeff, 7px 9px 0 #77eeff, 8px 9px 0 #77eeff, 9px 9px 0 #77eeff, 10px 9px 0 #00d4ff, 11px 9px 0 #00d4ff,
+    3px 10px 0 #00d4ff, 4px 10px 0 #009abb, 5px 10px 0 #00d4ff, 6px 10px 0 #009abb, 7px 10px 0 #00d4ff, 8px 10px 0 #00d4ff, 9px 10px 0 #009abb, 10px 10px 0 #00d4ff, 11px 10px 0 #009abb, 12px 10px 0 #00d4ff,
+    2px 11px 0 #00d4ff, 3px 11px 0 #009abb, 5px 11px 0 #009abb, 6px 11px 0 #00d4ff, 9px 11px 0 #00d4ff, 10px 11px 0 #009abb, 12px 11px 0 #009abb, 13px 11px 0 #00d4ff,
+    2px 12px 0 #009abb, 3px 12px 0 #00d4ff, 5px 12px 0 #00d4ff, 6px 12px 0 #009abb, 9px 12px 0 #009abb, 10px 12px 0 #00d4ff, 12px 12px 0 #00d4ff, 13px 12px 0 #009abb,
+    1px 13px 0 #009abb, 4px 13px 0 #009abb, 7px 13px 0 #009abb, 8px 13px 0 #009abb, 11px 13px 0 #009abb, 14px 13px 0 #009abb;
+}
+
+/* === SHARK Developer (scale 2.5 for pool) === */
+.shark-pixel {
+  transform: scale(2.5);
+  transform-origin: top left;
+  margin-right: 39px;
+  margin-bottom: 39px;
+  color: var(--orange);
+  box-shadow:
+    7px 0 0 #ff9f43, 8px 0 0 #ff9f43,
+    7px 1px 0 #ffcf99, 8px 1px 0 #ff9f43, 9px 1px 0 #ff9f43,
+    5px 2px 0 #ff9f43, 6px 2px 0 #ff9f43, 7px 2px 0 #ffcf99, 8px 2px 0 #ffcf99, 9px 2px 0 #ff9f43, 10px 2px 0 #ff9f43,
+    4px 3px 0 #ff9f43, 5px 3px 0 #ffcf99, 6px 3px 0 #ffcf99, 7px 3px 0 #ffcf99, 8px 3px 0 #ffcf99, 9px 3px 0 #ffcf99, 10px 3px 0 #ffcf99, 11px 3px 0 #ff9f43,
+    3px 4px 0 #ff9f43, 4px 4px 0 #ffcf99, 5px 4px 0 #ffcf99, 6px 4px 0 #ffcf99, 7px 4px 0 #ffcf99, 8px 4px 0 #ffcf99, 9px 4px 0 #ffcf99, 10px 4px 0 #ffcf99, 11px 4px 0 #ffcf99, 12px 4px 0 #ff9f43,
+    3px 5px 0 #ff9f43, 4px 5px 0 #ffcf99, 5px 5px 0 #ffffff, 6px 5px 0 #ffffff, 7px 5px 0 #ffcf99, 8px 5px 0 #ffcf99, 9px 5px 0 #ffffff, 10px 5px 0 #ffffff, 11px 5px 0 #ffcf99, 12px 5px 0 #ff9f43,
+    3px 6px 0 #ff9f43, 4px 6px 0 #ffcf99, 5px 6px 0 #ffffff, 6px 6px 0 #331100, 7px 6px 0 #ffcf99, 8px 6px 0 #ffcf99, 9px 6px 0 #ffffff, 10px 6px 0 #331100, 11px 6px 0 #ffcf99, 12px 6px 0 #ff9f43,
+    3px 7px 0 #ff9f43, 4px 7px 0 #ffcf99, 5px 7px 0 #ffffff, 6px 7px 0 #664422, 7px 7px 0 #ffcf99, 8px 7px 0 #ffcf99, 9px 7px 0 #ffffff, 10px 7px 0 #664422, 11px 7px 0 #ffcf99, 12px 7px 0 #ff9f43,
+    3px 8px 0 #ff9f43, 4px 8px 0 #ff7733, 5px 8px 0 #ffcf99, 6px 8px 0 #ffcf99, 7px 8px 0 #ffcf99, 8px 8px 0 #ffcf99, 9px 8px 0 #ffcf99, 10px 8px 0 #ffcf99, 11px 8px 0 #ff7733, 12px 8px 0 #ff9f43,
+    4px 9px 0 #ff9f43, 5px 9px 0 #ffcf99, 6px 9px 0 #cc7a22, 7px 9px 0 #ffffff, 8px 9px 0 #ffffff, 9px 9px 0 #cc7a22, 10px 9px 0 #ffcf99, 11px 9px 0 #ff9f43,
+    4px 10px 0 #ff9f43, 5px 10px 0 #ff9f43, 6px 10px 0 #ffcf99, 7px 10px 0 #ffeedd, 8px 10px 0 #ffeedd, 9px 10px 0 #ffcf99, 10px 10px 0 #ff9f43, 11px 10px 0 #ff9f43,
+    2px 11px 0 #ff9f43, 3px 11px 0 #cc7a22, 4px 11px 0 #ff9f43, 5px 11px 0 #ffcf99, 6px 11px 0 #ffeedd, 7px 11px 0 #ffeedd, 8px 11px 0 #ffeedd, 9px 11px 0 #ffeedd, 10px 11px 0 #ffcf99, 11px 11px 0 #ff9f43, 12px 11px 0 #cc7a22, 13px 11px 0 #ff9f43,
+    1px 12px 0 #cc7a22, 2px 12px 0 #ff9f43, 5px 12px 0 #ff9f43, 6px 12px 0 #ffcf99, 7px 12px 0 #ffcf99, 8px 12px 0 #ffcf99, 9px 12px 0 #ffcf99, 10px 12px 0 #ff9f43, 13px 12px 0 #ff9f43, 14px 12px 0 #cc7a22,
+    5px 13px 0 #ff9f43, 6px 13px 0 #ff9f43, 7px 13px 0 #cc7a22, 8px 13px 0 #cc7a22, 9px 13px 0 #ff9f43, 10px 13px 0 #ff9f43,
+    6px 14px 0 #cc7a22, 7px 14px 0 #ff9f43, 8px 14px 0 #ff9f43, 9px 14px 0 #cc7a22;
+}
+
+/* === TURTLE Reviewer (scale 2.5 for pool) === */
+.turtle-pixel {
+  transform: scale(2.5);
+  transform-origin: top left;
+  margin-right: 39px;
+  margin-bottom: 39px;
+  color: var(--green);
+  box-shadow:
+    4px 0 0 #aabbcc, 5px 0 0 #aabbcc, 6px 0 0 #aabbcc, 7px 0 0 #aabbcc, 8px 0 0 #aabbcc, 9px 0 0 #aabbcc, 10px 0 0 #aabbcc, 11px 0 0 #aabbcc,
+    5px 1px 0 #26de81, 6px 1px 0 #77ffbb, 7px 1px 0 #77ffbb, 8px 1px 0 #77ffbb, 9px 1px 0 #77ffbb, 10px 1px 0 #26de81,
+    4px 2px 0 #26de81, 5px 2px 0 #77ffbb, 6px 2px 0 #ffffff, 7px 2px 0 #ffffff, 8px 2px 0 #77ffbb, 9px 2px 0 #ffffff, 10px 2px 0 #ffffff, 11px 2px 0 #26de81,
+    4px 3px 0 #26de81, 5px 3px 0 #77ffbb, 6px 3px 0 #ffffff, 7px 3px 0 #224400, 8px 3px 0 #77ffbb, 9px 3px 0 #ffffff, 10px 3px 0 #224400, 11px 3px 0 #26de81,
+    4px 4px 0 #aabbcc, 5px 4px 0 #aabbcc, 6px 4px 0 #aabbcc, 7px 4px 0 #aabbcc, 8px 4px 0 #aabbcc, 9px 4px 0 #aabbcc, 10px 4px 0 #aabbcc, 11px 4px 0 #aabbcc,
+    5px 5px 0 #26de81, 6px 5px 0 #77ffbb, 7px 5px 0 #1aaa60, 8px 5px 0 #1aaa60, 9px 5px 0 #77ffbb, 10px 5px 0 #26de81,
+    6px 6px 0 #26de81, 7px 6px 0 #77ffbb, 8px 6px 0 #77ffbb, 9px 6px 0 #26de81,
+    4px 7px 0 #8B6914, 5px 7px 0 #8B6914, 6px 7px 0 #A0822B, 7px 7px 0 #A0822B, 8px 7px 0 #A0822B, 9px 7px 0 #A0822B, 10px 7px 0 #8B6914, 11px 7px 0 #8B6914,
+    3px 8px 0 #8B6914, 4px 8px 0 #A0822B, 5px 8px 0 #26de81, 6px 8px 0 #A0822B, 7px 8px 0 #26de81, 8px 8px 0 #A0822B, 9px 8px 0 #26de81, 10px 8px 0 #A0822B, 11px 8px 0 #26de81, 12px 8px 0 #8B6914,
+    3px 9px 0 #8B6914, 4px 9px 0 #26de81, 5px 9px 0 #A0822B, 6px 9px 0 #26de81, 7px 9px 0 #1aaa60, 8px 9px 0 #26de81, 9px 9px 0 #1aaa60, 10px 9px 0 #26de81, 11px 9px 0 #A0822B, 12px 9px 0 #8B6914,
+    3px 10px 0 #8B6914, 4px 10px 0 #A0822B, 5px 10px 0 #26de81, 6px 10px 0 #A0822B, 7px 10px 0 #26de81, 8px 10px 0 #A0822B, 9px 10px 0 #26de81, 10px 10px 0 #A0822B, 11px 10px 0 #26de81, 12px 10px 0 #8B6914,
+    4px 11px 0 #8B6914, 5px 11px 0 #8B6914, 6px 11px 0 #A0822B, 7px 11px 0 #A0822B, 8px 11px 0 #A0822B, 9px 11px 0 #A0822B, 10px 11px 0 #8B6914, 11px 11px 0 #8B6914,
+    2px 12px 0 #26de81, 3px 12px 0 #26de81, 5px 12px 0 #26de81, 10px 12px 0 #26de81, 12px 12px 0 #26de81, 13px 12px 0 #26de81,
+    1px 13px 0 #1aaa60, 2px 13px 0 #26de81, 5px 13px 0 #1aaa60, 10px 13px 0 #1aaa60, 13px 13px 0 #26de81, 14px 13px 0 #1aaa60;
+}
+
+/* === PUFFERFISH Tester (scale 2.5 for pool) === */
+.puffer-pixel {
+  transform: scale(2.5);
+  transform-origin: top left;
+  margin-right: 39px;
+  margin-bottom: 39px;
+  color: var(--yellow);
+  box-shadow:
+    6px 0 0 #ffd32a, 7px 0 0 #ccaa00, 8px 0 0 #ccaa00, 9px 0 0 #ffd32a,
+    5px 1px 0 #ffd32a, 6px 1px 0 #ffee88, 7px 1px 0 #ffee88, 8px 1px 0 #ffee88, 9px 1px 0 #ffee88, 10px 1px 0 #ffd32a,
+    4px 2px 0 #ccaa00, 5px 2px 0 #ffee88, 6px 2px 0 #ffee88, 7px 2px 0 #ffee88, 8px 2px 0 #ffee88, 9px 2px 0 #ffee88, 10px 2px 0 #ffee88, 11px 2px 0 #ccaa00,
+    3px 3px 0 #ffd32a, 4px 3px 0 #ffee88, 5px 3px 0 #ffee88, 6px 3px 0 #ffee88, 7px 3px 0 #ffee88, 8px 3px 0 #ffee88, 9px 3px 0 #ffee88, 10px 3px 0 #ffee88, 11px 3px 0 #ffee88, 12px 3px 0 #ffd32a,
+    2px 4px 0 #ccaa00, 3px 4px 0 #ffd32a, 4px 4px 0 #ffee88, 5px 4px 0 #ffee88, 6px 4px 0 #ffee88, 7px 4px 0 #ffee88, 8px 4px 0 #ffee88, 9px 4px 0 #ffee88, 10px 4px 0 #ffee88, 11px 4px 0 #ffee88, 12px 4px 0 #ffd32a, 13px 4px 0 #ccaa00,
+    2px 5px 0 #ffd32a, 3px 5px 0 #ffee88, 4px 5px 0 #ffee88, 5px 5px 0 #ffffff, 6px 5px 0 #ffffff, 7px 5px 0 #ffee88, 8px 5px 0 #ffee88, 9px 5px 0 #ffffff, 10px 5px 0 #ffffff, 11px 5px 0 #ffee88, 12px 5px 0 #ffee88, 13px 5px 0 #ffd32a,
+    2px 6px 0 #ccaa00, 3px 6px 0 #ffee88, 4px 6px 0 #ffee88, 5px 6px 0 #ffffff, 6px 6px 0 #332200, 7px 6px 0 #ffee88, 8px 6px 0 #ffee88, 9px 6px 0 #ffffff, 10px 6px 0 #332200, 11px 6px 0 #ffee88, 12px 6px 0 #ffee88, 13px 6px 0 #ccaa00,
+    2px 7px 0 #ffd32a, 3px 7px 0 #ffee88, 4px 7px 0 #ffee88, 5px 7px 0 #ffffff, 6px 7px 0 #665500, 7px 7px 0 #ffee88, 8px 7px 0 #ffee88, 9px 7px 0 #ffffff, 10px 7px 0 #665500, 11px 7px 0 #ffee88, 12px 7px 0 #ffee88, 13px 7px 0 #ffd32a,
+    2px 8px 0 #ccaa00, 3px 8px 0 #ffd32a, 4px 8px 0 #ffaa44, 5px 8px 0 #ffee88, 6px 8px 0 #ffee88, 7px 8px 0 #cc6633, 8px 8px 0 #cc6633, 9px 8px 0 #ffee88, 10px 8px 0 #ffee88, 11px 8px 0 #ffaa44, 12px 8px 0 #ffd32a, 13px 8px 0 #ccaa00,
+    3px 9px 0 #ffd32a, 4px 9px 0 #ffee88, 5px 9px 0 #ffee88, 6px 9px 0 #ffee88, 7px 9px 0 #ffccaa, 8px 9px 0 #ffccaa, 9px 9px 0 #ffee88, 10px 9px 0 #ffee88, 11px 9px 0 #ffee88, 12px 9px 0 #ffd32a,
+    2px 10px 0 #ccaa00, 3px 10px 0 #ffd32a, 4px 10px 0 #ffee88, 5px 10px 0 #ffee88, 6px 10px 0 #ffeedd, 7px 10px 0 #ffeedd, 8px 10px 0 #ffeedd, 9px 10px 0 #ffeedd, 10px 10px 0 #ffee88, 11px 10px 0 #ffee88, 12px 10px 0 #ffd32a, 13px 10px 0 #ccaa00,
+    3px 11px 0 #ffd32a, 4px 11px 0 #ffd32a, 5px 11px 0 #ffee88, 6px 11px 0 #ffeedd, 7px 11px 0 #ffeedd, 8px 11px 0 #ffeedd, 9px 11px 0 #ffeedd, 10px 11px 0 #ffee88, 11px 11px 0 #ffd32a, 12px 11px 0 #ffd32a,
+    4px 12px 0 #ccaa00, 5px 12px 0 #ffd32a, 6px 12px 0 #ffee88, 7px 12px 0 #ffee88, 8px 12px 0 #ffee88, 9px 12px 0 #ffee88, 10px 12px 0 #ffd32a, 11px 12px 0 #ccaa00,
+    5px 13px 0 #ccaa00, 6px 13px 0 #ffd32a, 7px 13px 0 #ffd32a, 8px 13px 0 #ffd32a, 9px 13px 0 #ffd32a, 10px 13px 0 #ccaa00,
+    6px 14px 0 #ccaa00, 7px 14px 0 #ffd32a, 8px 14px 0 #ffd32a, 9px 14px 0 #ccaa00;
+}
+
+/* === DIVER (scale 3, 48x48) === */
+.diver-pixel {
+  transform: scale(3);
+  transform-origin: top left;
+  margin-right: 47px;
+  margin-bottom: 47px;
+  box-shadow:
+    6px 0 0 #8899aa, 7px 0 0 #8899aa, 8px 0 0 #8899aa, 9px 0 0 #8899aa,
+    5px 1px 0 #8899aa, 6px 1px 0 #99aabb, 7px 1px 0 #99aabb, 8px 1px 0 #99aabb, 9px 1px 0 #99aabb, 10px 1px 0 #8899aa,
+    4px 2px 0 #667788, 5px 2px 0 #8899aa, 6px 2px 0 #4488ff, 7px 2px 0 #4488ff, 8px 2px 0 #4488ff, 9px 2px 0 #8899aa, 10px 2px 0 #8899aa, 11px 2px 0 #667788,
+    4px 3px 0 #667788, 5px 3px 0 #8899aa, 6px 3px 0 #4488ff, 7px 3px 0 #66aaff, 8px 3px 0 #4488ff, 9px 3px 0 #8899aa, 10px 3px 0 #8899aa, 11px 3px 0 #667788,
+    5px 4px 0 #667788, 6px 4px 0 #8899aa, 7px 4px 0 #8899aa, 8px 4px 0 #8899aa, 9px 4px 0 #8899aa, 10px 4px 0 #667788,
+    5px 5px 0 #ffcc33, 6px 5px 0 #ffcc33, 7px 5px 0 #ffdd55, 8px 5px 0 #ffdd55, 9px 5px 0 #ffcc33, 10px 5px 0 #ffcc33,
+    4px 6px 0 #ffcc33, 5px 6px 0 #ffdd55, 6px 6px 0 #ffdd55, 7px 6px 0 #ffee77, 8px 6px 0 #ffee77, 9px 6px 0 #ffdd55, 10px 6px 0 #ffdd55, 11px 6px 0 #ffcc33,
+    3px 7px 0 #ffcc33, 4px 7px 0 #ddaa22, 5px 7px 0 #ffdd55, 6px 7px 0 #ffdd55, 7px 7px 0 #7788aa, 8px 7px 0 #7788aa, 9px 7px 0 #ffdd55, 10px 7px 0 #ffdd55, 11px 7px 0 #ddaa22, 12px 7px 0 #ffcc33,
+    4px 8px 0 #ddaa22, 5px 8px 0 #ffcc33, 6px 8px 0 #ffdd55, 7px 8px 0 #ffdd55, 8px 8px 0 #ffdd55, 9px 8px 0 #ffdd55, 10px 8px 0 #ffcc33, 11px 8px 0 #ddaa22,
+    5px 9px 0 #ddaa22, 6px 9px 0 #ffcc33, 7px 9px 0 #ffcc33, 8px 9px 0 #ffcc33, 9px 9px 0 #ffcc33, 10px 9px 0 #ddaa22,
+    5px 10px 0 #ddaa22, 6px 10px 0 #ffcc33, 9px 10px 0 #ffcc33, 10px 10px 0 #ddaa22,
+    4px 11px 0 #222233, 5px 11px 0 #333344, 10px 11px 0 #333344, 11px 11px 0 #222233,
+    3px 12px 0 #222233, 4px 12px 0 #333344, 5px 12px 0 #222233, 10px 12px 0 #222233, 11px 12px 0 #333344, 12px 12px 0 #222233;
+}
+
+/* === PM AREA === */
+.pm-area {
+  position: absolute;
+  z-index: 30;
+  text-align: center;
+}
+.pm-area .char-wrapper {
+  position: relative !important;
+  display: inline-block;
+}
+.pm-label {
+  font-size: 10px;
+  color: var(--pink-light);
+  white-space: nowrap;
+  text-shadow: 1px 1px 0 #0a1a2e;
+  margin-top: 2px;
+}
+.pm-speech-bubble {
+  position: absolute;
+  top: -40px; left: 50%;
+  transform: translateX(-50%);
+  background: rgba(10, 25, 50, 0.9);
+  border: 2px solid var(--pink);
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 8px;
+  color: #ffaac4;
+  white-space: nowrap;
+  z-index: 30;
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+}
+.pm-speech-bubble.visible { opacity: 1; }
+.pm-speech-bubble::after {
+  content: '';
+  position: absolute;
+  bottom: -6px; left: 50%;
+  transform: translateX(-50%);
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 6px solid var(--pink);
+}
+
+/* === MOVING DIVER === */
+#moving-diver {
+  position: absolute;
+  z-index: 50;
+  pointer-events: none;
+  filter: drop-shadow(0 0 6px rgba(255,204,51,0.4));
+}
+.mini-label {
+  font-size: 7px;
+  color: var(--yellow-light);
+  text-align: center;
+  margin-top: 2px;
+  opacity: 0.7;
+}
+
+/* === DIVER SPEECH BUBBLE === */
+.diver-speech-bubble {
+  position: absolute;
+  top: -38px; left: 50%;
+  transform: translateX(-50%);
+  background: rgba(10, 25, 50, 0.92);
+  border: 2px solid var(--yellow);
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 9px;
+  color: #ffdd55;
+  white-space: nowrap;
+  z-index: 60;
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+  text-shadow: 0 0 6px rgba(255,221,85,0.4);
+}
+.diver-speech-bubble.visible { opacity: 1; }
+.diver-speech-bubble::after {
+  content: '';
+  position: absolute;
+  bottom: -6px; left: 50%;
+  transform: translateX(-50%);
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 6px solid var(--yellow);
+}
+
+/* === STATUS BAR (bottom) === */
+.status-bar {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 40px;
+  background: linear-gradient(0deg, rgba(0,10,30,0.95) 0%, rgba(0,10,30,0.8) 80%, transparent 100%);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 30px;
+  z-index: 100;
+}
+.status-left, .status-right {
+  font-size: 8px;
+  color: #5599aa;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 140px;
+}
+.status-right { justify-content: flex-end; }
+.status-center {
+  font-size: 9px;
+  color: var(--cyan-light);
+  text-align: center;
+  max-width: 400px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.conn-dot-status {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: #557788;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.conn-dot-status.live {
+  background: #26de81;
+  box-shadow: 0 0 6px rgba(38,222,129,0.6);
+  animation: blink-dot 2s ease-in-out infinite;
+}
+.conn-dot-status.demo {
+  background: #ffd32a;
+  box-shadow: 0 0 6px rgba(255,211,42,0.6);
+  animation: blink-dot 1.5s ease-in-out infinite;
+}
+
+/* === MISSION LOG === */
+.mission-log {
+  position: absolute;
+  bottom: 30px; left: 90px; right: 90px;
+  height: 58px;
+  background: rgba(5,15,35,0.7);
+  border-radius: 6px 6px 0 0;
+  padding: 4px 12px;
+  z-index: 99;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.mission-log::-webkit-scrollbar { width: 4px; }
+.mission-log::-webkit-scrollbar-track { background: transparent; }
+.mission-log::-webkit-scrollbar-thumb { background: rgba(100,150,200,0.3); border-radius: 2px; }
+.log-entries {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.log-entry {
+  font-size: 8px;
+  color: #6688aa;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.8;
+  animation: logFadeIn 0.3s ease;
+}
+.log-entry .time { color: #446677; }
+.log-entry .agent { font-weight: bold; }
+.log-entry .agent.pm { color: var(--pink); }
+.log-entry .agent.researcher { color: var(--cyan); }
+.log-entry .agent.developer { color: var(--orange); }
+.log-entry .agent.reviewer { color: var(--green); }
+.log-entry .agent.verifier { color: var(--green); }
+.log-entry .agent.tester { color: var(--yellow); }
+.log-entry .agent.writer { color: var(--lavender); }
+@keyframes logFadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* === DEMO BUTTON === */
+.btn-demo {
+  position: absolute;
+  bottom: 46px; right: 100px;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 7px;
+  padding: 5px 12px;
+  border: 1px solid rgba(0,212,255,0.4);
+  border-radius: 4px;
+  cursor: pointer;
+  background: rgba(0,212,255,0.1);
+  color: var(--cyan);
+  z-index: 101;
+  display: none;
+  transition: all 0.2s;
+}
+.btn-demo:hover {
+  background: rgba(0,212,255,0.25);
+  box-shadow: 0 0 10px rgba(0,212,255,0.2);
+}
+.btn-demo:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* === KEYBOARD === */
+.keyboard-hint {
+  position: absolute;
+  bottom: 108px; right: 100px;
+  font-size: 7px;
+  color: #335566;
+  z-index: 99;
+  letter-spacing: 1px;
+}
+
+/* === AGENT STATUS EFFECTS === */
+.desk-station.status-working .agent-slot > div {
+  animation: bob-work 1.5s ease-in-out infinite !important;
+}
+.desk-station.status-working .monitor-screen {
+  filter: brightness(1.4);
+}
+.desk-station.status-working .screen-line {
+  animation-name: type-line-fast !important;
+  animation-duration: 1.5s !important;
+}
+.desk-station.status-complete .monitor-screen {
+  background: #0a2a0a !important;
+}
+.desk-station.status-complete .screen-line {
+  background: #00ff66 !important;
+  width: 90% !important;
+  animation: none !important;
+}
+.desk-station.status-error .monitor-screen {
+  background: #2a0a0a !important;
+}
+.desk-station.status-error .screen-line {
+  background: #ff3333 !important;
+  animation: none !important;
+}
+
+/* candlestick bars */
+.candle { display: inline-block; width: 3px; margin: 0 1px; border-radius: 1px; vertical-align: bottom; }
+.candle-wrap { position: absolute; bottom: 3px; left: 3px; right: 3px; height: 16px; display: flex; align-items: flex-end; gap: 1px; }
+
+/* === AGENT NAME (pool) === */
+.agent-name-label {
+  position: absolute;
+  font-size: 8px;
+  color: #6699aa;
+  white-space: nowrap;
+  text-shadow: 1px 1px 0 #0a1a2e;
+  z-index: 21;
+}
+.char-wrapper {
+  position: absolute;
+  z-index: 20;
+}
+
+/* === DESK GLOW ON DIVER PROXIMITY === */
+.desk-station.desk-highlight {
+  filter: brightness(1.3);
+}
+.desk-station.desk-highlight .desk-surface {
+  box-shadow: 0 4px 0 #1a1008, 0 0 8px rgba(255,204,51,0.3);
+}
+
+/* === EXTERNAL AI POOL === */
+.external-ai-pool {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+.external-agent {
+  position: absolute;
+  text-align: center;
+  opacity: 0.7;
+  transition: opacity 0.5s, filter 0.5s;
+  z-index: 2;
+}
+.external-agent.right-side .external-agent-label {
+  position: relative;
+  left: -16px;
+}
+.external-agent-label {
+  font-size: 8px;
+  white-space: nowrap;
+  text-shadow: 1px 1px 0 #0a1a2e;
+  margin-top: 2px;
+  transition: color 0.3s;
+}
+.external-agent.called {
+  opacity: 1;
+  filter: drop-shadow(0 0 8px currentColor);
+}
+.external-agent.called .external-agent-label {
+  filter: brightness(1.5);
+}
+.external-agent.working {
+  opacity: 1;
+  filter: drop-shadow(0 0 12px currentColor);
+}
+.external-agent.working .external-agent-label {
+  filter: brightness(1.5);
+}
+.external-agent.complete {
+  opacity: 1;
+  filter: drop-shadow(0 0 6px currentColor) brightness(1.2);
+}
+
+@keyframes bob-ocean {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+@keyframes bob-ocean-fast {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+@keyframes sway-ocean {
+  0%, 100% { transform: translateX(0) translateY(0); }
+  25% { transform: translateX(4px) translateY(-4px); }
+  50% { transform: translateX(0) translateY(-6px); }
+  75% { transform: translateX(-4px) translateY(-4px); }
+}
+@keyframes sway-ocean-fast {
+  0%, 100% { transform: translateX(0) translateY(0); }
+  25% { transform: translateX(6px) translateY(-5px); }
+  50% { transform: translateX(0) translateY(-8px); }
+  75% { transform: translateX(-6px) translateY(-5px); }
+}
+@keyframes sway-jelly {
+  0%, 100% { transform: translateX(0) translateY(0) rotate(-2deg); }
+  25% { transform: translateX(5px) translateY(-5px) rotate(0deg); }
+  50% { transform: translateX(0) translateY(-8px) rotate(2deg); }
+  75% { transform: translateX(-5px) translateY(-5px) rotate(0deg); }
+}
+@keyframes sway-jelly-fast {
+  0%, 100% { transform: translateX(0) translateY(0) rotate(-3deg); }
+  25% { transform: translateX(7px) translateY(-6px) rotate(0deg); }
+  50% { transform: translateX(0) translateY(-10px) rotate(3deg); }
+  75% { transform: translateX(-7px) translateY(-6px) rotate(0deg); }
+}
+@keyframes swim-to-dome-left {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(60px); }
+}
+@keyframes swim-to-dome-right {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-60px); }
+}
+@keyframes jelly-drift {
+  0%, 100% { transform: translateY(0) rotate(-2deg); }
+  50% { transform: translateY(-8px) rotate(2deg); }
+}
+@keyframes jelly-drift-fast {
+  0%, 100% { transform: translateY(0) rotate(-3deg); }
+  50% { transform: translateY(-10px) rotate(3deg); }
+}
+/* Walk animation for agents moving to desk */
+.pool-agent.walking {
+  position: fixed !important;
+  z-index: 100;
+  transition: transform 2.5s ease-in-out, opacity 0.5s;
+  opacity: 1 !important;
+}
+.pool-agent.at-desk {
+  position: fixed !important;
+  z-index: 100;
+  opacity: 1 !important;
+}
+.pool-agent.walking > div:first-child {
+  animation: swim-bounce 0.35s ease-in-out infinite !important;
+}
+@keyframes swim-bounce {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  25% { transform: translateY(-2px) rotate(2deg); }
+  50% { transform: translateY(-4px) rotate(0deg); }
+  75% { transform: translateY(-2px) rotate(-2deg); }
+}
+@keyframes eel-spark {
+  0%, 90%, 100% { filter: brightness(1); }
+  95% { filter: brightness(1.8) drop-shadow(0 0 4px #ffdd44); }
+}
+
+/* === GPT WHALE (scale 1.5) === */
+.whale-pixel {
+  transform: scale(2);
+  transform-origin: top left;
+  margin-right: 30px;
+  margin-bottom: 24px;
+  color: #4488ff;
+  box-shadow:
+    7px 0 0 #4488ff, 8px 0 0 #4488ff, 9px 0 0 #4488ff, 10px 0 0 #4488ff,
+    5px 1px 0 #4488ff, 6px 1px 0 #66aaff, 7px 1px 0 #88bbff, 8px 1px 0 #88bbff, 9px 1px 0 #88bbff, 10px 1px 0 #66aaff, 11px 1px 0 #4488ff,
+    4px 2px 0 #4488ff, 5px 2px 0 #66aaff, 6px 2px 0 #88bbff, 7px 2px 0 #88bbff, 8px 2px 0 #aaddff, 9px 2px 0 #88bbff, 10px 2px 0 #88bbff, 11px 2px 0 #66aaff, 12px 2px 0 #4488ff,
+    3px 3px 0 #4488ff, 4px 3px 0 #66aaff, 5px 3px 0 #88bbff, 6px 3px 0 #88bbff, 7px 3px 0 #aaddff, 8px 3px 0 #aaddff, 9px 3px 0 #aaddff, 10px 3px 0 #88bbff, 11px 3px 0 #88bbff, 12px 3px 0 #66aaff, 13px 3px 0 #4488ff,
+    2px 4px 0 #4488ff, 3px 4px 0 #66aaff, 4px 4px 0 #88bbff, 5px 4px 0 #aaddff, 6px 4px 0 #aaddff, 7px 4px 0 #aaddff, 8px 4px 0 #aaddff, 9px 4px 0 #aaddff, 10px 4px 0 #aaddff, 11px 4px 0 #88bbff, 12px 4px 0 #66aaff, 13px 4px 0 #4488ff, 14px 4px 0 #4488ff,
+    2px 5px 0 #4488ff, 3px 5px 0 #88bbff, 4px 5px 0 #aaddff, 5px 5px 0 #ffffff, 6px 5px 0 #112244, 7px 5px 0 #aaddff, 8px 5px 0 #aaddff, 9px 5px 0 #aaddff, 10px 5px 0 #aaddff, 11px 5px 0 #88bbff, 12px 5px 0 #66aaff, 13px 5px 0 #4488ff, 14px 5px 0 #2266cc, 15px 5px 0 #4488ff,
+    2px 6px 0 #4488ff, 3px 6px 0 #66aaff, 4px 6px 0 #88bbff, 5px 6px 0 #aaddff, 6px 6px 0 #aaddff, 7px 6px 0 #aaddff, 8px 6px 0 #aaddff, 9px 6px 0 #aaddff, 10px 6px 0 #88bbff, 11px 6px 0 #66aaff, 12px 6px 0 #4488ff, 13px 6px 0 #2266cc, 14px 6px 0 #4488ff,
+    2px 7px 0 #4488ff, 3px 7px 0 #66aaff, 4px 7px 0 #88bbff, 5px 7px 0 #ccddff, 6px 7px 0 #ccddff, 7px 7px 0 #88bbff, 8px 7px 0 #88bbff, 9px 7px 0 #ccddff, 10px 7px 0 #ccddff, 11px 7px 0 #66aaff, 12px 7px 0 #4488ff,
+    3px 8px 0 #4488ff, 4px 8px 0 #66aaff, 5px 8px 0 #88bbff, 6px 8px 0 #88bbff, 7px 8px 0 #66aaff, 8px 8px 0 #66aaff, 9px 8px 0 #88bbff, 10px 8px 0 #88bbff, 11px 8px 0 #4488ff,
+    4px 9px 0 #4488ff, 5px 9px 0 #4488ff, 6px 9px 0 #66aaff, 7px 9px 0 #66aaff, 8px 9px 0 #66aaff, 9px 9px 0 #66aaff, 10px 9px 0 #4488ff, 11px 9px 0 #4488ff,
+    3px 10px 0 #2266cc, 4px 10px 0 #4488ff, 5px 10px 0 #4488ff, 10px 10px 0 #4488ff, 11px 10px 0 #4488ff, 12px 10px 0 #2266cc,
+    2px 11px 0 #2266cc, 3px 11px 0 #4488ff, 11px 11px 0 #4488ff, 12px 11px 0 #2266cc;
+}
+
+/* === GEMINI JELLYFISH (scale 1.5) === */
+.jellyfish-pixel {
+  transform: scale(2);
+  transform-origin: top left;
+  margin-right: 24px;
+  margin-bottom: 30px;
+  color: #cc66ff;
+  box-shadow:
+    6px 0px 0 #cc66ff, 7px 0px 0 #cc66ff, 8px 0px 0 #cc66ff,
+    5px 1px 0 #cc66ff, 6px 1px 0 #dd99ff, 7px 1px 0 #eeccff, 8px 1px 0 #dd99ff, 9px 1px 0 #cc66ff,
+    4px 2px 0 #cc66ff, 5px 2px 0 #dd99ff, 6px 2px 0 #eeccff, 7px 2px 0 #eeccff, 8px 2px 0 #eeccff, 9px 2px 0 #dd99ff, 10px 2px 0 #cc66ff,
+    4px 3px 0 #cc66ff, 5px 3px 0 #eeccff, 6px 3px 0 #ffffff, 7px 3px 0 #220044, 8px 3px 0 #eeccff, 9px 3px 0 #ffffff, 10px 3px 0 #220044,
+    4px 4px 0 #9944cc, 5px 4px 0 #cc66ff, 6px 4px 0 #dd99ff, 7px 4px 0 #dd99ff, 8px 4px 0 #dd99ff, 9px 4px 0 #dd99ff, 10px 4px 0 #9944cc,
+    5px 5px 0 #9944cc, 6px 5px 0 #cc66ff, 7px 5px 0 #cc66ff, 8px 5px 0 #cc66ff, 9px 5px 0 #9944cc,
+    4px 6px 0 #9944cc, 6px 6px 0 #cc66ff, 8px 6px 0 #cc66ff, 10px 6px 0 #9944cc,
+    4px 7px 0 #cc66ff, 6px 7px 0 #9944cc, 8px 7px 0 #9944cc, 10px 7px 0 #cc66ff,
+    3px 8px 0 #9944cc, 7px 8px 0 #9944cc, 11px 8px 0 #9944cc,
+    4px 9px 0 #cc66ff, 6px 9px 0 #cc66ff, 8px 9px 0 #cc66ff, 10px 9px 0 #cc66ff,
+    3px 10px 0 #9944cc, 5px 10px 0 #9944cc, 7px 10px 0 #9944cc, 9px 10px 0 #9944cc, 11px 10px 0 #9944cc,
+    4px 11px 0 #cc66ff, 6px 11px 0 #9944cc, 8px 11px 0 #9944cc, 10px 11px 0 #cc66ff,
+    3px 12px 0 #9944cc, 7px 12px 0 #cc66ff, 11px 12px 0 #9944cc,
+    4px 13px 0 #9944cc, 6px 13px 0 #9944cc, 8px 13px 0 #9944cc, 10px 13px 0 #9944cc;
+}
+
+/* === GROK EEL (scale 1.5) === */
+.eel-pixel {
+  transform: scale(2);
+  transform-origin: top left;
+  margin-right: 24px;
+  margin-bottom: 24px;
+  color: #ffdd44;
+  animation: eel-spark 3s ease-in-out infinite;
+  box-shadow:
+    3px 0px 0 #ffdd44, 4px 0px 0 #ffee66,
+    2px 1px 0 #ffdd44, 3px 1px 0 #ffee66, 4px 1px 0 #ffee66, 5px 1px 0 #ffdd44,
+    1px 2px 0 #ccaa22, 2px 2px 0 #ffee66, 3px 2px 0 #ffffff, 4px 2px 0 #332200, 5px 2px 0 #ffee66, 6px 2px 0 #ccaa22,
+    2px 3px 0 #ffdd44, 3px 3px 0 #ffee66, 4px 3px 0 #ffee66, 5px 3px 0 #ffdd44,
+    3px 4px 0 #ffdd44, 4px 4px 0 #ffee66, 5px 4px 0 #ccaa22,
+    4px 5px 0 #ffdd44, 5px 5px 0 #ffee66, 6px 5px 0 #ccaa22,
+    5px 6px 0 #ffdd44, 6px 6px 0 #ffee66, 7px 6px 0 #ffdd44,
+    6px 7px 0 #ccaa22, 7px 7px 0 #ffee66, 8px 7px 0 #ffdd44,
+    7px 8px 0 #ffdd44, 8px 8px 0 #ffee66, 9px 8px 0 #ccaa22,
+    8px 9px 0 #ffdd44, 9px 9px 0 #ffee66, 10px 9px 0 #ffdd44,
+    9px 10px 0 #ccaa22, 10px 10px 0 #ffee66, 11px 10px 0 #ccaa22,
+    10px 11px 0 #ffdd44, 11px 11px 0 #ffdd44,
+    11px 12px 0 #ccaa22, 12px 12px 0 #ffdd44,
+    12px 13px 0 #ccaa22, 13px 13px 0 #ccaa22;
+}
+
+/* === WHISPER DOLPHIN (scale 1.5) === */
+.dolphin-pixel {
+  transform: scale(2);
+  transform-origin: top left;
+  margin-right: 24px;
+  margin-bottom: 24px;
+  color: #66ddee;
+  box-shadow:
+    10px 0px 0 #66ddee, 11px 0px 0 #66ddee, 12px 0px 0 #66ddee,
+    8px 1px 0 #66ddee, 9px 1px 0 #88eeff, 10px 1px 0 #88eeff, 11px 1px 0 #88eeff, 12px 1px 0 #66ddee, 13px 1px 0 #44aabb,
+    6px 2px 0 #66ddee, 7px 2px 0 #88eeff, 8px 2px 0 #88eeff, 9px 2px 0 #aaf4ff, 10px 2px 0 #aaf4ff, 11px 2px 0 #88eeff, 12px 2px 0 #66ddee,
+    4px 3px 0 #44aabb, 5px 3px 0 #66ddee, 6px 3px 0 #88eeff, 7px 3px 0 #aaf4ff, 8px 3px 0 #aaf4ff, 9px 3px 0 #aaf4ff, 10px 3px 0 #88eeff, 11px 3px 0 #66ddee,
+    3px 4px 0 #44aabb, 4px 4px 0 #66ddee, 5px 4px 0 #88eeff, 6px 4px 0 #aaf4ff, 7px 4px 0 #ffffff, 8px 4px 0 #113344, 9px 4px 0 #88eeff, 10px 4px 0 #66ddee,
+    2px 5px 0 #44aabb, 3px 5px 0 #66ddee, 4px 5px 0 #88eeff, 5px 5px 0 #88eeff, 6px 5px 0 #88eeff, 7px 5px 0 #88eeff, 8px 5px 0 #66ddee, 9px 5px 0 #44aabb,
+    1px 6px 0 #44aabb, 2px 6px 0 #66ddee, 3px 6px 0 #88eeff, 4px 6px 0 #88eeff, 5px 6px 0 #ccddff, 6px 6px 0 #ccddff, 7px 6px 0 #66ddee, 8px 6px 0 #44aabb,
+    2px 7px 0 #44aabb, 3px 7px 0 #66ddee, 4px 7px 0 #88eeff, 5px 7px 0 #ccddff, 6px 7px 0 #ccddff, 7px 7px 0 #66ddee,
+    3px 8px 0 #44aabb, 4px 8px 0 #66ddee, 5px 8px 0 #66ddee, 6px 8px 0 #44aabb,
+    4px 9px 0 #44aabb, 5px 9px 0 #66ddee, 6px 9px 0 #44aabb,
+    3px 10px 0 #44aabb, 4px 10px 0 #66ddee, 5px 10px 0 #44aabb, 8px 10px 0 #66ddee, 9px 10px 0 #66ddee,
+    2px 11px 0 #44aabb, 3px 11px 0 #44aabb, 8px 11px 0 #44aabb, 9px 11px 0 #44aabb, 10px 11px 0 #66ddee;
+}
+
+/* === PERPLEXITY STINGRAY (scale 1.5) === */
+.stingray-pixel {
+  transform: scale(2);
+  transform-origin: top left;
+  margin-right: 24px;
+  margin-bottom: 24px;
+  color: #ff7744;
+  box-shadow:
+    7px 0px 0 #ff7744, 8px 0px 0 #ff7744,
+    5px 1px 0 #ff7744, 6px 1px 0 #ffaa88, 7px 1px 0 #ffaa88, 8px 1px 0 #ffaa88, 9px 1px 0 #ffaa88, 10px 1px 0 #ff7744,
+    3px 2px 0 #cc5522, 4px 2px 0 #ff7744, 5px 2px 0 #ffaa88, 6px 2px 0 #ffcc99, 7px 2px 0 #ffcc99, 8px 2px 0 #ffcc99, 9px 2px 0 #ffcc99, 10px 2px 0 #ffaa88, 11px 2px 0 #ff7744, 12px 2px 0 #cc5522,
+    2px 3px 0 #cc5522, 3px 3px 0 #ff7744, 4px 3px 0 #ffaa88, 5px 3px 0 #ffcc99, 6px 3px 0 #ffffff, 7px 3px 0 #331100, 8px 3px 0 #ffcc99, 9px 3px 0 #ffffff, 10px 3px 0 #331100, 11px 3px 0 #ffaa88, 12px 3px 0 #ff7744, 13px 3px 0 #cc5522,
+    1px 4px 0 #cc5522, 2px 4px 0 #ff7744, 3px 4px 0 #ffaa88, 4px 4px 0 #ffcc99, 5px 4px 0 #ffcc99, 6px 4px 0 #ffcc99, 7px 4px 0 #ffcc99, 8px 4px 0 #ffcc99, 9px 4px 0 #ffcc99, 10px 4px 0 #ffcc99, 11px 4px 0 #ffaa88, 12px 4px 0 #ff7744, 13px 4px 0 #cc5522, 14px 4px 0 #cc5522,
+    2px 5px 0 #cc5522, 3px 5px 0 #ff7744, 4px 5px 0 #ffaa88, 5px 5px 0 #ffaa88, 6px 5px 0 #cc5522, 7px 5px 0 #cc5522, 8px 5px 0 #cc5522, 9px 5px 0 #cc5522, 10px 5px 0 #ffaa88, 11px 5px 0 #ffaa88, 12px 5px 0 #ff7744, 13px 5px 0 #cc5522,
+    3px 6px 0 #cc5522, 4px 6px 0 #ff7744, 5px 6px 0 #ff7744, 6px 6px 0 #ff7744, 7px 6px 0 #cc5522, 8px 6px 0 #cc5522, 9px 6px 0 #ff7744, 10px 6px 0 #ff7744, 11px 6px 0 #ff7744, 12px 6px 0 #cc5522,
+    5px 7px 0 #cc5522, 6px 7px 0 #cc5522, 7px 7px 0 #ff7744, 8px 7px 0 #ff7744, 9px 7px 0 #cc5522, 10px 7px 0 #cc5522,
+    7px 8px 0 #cc5522, 8px 8px 0 #cc5522,
+    7px 9px 0 #ff7744, 8px 9px 0 #cc5522,
+    7px 10px 0 #cc5522, 8px 10px 0 #ff7744,
+    8px 11px 0 #cc5522,
+    8px 12px 0 #cc5522,
+    8px 13px 0 #993311;
+}
+
+/* === SEAHORSE Writer (scale 2.5 for pool) === */
+.seahorse-pixel {
+  transform: scale(2.5);
+  transform-origin: top left;
+  margin-right: 39px;
+  margin-bottom: 39px;
+  color: var(--lavender);
+  box-shadow:
+    /* crown/crest */
+    8px 0 0 #ddbbff, 9px 0 0 #bb88ff,
+    7px 1px 0 #ddbbff, 8px 1px 0 #bb88ff, 10px 1px 0 #bb88ff,
+    /* head */
+    6px 2px 0 #bb88ff, 7px 2px 0 #ddbbff, 8px 2px 0 #ddbbff, 9px 2px 0 #ddbbff, 10px 2px 0 #bb88ff,
+    5px 3px 0 #bb88ff, 6px 3px 0 #ddbbff, 7px 3px 0 #ffffff, 8px 3px 0 #330066, 9px 3px 0 #ddbbff, 10px 3px 0 #ddbbff, 11px 3px 0 #bb88ff,
+    5px 4px 0 #bb88ff, 6px 4px 0 #ddbbff, 7px 4px 0 #ddbbff, 8px 4px 0 #ddbbff, 9px 4px 0 #ddbbff, 10px 4px 0 #bb88ff,
+    /* snout */
+    5px 5px 0 #8855cc, 6px 5px 0 #bb88ff, 7px 5px 0 #ddbbff, 8px 5px 0 #bb88ff, 9px 5px 0 #8855cc,
+    3px 6px 0 #8855cc, 4px 6px 0 #bb88ff, 5px 6px 0 #bb88ff, 6px 6px 0 #8855cc, 7px 6px 0 #bb88ff, 8px 6px 0 #8855cc,
+    /* neck + belly curve right */
+    7px 7px 0 #bb88ff, 8px 7px 0 #ddbbff, 9px 7px 0 #bb88ff,
+    7px 8px 0 #8855cc, 8px 8px 0 #ddbbff, 9px 8px 0 #ddbbff, 10px 8px 0 #bb88ff,
+    8px 9px 0 #bb88ff, 9px 9px 0 #ddbbff, 10px 9px 0 #ddbbff, 11px 9px 0 #8855cc,
+    /* belly bulge */
+    8px 10px 0 #8855cc, 9px 10px 0 #ddbbff, 10px 10px 0 #ddbbff, 11px 10px 0 #bb88ff,
+    8px 11px 0 #bb88ff, 9px 11px 0 #ddbbff, 10px 11px 0 #bb88ff,
+    /* tail curving left */
+    7px 12px 0 #8855cc, 8px 12px 0 #bb88ff, 9px 12px 0 #8855cc,
+    6px 13px 0 #8855cc, 7px 13px 0 #bb88ff,
+    5px 14px 0 #bb88ff, 6px 14px 0 #8855cc,
+    6px 15px 0 #8855cc, 7px 15px 0 #8855cc;
+}
+/* === LOBSTER Writer (scale 2.5 for pool) === */
+.lobster-pixel {
+  transform: scale(2.5);
+  transform-origin: top left;
+  margin-right: 39px;
+  margin-bottom: 39px;
+  color: var(--lavender);
+  box-shadow:
+    /* antennae */
+    3px 0 0 #bb88ff, 12px 0 0 #bb88ff,
+    2px 1px 0 #8855cc, 13px 1px 0 #8855cc,
+    /* head */
+    6px 1px 0 #bb88ff, 7px 1px 0 #ddbbff, 8px 1px 0 #ddbbff, 9px 1px 0 #bb88ff,
+    5px 2px 0 #bb88ff, 6px 2px 0 #ddbbff, 7px 2px 0 #ffffff, 8px 2px 0 #330066, 9px 2px 0 #ddbbff, 10px 2px 0 #bb88ff,
+    5px 3px 0 #8855cc, 6px 3px 0 #ddbbff, 7px 3px 0 #ddbbff, 8px 3px 0 #ddbbff, 9px 3px 0 #ddbbff, 10px 3px 0 #8855cc,
+    /* body segment 1 */
+    4px 4px 0 #bb88ff, 5px 4px 0 #ddbbff, 6px 4px 0 #ddbbff, 7px 4px 0 #ddbbff, 8px 4px 0 #ddbbff, 9px 4px 0 #ddbbff, 10px 4px 0 #ddbbff, 11px 4px 0 #bb88ff,
+    4px 5px 0 #8855cc, 5px 5px 0 #bb88ff, 6px 5px 0 #ddbbff, 7px 5px 0 #ddbbff, 8px 5px 0 #ddbbff, 9px 5px 0 #ddbbff, 10px 5px 0 #bb88ff, 11px 5px 0 #8855cc,
+    /* claws */
+    1px 6px 0 #bb88ff, 2px 6px 0 #ddbbff, 3px 6px 0 #8855cc,
+    5px 6px 0 #bb88ff, 6px 6px 0 #ddbbff, 7px 6px 0 #ddbbff, 8px 6px 0 #ddbbff, 9px 6px 0 #ddbbff, 10px 6px 0 #bb88ff,
+    12px 6px 0 #8855cc, 13px 6px 0 #ddbbff, 14px 6px 0 #bb88ff,
+    0px 7px 0 #bb88ff, 1px 7px 0 #ddbbff, 2px 7px 0 #bb88ff,
+    5px 7px 0 #8855cc, 6px 7px 0 #bb88ff, 7px 7px 0 #ddbbff, 8px 7px 0 #ddbbff, 9px 7px 0 #bb88ff, 10px 7px 0 #8855cc,
+    13px 7px 0 #bb88ff, 14px 7px 0 #ddbbff, 15px 7px 0 #bb88ff,
+    1px 8px 0 #8855cc, 2px 8px 0 #bb88ff,
+    6px 8px 0 #bb88ff, 7px 8px 0 #ddbbff, 8px 8px 0 #ddbbff, 9px 8px 0 #bb88ff,
+    13px 8px 0 #bb88ff, 14px 8px 0 #8855cc,
+    /* body segment 2 */
+    6px 9px 0 #8855cc, 7px 9px 0 #bb88ff, 8px 9px 0 #bb88ff, 9px 9px 0 #8855cc,
+    5px 10px 0 #8855cc, 6px 10px 0 #bb88ff, 7px 10px 0 #ddbbff, 8px 10px 0 #ddbbff, 9px 10px 0 #bb88ff, 10px 10px 0 #8855cc,
+    /* tail fan */
+    4px 11px 0 #bb88ff, 5px 11px 0 #ddbbff, 6px 11px 0 #bb88ff, 7px 11px 0 #8855cc, 8px 11px 0 #8855cc, 9px 11px 0 #bb88ff, 10px 11px 0 #ddbbff, 11px 11px 0 #bb88ff,
+    3px 12px 0 #8855cc, 4px 12px 0 #bb88ff, 5px 12px 0 #8855cc, 10px 12px 0 #8855cc, 11px 12px 0 #bb88ff, 12px 12px 0 #8855cc,
+    /* legs (3 pairs) */
+    4px 8px 0 #8855cc, 11px 8px 0 #8855cc,
+    3px 9px 0 #8855cc, 12px 9px 0 #8855cc,
+    4px 10px 0 #8855cc, 11px 10px 0 #8855cc;
+}
+
+/* === WORKSPACE CARGO CRATE === */
+.cargo-crate {
+  position: absolute;
+  z-index: 12;
+  cursor: pointer;
+  transition: filter 0.5s, opacity 0.5s;
+}
+.cargo-crate .crate-pixel {
+  transform: scale(2);
+  transform-origin: top left;
+  box-shadow:
+    /* top */
+    2px 0 0 #8B6914, 3px 0 0 #A0792B, 4px 0 0 #A0792B, 5px 0 0 #A0792B, 6px 0 0 #A0792B, 7px 0 0 #A0792B, 8px 0 0 #A0792B, 9px 0 0 #8B6914,
+    /* body */
+    1px 1px 0 #8B6914, 2px 1px 0 #C4943E, 3px 1px 0 #D4A44E, 4px 1px 0 #D4A44E, 5px 1px 0 #8B6914, 6px 1px 0 #D4A44E, 7px 1px 0 #D4A44E, 8px 1px 0 #C4943E, 9px 1px 0 #8B6914, 10px 1px 0 #8B6914,
+    1px 2px 0 #8B6914, 2px 2px 0 #D4A44E, 3px 2px 0 #E4B45E, 4px 2px 0 #E4B45E, 5px 2px 0 #8B6914, 6px 2px 0 #E4B45E, 7px 2px 0 #E4B45E, 8px 2px 0 #D4A44E, 9px 2px 0 #8B6914, 10px 2px 0 #8B6914,
+    1px 3px 0 #6B4914, 2px 3px 0 #8B6914, 3px 3px 0 #8B6914, 4px 3px 0 #8B6914, 5px 3px 0 #6B4914, 6px 3px 0 #8B6914, 7px 3px 0 #8B6914, 8px 3px 0 #8B6914, 9px 3px 0 #6B4914, 10px 3px 0 #6B4914,
+    1px 4px 0 #8B6914, 2px 4px 0 #C4943E, 3px 4px 0 #D4A44E, 4px 4px 0 #D4A44E, 5px 4px 0 #8B6914, 6px 4px 0 #D4A44E, 7px 4px 0 #D4A44E, 8px 4px 0 #C4943E, 9px 4px 0 #8B6914, 10px 4px 0 #8B6914,
+    1px 5px 0 #8B6914, 2px 5px 0 #D4A44E, 3px 5px 0 #E4B45E, 4px 5px 0 #E4B45E, 5px 5px 0 #8B6914, 6px 5px 0 #E4B45E, 7px 5px 0 #E4B45E, 8px 5px 0 #D4A44E, 9px 5px 0 #8B6914, 10px 5px 0 #8B6914,
+    /* bottom */
+    2px 6px 0 #6B4914, 3px 6px 0 #8B6914, 4px 6px 0 #8B6914, 5px 6px 0 #6B4914, 6px 6px 0 #8B6914, 7px 6px 0 #8B6914, 8px 6px 0 #6B4914, 9px 6px 0 #6B4914;
+}
+.cargo-crate .crate-label {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 7px;
+  color: #8B6914;
+  text-align: center;
+  margin-top: 16px;
+  text-shadow: 1px 1px 0 #0a1a2e;
+  white-space: nowrap;
+}
+.cargo-crate.ws-active {
+  filter: drop-shadow(0 0 6px rgba(0,212,255,0.4));
+  animation: bob-slow 3s ease-in-out infinite;
+}
+.cargo-crate.ws-standby { opacity: 0.7; }
+.cargo-crate.ws-hold { opacity: 0.4; }
+.cargo-crate.ws-old { opacity: 0.4; filter: sepia(0.3) brightness(0.8); }
+
+/* Crate popup */
+.crate-popup {
+  position: absolute;
+  background: rgba(5,15,35,0.92);
+  border: 2px solid rgba(0,212,255,0.4);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 7px;
+  color: #88bbcc;
+  z-index: 200;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s;
+  min-width: 140px;
+  line-height: 2;
+}
+.crate-popup.visible { opacity: 1; }
+.crate-popup .popup-title { color: var(--cyan); font-size: 9px; margin-bottom: 4px; }
+.crate-popup .popup-dept { color: var(--pink); }
+.crate-popup .popup-date { color: #557788; }
+.crate-popup .popup-status { color: var(--green); }
+
+/* === ENTRANCE ANIMATION === */
+@keyframes entrance-bounce {
+  0% { transform: translateY(8px) scale(0.9); opacity: 0.3; }
+  50% { transform: translateY(-10px) scale(1.05); }
+  70% { transform: translateY(2px) scale(0.98); }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+.pool-agent.entrance-anim > div:nth-child(2) {
+  animation: entrance-bounce 0.6s ease-out forwards !important;
+}
+
+/* === AGENT SPEECH BUBBLE === */
+.agent-speech {
+  position: absolute;
+  top: -35px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0,20,40,0.85);
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-size: 7px;
+  font-family: 'Press Start 2P', monospace;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  z-index: 50;
+}
+.agent-speech::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0; height: 0;
+  border-left: 3px solid transparent;
+  border-right: 3px solid transparent;
+  border-top: 4px solid rgba(0,20,40,0.85);
+}
+.agent-speech.visible {
+  opacity: 1;
+}
+#pool-researcher .agent-speech { border: 1px solid var(--cyan); color: var(--cyan); }
+#pool-developer .agent-speech  { border: 1px solid var(--orange); color: var(--orange); }
+#pool-reviewer .agent-speech   { border: 1px solid var(--green); color: var(--green); }
+#pool-tester .agent-speech     { border: 1px solid var(--yellow); color: var(--yellow); }
+#pool-writer .agent-speech     { border: 1px solid var(--lavender); color: var(--lavender); }
+
+/* === COMMANDER POPUP === */
+@keyframes commander-pop {
+  0% { transform: translateX(-50%) scale(0) rotate(-3deg); }
+  50% { transform: translateX(-50%) scale(1.15) rotate(1deg); }
+  70% { transform: translateX(-50%) scale(0.95) rotate(-1deg); }
+  100% { transform: translateX(-50%) scale(1) rotate(0deg); }
+}
+@keyframes commander-shake {
+  0%, 100% { transform: translateX(-50%) scale(1) rotate(0deg); }
+  15% { transform: translateX(-50%) scale(1) rotate(-2deg) translateY(-2px); }
+  30% { transform: translateX(-50%) scale(1) rotate(2deg) translateY(1px); }
+  45% { transform: translateX(-50%) scale(1) rotate(-1deg) translateY(-1px); }
+  60% { transform: translateX(-50%) scale(1) rotate(1deg); }
+}
+#commander-popup.show {
+  opacity: 1 !important;
+  animation: commander-pop 0.4s ease-out, commander-shake 0.6s ease-in-out 0.4s;
+}
+
+/* === FLINCH (spacebar reaction) === */
+@keyframes flinch {
+  0% { transform: translateY(0); }
+  20% { transform: translateY(-8px); }
+  50% { transform: translateY(3px); }
+  70% { transform: translateY(-2px); }
+  100% { transform: translateY(0); }
+}
+.pool-agent.flinch > div:nth-child(2) {
+  animation: flinch 0.35s ease-out !important;
+}
+</style>
+</head>
+<body>
+<div class="viewport">
+  <!-- Ocean Background -->
+  <div class="ocean-bg"></div>
+
+  <!-- Bubbles outside dome -->
+  <div id="bubbles-container"></div>
+
+  <!-- Fish silhouettes -->
+  <div id="fish-container"></div>
+
+  <!-- Glass Dome -->
+  <div class="glass-dome" id="dome">
+    <div class="floor"></div>
+
+    <!-- SVG Connection Lines (PM → desks) -->
+    <svg class="conn-svg" viewBox="0 0 1040 720">
+      <defs>
+        <filter id="glow"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      </defs>
+      <path id="line-thread"    class="conn-line" d="M520,580 C350,400 150,250 90,140" />
+      <path id="line-news"      class="conn-line" d="M520,580 C450,400 350,250 300,140" />
+      <path id="line-shorts"    class="conn-line" d="M520,580 C520,400 510,250 510,140" />
+      <path id="line-trading"   class="conn-line" d="M520,580 C350,520 230,460 170,400" />
+      <path id="line-marketing" class="conn-line" d="M520,580 C550,520 540,460 525,400" />
+    </svg>
+
+    <!-- ============================== -->
+    <!--  콘텐츠팀 (active, top)         -->
+    <!-- ============================== -->
+    <div class="dept-zone" id="dept-content"
+         style="left:10px; top:15px; width:660px; height:260px;
+                background: rgba(0,212,255,0.06);
+                border: 1px dashed rgba(0,212,255,0.3);">
+      <div class="dept-label" style="color: var(--cyan);">콘텐츠팀 <span class="dept-eye">👀</span></div>
+      <div class="dept-sublabel" style="color: rgba(0,212,255,0.5);">스레드 · 뉴스 · 쇼츠</div>
+
+      <!-- 스레드담당 데스크 -->
+      <div class="desk-station" id="desk-thread" style="left:20px; top:45px;">
+        <div class="desk-assignment-label" style="left:10px; top:0; color: var(--cyan);">스레드담당</div>
+        <div class="context-icon" style="left:100px; top:5px;"></div>
+        <div class="desk" style="left:0; top:85px;"><div class="desk-surface"></div></div>
+        <div class="monitor" style="left:8px; top:68px;">
+          <div class="monitor-frame"><div class="monitor-screen" id="screen-thread">
+            <div class="screen-line" style="background:#00d4ff;"></div>
+            <div class="screen-line" style="background:#ffffff; width:60%; animation-delay:0.5s;"></div>
+            <div class="screen-line" style="background:#00d4ff; animation-delay:1s;"></div>
+          </div></div><div class="monitor-stand"></div>
+        </div>
+        <div class="monitor" style="left:52px; top:72px;">
+          <div class="monitor-frame" style="width:30px; height:24px;"><div class="monitor-screen">
+            <div class="screen-line" style="background:#66ddff; height:1px;"></div>
+            <div class="screen-line" style="background:#44bbdd; height:1px; animation-delay:0.3s;"></div>
+          </div></div><div class="monitor-stand" style="width:10px;"></div>
+        </div>
+        <div class="mug" style="left:96px; top:92px;"><div class="mug-steam"></div></div>
+        <div class="agent-slot" id="slot-thread" style="left:28px; top:16px;"></div>
+        <div class="hp-bar-wrap" id="hp-wrap-thread" style="left:16px; top:58px; display:none;"><div class="hp-bar" id="hp-desk-thread"></div></div>
+      </div>
+
+      <!-- 뉴스담당 데스크 -->
+      <div class="desk-station" id="desk-news" style="left:230px; top:45px;">
+        <div class="desk-assignment-label" style="left:14px; top:0; color: var(--green);">뉴스담당</div>
+        <div class="context-icon" style="left:100px; top:5px;"></div>
+        <div class="desk" style="left:0; top:85px;"><div class="desk-surface"></div></div>
+        <div class="monitor" style="left:8px; top:68px;">
+          <div class="monitor-frame"><div class="monitor-screen" id="screen-news">
+            <div class="screen-line" style="background:#26de81;"></div>
+            <div class="screen-line" style="background:#00d4ff; animation-delay:0.4s;"></div>
+            <div class="screen-line" style="background:#26de81; width:50%; animation-delay:0.8s;"></div>
+          </div></div><div class="monitor-stand"></div>
+        </div>
+        <div class="monitor" style="left:52px; top:72px;">
+          <div class="monitor-frame" style="width:30px; height:24px;"><div class="monitor-screen">
+            <div class="screen-line" style="background:#44ddaa; height:1px;"></div>
+            <div class="screen-line" style="background:#22bb88; height:1px; animation-delay:0.5s;"></div>
+          </div></div><div class="monitor-stand" style="width:10px;"></div>
+        </div>
+        <div class="book" style="left:90px; top:92px; width:14px; height:10px; background:#c44a3f;"></div>
+        <div class="book" style="left:92px; top:86px; width:12px; height:8px; background:#3f7ac4;"></div>
+        <div class="mug" style="left:48px; top:92px;"><div class="mug-steam"></div></div>
+        <div class="agent-slot" id="slot-news" style="left:28px; top:16px;"></div>
+        <div class="hp-bar-wrap" id="hp-wrap-news" style="left:16px; top:58px; display:none;"><div class="hp-bar" id="hp-desk-news"></div></div>
+      </div>
+
+      <!-- 쇼츠담당 데스크 (dim) -->
+      <div class="desk-station" id="desk-shorts" style="left:440px; top:45px; opacity:0.5;">
+        <div class="desk-assignment-label" style="left:14px; top:0; color: var(--purple);">쇼츠담당</div>
+        <div class="context-icon" style="left:100px; top:5px;"></div>
+        <div class="desk" style="left:0; top:85px;"><div class="desk-surface"></div></div>
+        <div class="monitor" style="left:20px; top:68px;">
+          <div class="monitor-frame" style="width:42px; height:30px;">
+            <div class="monitor-screen" id="screen-shorts" style="background:#0a0a1e;">
+              <div style="position:absolute; left:8px; top:3px; width:12px; height:18px; background:rgba(153,68,204,0.2); border:1px solid rgba(153,68,204,0.3); border-radius:1px;"></div>
+            </div>
+          </div>
+          <div class="monitor-stand" style="width:14px;"></div>
+        </div>
+        <div class="mug" style="left:76px; top:92px;"></div>
+        <div class="agent-slot" id="slot-shorts" style="left:28px; top:16px;"></div>
+        <div class="hp-bar-wrap" id="hp-wrap-shorts" style="left:16px; top:58px; display:none;"><div class="hp-bar" id="hp-desk-shorts"></div></div>
+      </div>
+    </div>
+
+    <!-- ================================ -->
+    <!--  트레이딩팀 (standby, bottom-left) -->
+    <!-- ================================ -->
+    <div class="dept-zone" id="dept-trading"
+         style="left:10px; top:290px; width:330px; height:200px;
+                background: rgba(38,222,129,0.04);
+                border: 1px dashed rgba(38,222,129,0.2);
+                opacity: 0.65;">
+      <div class="dept-label" style="color: var(--green);">트레이딩팀 <span class="dept-eye">👀</span></div>
+      <div class="dept-sublabel" style="color: rgba(38,222,129,0.4);">API 키 대기</div>
+
+      <!-- 자동매매담당 데스크 -->
+      <div class="desk-station" id="desk-trading" style="left:100px; top:40px;">
+        <div class="desk-assignment-label" style="left:2px; top:0; color: var(--green);">자동매매담당</div>
+        <div class="context-icon" style="left:100px; top:5px;"></div>
+        <div class="desk" style="left:0; top:85px;"><div class="desk-surface"></div></div>
+        <div class="monitor" style="left:10px; top:68px;">
+          <div class="monitor-frame" style="width:42px; height:30px;">
+            <div class="monitor-screen" id="screen-trading" style="background:#0a0a1e;">
+              <div class="candle-wrap" id="candle-chart">
+                <div class="candle" style="height:10px; background:#ff4444;"></div>
+                <div class="candle" style="height:14px; background:#44ff66;"></div>
+                <div class="candle" style="height:8px; background:#ff4444;"></div>
+                <div class="candle" style="height:12px; background:#44ff66;"></div>
+                <div class="candle" style="height:6px; background:#ff4444;"></div>
+                <div class="candle" style="height:11px; background:#44ff66;"></div>
+                <div class="candle" style="height:9px; background:#ff4444;"></div>
+              </div>
+            </div>
+          </div>
+          <div class="monitor-stand" style="width:14px;"></div>
+        </div>
+        <div class="book" style="left:6px; top:92px; width:14px; height:8px; background:#8844aa;"></div>
+        <div class="mug" style="left:96px; top:92px;"><div class="mug-steam" style="opacity:0.15; height:5px;"></div></div>
+        <div class="agent-slot" id="slot-trading" style="left:28px; top:16px;"></div>
+        <div class="hp-bar-wrap" id="hp-wrap-trading" style="left:16px; top:58px; display:none;"><div class="hp-bar" id="hp-desk-trading"></div></div>
+      </div>
+    </div>
+
+    <!-- ======================================= -->
+    <!--  핸드폰마케팅팀 (hold, bottom-right)       -->
+    <!-- ======================================= -->
+    <div class="dept-zone" id="dept-phone"
+         style="left:360px; top:290px; width:330px; height:200px;
+                background: rgba(255,211,42,0.03);
+                border: 1px dashed rgba(255,211,42,0.15);
+                opacity: 0.4;">
+      <div class="dept-label" style="color: var(--yellow);">핸드폰마케팅팀 <span class="dept-eye">👀</span></div>
+      <div class="dept-sublabel" style="color: rgba(255,211,42,0.3);">보류</div>
+
+      <!-- 광고배포담당 데스크 -->
+      <div class="desk-station" id="desk-marketing" style="left:100px; top:40px;">
+        <div class="desk-assignment-label" style="left:2px; top:0; color: var(--yellow);">광고배포담당</div>
+        <div class="context-icon" style="left:100px; top:5px;"></div>
+        <div class="desk" style="left:0; top:85px;"><div class="desk-surface"></div></div>
+        <div class="monitor" style="left:20px; top:68px;">
+          <div class="monitor-frame" style="width:38px; height:28px;">
+            <div class="monitor-screen" id="screen-marketing" style="background:#050508;"></div>
+          </div>
+          <div class="monitor-stand" style="width:12px;"></div>
+        </div>
+        <div class="mug" style="left:76px; top:92px;"></div>
+        <div class="agent-slot" id="slot-marketing" style="left:28px; top:16px;"></div>
+        <div class="hp-bar-wrap" id="hp-wrap-marketing" style="left:16px; top:58px; display:none;"><div class="hp-bar" id="hp-desk-marketing"></div></div>
+      </div>
+    </div>
+
+    <!-- ========================= -->
+    <!--  AGENT POOL               -->
+    <!-- ========================= -->
+    <div class="agent-pool" id="agent-pool" style="left:160px; top:640px;">
+      <!-- Researcher (Octopus) -->
+      <div class="pool-agent" id="pool-researcher">
+        <div class="agent-speech" id="speech-researcher"></div>
+        <div style="animation: bob-slow 3s ease-in-out infinite;">
+          <div class="pixel-char octopus-pixel"></div>
+        </div>
+        <div class="pool-agent-label" style="color: var(--cyan);">Explorer</div>
+        <div class="hp-bar-wrap" style="left:2px; top:6px; position:relative;"><div class="hp-bar" id="hp-researcher"></div></div>
+      </div>
+
+      <!-- Developer (Shark) -->
+      <div class="pool-agent" id="pool-developer">
+        <div class="agent-speech" id="speech-developer"></div>
+        <div style="animation: bob-slow 2.5s ease-in-out infinite 0.3s;">
+          <div class="pixel-char shark-pixel"></div>
+        </div>
+        <div class="pool-agent-label" style="color: var(--orange);">Engineer</div>
+        <div class="hp-bar-wrap" style="left:2px; top:6px; position:relative;"><div class="hp-bar" id="hp-developer"></div></div>
+      </div>
+
+      <!-- Reviewer (Turtle) -->
+      <div class="pool-agent" id="pool-reviewer">
+        <div class="agent-speech" id="speech-reviewer"></div>
+        <div style="animation: bob-slow 4s ease-in-out infinite 1s;">
+          <div class="pixel-char turtle-pixel"></div>
+        </div>
+        <div class="pool-agent-label" style="color: var(--green);">Reviewer</div>
+        <div class="hp-bar-wrap" style="left:2px; top:6px; position:relative;"><div class="hp-bar" id="hp-reviewer"></div></div>
+      </div>
+
+      <!-- Tester (Pufferfish) -->
+      <div class="pool-agent" id="pool-tester">
+        <div class="agent-speech" id="speech-tester"></div>
+        <div style="animation: bob-slow 3.5s ease-in-out infinite 0.7s;">
+          <div class="pixel-char puffer-pixel"></div>
+        </div>
+        <div class="pool-agent-label" style="color: var(--yellow);">Tester</div>
+        <div class="hp-bar-wrap" style="left:2px; top:6px; position:relative;"><div class="hp-bar" id="hp-tester"></div></div>
+      </div>
+
+      <!-- Writer (Lobster) -->
+      <div class="pool-agent" id="pool-writer">
+        <div class="agent-speech" id="speech-writer"></div>
+        <div style="animation: bob-slow 5s ease-in-out infinite 0.5s;">
+          <div class="pixel-char lobster-pixel"></div>
+        </div>
+        <div class="pool-agent-label" style="color: var(--lavender);">Writer</div>
+        <div class="hp-bar-wrap" style="left:2px; top:6px; position:relative;"><div class="hp-bar" id="hp-writer"></div></div>
+      </div>
+    </div>
+
+    <!-- ========================= -->
+    <!--  WORKSPACE CARGO CRATES   -->
+    <!-- ========================= -->
+    <div id="workspace-crates"></div>
+    <div id="crate-popup" class="crate-popup"></div>
+
+    <!-- ========================= -->
+    <!--  PM — heysquid (fixed)    -->
+    <!-- ========================= -->
+    <div class="pm-area" id="pm-area" style="left:460px; top:570px;">
+      <div class="pm-speech-bubble" id="pm-speech"></div>
+      <div class="char-wrapper" style="position:relative !important; animation: bob 2.5s ease-in-out infinite;">
+        <div style="animation: crown-shine 3s ease-in-out infinite; display:inline-block;">
+          <div class="pixel-char squid-pixel-lg"></div>
+        </div>
+      </div>
+      <div class="pm-label">PM — heysquid</div>
+    </div>
+
+    <!-- ============= -->
+    <!--  WATER COOLER  -->
+    <!-- ============= -->
+    <div class="water-cooler" style="left:730px; top:510px;">
+      <div style="position:relative; width:28px;">
+        <!-- Water jug (top) -->
+        <div style="width:16px; height:10px; background:rgba(100,180,255,0.35); border:2px solid rgba(100,180,255,0.5); border-radius:6px 6px 2px 2px; margin:0 auto; position:relative;">
+          <div style="position:absolute; top:2px; left:4px; width:4px; height:4px; background:rgba(150,220,255,0.4); border-radius:50%;"></div>
+        </div>
+        <!-- Dispenser body -->
+        <div style="width:20px; height:20px; background:rgba(60,80,110,0.6); border:2px solid rgba(80,120,160,0.5); border-radius:2px; margin:0 auto; position:relative;">
+          <div style="position:absolute; top:4px; left:50%; transform:translateX(-50%); width:6px; height:6px; background:rgba(100,180,255,0.3); border-radius:50%;"></div>
+          <!-- Tap -->
+          <div style="position:absolute; bottom:3px; left:50%; transform:translateX(-50%); width:4px; height:3px; background:#5599bb; border-radius:1px;"></div>
+        </div>
+        <!-- Base/stand -->
+        <div style="width:24px; height:4px; background:rgba(60,80,100,0.5); border-radius:1px; margin:0 auto;"></div>
+      </div>
+      <div style="font-size:7px; color:#3a6a8a; text-align:center; margin-top:2px;">Cooler</div>
+    </div>
+
+    <!-- ============ -->
+    <!--  PLANTS x2   -->
+    <!-- ============ -->
+    <div class="plant" style="left:960px; top:520px;">
+      <div style="position:relative;">
+        <div style="width:4px; height:16px; background:#44aa66; border-radius:2px; position:absolute; bottom:4px; left:5px; transform:rotate(-10deg); animation: bob-slow 3s ease-in-out infinite;"></div>
+        <div style="width:4px; height:20px; background:#55bb77; border-radius:2px; position:absolute; bottom:4px; left:11px; animation: bob-slow 3.5s ease-in-out infinite 0.5s;"></div>
+        <div style="width:4px; height:14px; background:#44aa66; border-radius:2px; position:absolute; bottom:4px; left:17px; transform:rotate(10deg); animation: bob-slow 2.8s ease-in-out infinite 1s;"></div>
+        <div style="width:26px; height:14px; background:#8B5E3C; border-radius:2px 2px 4px 4px;"></div>
+        <div style="width:30px; height:3px; background:#9B6E4C; border-radius:1px; position:relative; top:-14px; left:-2px;"></div>
+      </div>
+    </div>
+    <div class="plant" style="left:15px; top:560px;">
+      <div style="position:relative;">
+        <div style="width:3px; height:12px; background:#66cc88; border-radius:2px; position:absolute; bottom:4px; left:4px; transform:rotate(-15deg); animation: bob-slow 2.5s ease-in-out infinite 0.3s;"></div>
+        <div style="width:3px; height:16px; background:#55bb77; border-radius:2px; position:absolute; bottom:4px; left:9px; animation: bob-slow 3s ease-in-out infinite;"></div>
+        <div style="width:3px; height:10px; background:#66cc88; border-radius:2px; position:absolute; bottom:4px; left:14px; transform:rotate(12deg); animation: bob-slow 3.2s ease-in-out infinite 0.7s;"></div>
+        <div style="width:22px; height:12px; background:#7B4E2C; border-radius:2px 2px 4px 4px;"></div>
+        <div style="width:26px; height:3px; background:#8B5E3C; border-radius:1px; position:relative; top:-12px; left:-2px;"></div>
+      </div>
+    </div>
+
+    <!-- ======================== -->
+    <!--  MOVING DIVER (보스)     -->
+    <!-- ======================== -->
+    <div id="moving-diver" style="left:600px; top:580px;">
+      <div class="diver-speech-bubble" id="diver-speech"></div>
+      <div class="pixel-char diver-pixel"></div>
+      <div class="mini-label">↑↓←→ Patrol</div>
+    </div>
+
+  </div><!-- end glass-dome -->
+
+  <!-- ========================= -->
+  <!--  EXTERNAL AI POOL (ocean) -->
+  <!-- ========================= -->
+  <div class="external-ai-pool">
+    <!-- GPT Whale (왼쪽 상단 바다) -->
+    <div class="external-agent" id="ext-gpt" style="left:5px; top:130px; color:#4488ff;">
+      <div style="animation: sway-ocean 5s ease-in-out infinite;">
+        <div class="pixel-char whale-pixel"></div>
+      </div>
+      <div class="external-agent-label" style="color:#4488ff;">GPT</div>
+    </div>
+
+    <!-- Grok Eel (왼쪽 하단 바다) -->
+    <div class="external-agent" id="ext-grok" style="left:8px; top:480px; color:#ffdd44;">
+      <div style="animation: sway-ocean 4s ease-in-out infinite 0.5s;">
+        <div class="pixel-char eel-pixel"></div>
+      </div>
+      <div class="external-agent-label" style="color:#ffdd44;">Grok</div>
+    </div>
+
+    <!-- Gemini Jellyfish (오른쪽 상단 바다) -->
+    <div class="external-agent right-side" id="ext-gemini" style="left:1140px; top:100px; color:#cc66ff;">
+      <div style="animation: sway-jelly 6s ease-in-out infinite;">
+        <div class="pixel-char jellyfish-pixel"></div>
+      </div>
+      <div class="external-agent-label" style="color:#cc66ff;">Gemini</div>
+    </div>
+
+    <!-- Perplexity Stingray (오른쪽 중간 바다) -->
+    <div class="external-agent right-side" id="ext-perplexity" style="left:1140px; top:360px; color:#ff7744;">
+      <div style="animation: sway-ocean 5.5s ease-in-out infinite 0.3s;">
+        <div class="pixel-char stingray-pixel"></div>
+      </div>
+      <div class="external-agent-label" style="color:#ff7744;">Perplexity</div>
+    </div>
+
+    <!-- Whisper Dolphin (오른쪽 하단 바다) -->
+    <div class="external-agent right-side" id="ext-whisper" style="left:1140px; top:580px; color:#66ddee;">
+      <div style="animation: sway-ocean 4.5s ease-in-out infinite 1s;">
+        <div class="pixel-char dolphin-pixel"></div>
+      </div>
+      <div class="external-agent-label" style="color:#66ddee;">Whisper</div>
+    </div>
+  </div>
+
+  <!-- Title Bar -->
+  <div class="title-bar">
+    <h1>heysquid HQ</h1>
+    <div class="subtitle">DEEP SEA AGENT COMMAND CENTER</div>
+  </div>
+
+  <!-- Mission Log -->
+  <div class="mission-log">
+    <div class="log-entries" id="logEntries">
+      <div class="log-entry"><span class="time">[--:--]</span> System standby...</div>
+    </div>
+  </div>
+
+  <!-- Status Bar -->
+  <div class="status-bar">
+    <div class="status-left">
+      <span class="conn-dot-status" id="connDot"></span>
+      <span id="connLabel">Connecting...</span>
+    </div>
+    <div class="status-center" id="currentTask">Standby</div>
+    <div class="status-right">
+      <span id="lastUpdated">--:--:--</span>
+    </div>
+  </div>
+
+  <!-- DEMO Button -->
+  <button class="btn-demo" id="btnDemo" onclick="runDemo()">DEMO</button>
+
+  <!-- Keyboard hint -->
+  <div class="keyboard-hint">↑↓←→ Patrol &nbsp; SPACE: Commander's words</div>
+
+  <!-- Commander popup (replaced by diver speech bubble) -->
+  <div id="commander-popup" style="display:none;"></div>
+
+</div><!-- end viewport -->
+
+<script>
+// ===== CONSTANTS =====
+var AGENTS = ['researcher', 'developer', 'reviewer', 'tester', 'writer'];
+var DESKS = ['thread', 'news', 'shorts', 'trading', 'marketing'];
+var EXTERNAL_AIS = ['gpt', 'gemini', 'grok', 'whisper', 'perplexity'];
+var AGENT_PIXEL_CLASS = {
+  researcher: 'octopus-pixel',
+  developer: 'shark-pixel',
+  reviewer: 'turtle-pixel',
+  tester: 'puffer-pixel',
+  writer: 'lobster-pixel'
+};
+var REGISTRY = {};  // populated from agent_status.json _registry
+var POLL_INTERVAL = 3000;
+var fetchFailCount = 0;
+var mode = 'connecting';
+var prevLogLength = 0;
+var demoRunning = false;
+
+var DEPARTMENTS = [
+  { id: 'dept-content', left: 10, top: 15, width: 660, height: 260 },
+  { id: 'dept-trading', left: 10, top: 290, width: 330, height: 200 },
+  { id: 'dept-phone', left: 360, top: 290, width: 330, height: 200 }
+];
+
+// ===== BUBBLES =====
+(function() {
+  var container = document.getElementById('bubbles-container');
+  function createBubble() {
+    var b = document.createElement('div');
+    b.className = 'bubble';
+    var sz = 4 + Math.random() * 14;
+    b.style.width = sz + 'px';
+    b.style.height = sz + 'px';
+    b.style.left = Math.random() * 1200 + 'px';
+    b.style.top = (500 + Math.random() * 400) + 'px';
+    b.style.animationDuration = (6 + Math.random() * 8) + 's';
+    b.style.animationDelay = (Math.random() * 2) + 's';
+    container.appendChild(b);
+    setTimeout(function() { b.remove(); }, 16000);
+  }
+  for (var i = 0; i < 15; i++) setTimeout(createBubble, i * 300);
+  setInterval(createBubble, 1500);
+})();
+
+// ===== FISH SILHOUETTES =====
+(function() {
+  var container = document.getElementById('fish-container');
+  function createFish() {
+    var f = document.createElement('div');
+    f.className = 'fish-sil';
+    var y = 80 + Math.random() * 700;
+    var sz = 16 + Math.random() * 30;
+    var goR = Math.random() > 0.5;
+    var startX = goR ? -60 : 1260;
+    var endX = goR ? 1260 : -60;
+    var dur = 12 + Math.random() * 18;
+    f.style.top = y + 'px';
+    f.style.left = startX + 'px';
+    f.style.opacity = 0.06 + Math.random() * 0.08;
+    f.style.transition = 'left ' + dur + 's linear';
+    f.innerHTML = '<div style="position:relative;transform:scaleX(' + (goR ? 1 : -1) + ');">' +
+      '<div style="width:' + sz + 'px;height:' + (sz * 0.5) + 'px;background:#4488aa;border-radius:' + (sz * 0.4) + 'px ' + (sz * 0.3) + 'px ' + (sz * 0.3) + 'px ' + (sz * 0.4) + 'px;"></div>' +
+      '<div style="position:absolute;right:-' + (sz * 0.25) + 'px;top:' + (sz * 0.05) + 'px;width:0;height:0;border-top:' + (sz * 0.2) + 'px solid transparent;border-bottom:' + (sz * 0.2) + 'px solid transparent;border-left:' + (sz * 0.3) + 'px solid #4488aa;"></div></div>';
+    container.appendChild(f);
+    requestAnimationFrame(function() { f.style.left = endX + 'px'; });
+    setTimeout(function() { f.remove(); }, dur * 1000 + 500);
+  }
+  for (var i = 0; i < 4; i++) setTimeout(createFish, i * 2000);
+  setInterval(createFish, 5000 + Math.random() * 4000);
+})();
+
+// ===== CANDLESTICK CHART ANIMATION =====
+setInterval(function() {
+  var chart = document.getElementById('candle-chart');
+  if (!chart) return;
+  var candles = chart.children;
+  for (var i = 0; i < candles.length; i++) {
+    var h = 4 + Math.floor(Math.random() * 13);
+    candles[i].style.height = h + 'px';
+    candles[i].style.background = Math.random() > 0.5 ? '#44ff66' : '#ff4444';
+  }
+}, 4000);
+
+// ===== SCREEN FLICKER =====
+setInterval(function() {
+  var screens = document.querySelectorAll('.monitor-screen');
+  var idx = Math.floor(Math.random() * screens.length);
+  var s = screens[idx];
+  if (s) {
+    s.style.transition = 'opacity 0.05s';
+    s.style.opacity = '0.5';
+    setTimeout(function() { s.style.opacity = '1'; }, 100);
+  }
+}, 7000);
+
+// ===== MARKETING SCREEN FLICKER (every ~30s) =====
+setInterval(function() {
+  var screen = document.getElementById('screen-marketing');
+  if (!screen) return;
+  screen.style.background = '#0a1a0a';
+  screen.innerHTML = '<div class="screen-line" style="background:#553322;height:1px;margin-top:4px;"></div>';
+  setTimeout(function() {
+    screen.style.background = '#050508';
+    screen.innerHTML = '';
+  }, 300);
+}, 30000);
+
+// ===== ARROW KEY DIVER MOVEMENT =====
+(function() {
+  var diver = document.getElementById('moving-diver');
+  var posX = 600, posY = 580;
+  var keys = {};
+  var speed = 4;
+  var BOUNDS = { left: 15, top: 15, right: 990, bottom: 690 };
+  var currentHighlight = null;
+  var currentDeskHighlight = null;
+
+  document.addEventListener('keydown', function(e) {
+    if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].indexOf(e.key) !== -1) {
+      e.preventDefault();
+      keys[e.key] = true;
+    }
+  });
+  document.addEventListener('keyup', function(e) { keys[e.key] = false; });
+
+  function checkDeptCollision(cx, cy) {
+    for (var i = 0; i < DEPARTMENTS.length; i++) {
+      var d = DEPARTMENTS[i];
+      if (cx >= d.left && cx <= d.left + d.width && cy >= d.top && cy <= d.top + d.height) {
+        return d.id;
+      }
+    }
+    return null;
+  }
+
+  // Desk bounds (relative to dome)
+  var DESK_BOUNDS = [
+    { id: 'desk-thread', left: 30, top: 60, width: 120, height: 140 },
+    { id: 'desk-news', left: 240, top: 60, width: 120, height: 140 },
+    { id: 'desk-shorts', left: 450, top: 60, width: 120, height: 140 },
+    { id: 'desk-trading', left: 110, top: 330, width: 120, height: 140 },
+    { id: 'desk-marketing', left: 460, top: 330, width: 120, height: 140 }
+  ];
+
+  function checkDeskProximity(cx, cy) {
+    for (var i = 0; i < DESK_BOUNDS.length; i++) {
+      var d = DESK_BOUNDS[i];
+      if (cx >= d.left - 20 && cx <= d.left + d.width + 20 && cy >= d.top - 20 && cy <= d.top + d.height + 20) {
+        return d.id;
+      }
+    }
+    return null;
+  }
+
+  function gameLoop() {
+    var moved = false;
+    if (keys['ArrowUp'])    { posY -= speed; moved = true; }
+    if (keys['ArrowDown'])  { posY += speed; moved = true; }
+    if (keys['ArrowLeft'])  { posX -= speed; moved = true; }
+    if (keys['ArrowRight']) { posX += speed; moved = true; }
+
+    posX = Math.max(BOUNDS.left, Math.min(BOUNDS.right, posX));
+    posY = Math.max(BOUNDS.top, Math.min(BOUNDS.bottom, posY));
+
+    if (moved) {
+      diver.style.left = posX + 'px';
+      diver.style.top = posY + 'px';
+    }
+
+    // Department highlight
+    var centerX = posX + 24;
+    var centerY = posY + 24;
+    var hit = checkDeptCollision(centerX, centerY);
+
+    if (hit !== currentHighlight) {
+      if (currentHighlight) document.getElementById(currentHighlight).classList.remove('highlighted');
+      if (hit) document.getElementById(hit).classList.add('highlighted');
+      currentHighlight = hit;
+    }
+
+    // Desk proximity highlight
+    var deskHit = checkDeskProximity(centerX, centerY);
+    if (deskHit !== currentDeskHighlight) {
+      if (currentDeskHighlight) document.getElementById(currentDeskHighlight).classList.remove('desk-highlight');
+      if (deskHit) document.getElementById(deskHit).classList.add('desk-highlight');
+      currentDeskHighlight = deskHit;
+    }
+
+    requestAnimationFrame(gameLoop);
+  }
+  requestAnimationFrame(gameLoop);
+})();
+
+// ===== TIME HELPER =====
+function getTime() {
+  var d = new Date();
+  return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') + ':' + String(d.getSeconds()).padStart(2, '0');
+}
+
+// ===== CONNECTION STATUS =====
+function setConnectionStatus(newMode) {
+  mode = newMode;
+  var dot = document.getElementById('connDot');
+  var label = document.getElementById('connLabel');
+  var btn = document.getElementById('btnDemo');
+  dot.className = 'conn-dot-status';
+  if (newMode === 'live') {
+    dot.classList.add('live');
+    label.textContent = 'LIVE';
+    label.style.color = '#26de81';
+    btn.style.display = 'none';
+  } else if (newMode === 'demo') {
+    dot.classList.add('demo');
+    label.textContent = 'DEMO';
+    label.style.color = '#ffd32a';
+    btn.style.display = 'inline-block';
+  } else {
+    label.textContent = 'Connecting...';
+    label.style.color = '#5599aa';
+    btn.style.display = 'none';
+  }
+}
+
+// ===== SVG LINE ACTIVATION =====
+function setLineActive(desk, active) {
+  var line = document.getElementById('line-' + desk);
+  if (line) {
+    if (active) line.classList.add('active');
+    else line.classList.remove('active');
+  }
+}
+
+// ===== HP BAR COLOR =====
+function hpColor(value) {
+  if (value >= 60) return '#26de81';
+  if (value >= 30) return '#ffd32a';
+  return '#ff3c3c';
+}
+
+// ===== DISPATCH AGENT TO DESK =====
+function dispatchAgent(agent, desk) {
+  var poolEl = document.getElementById('pool-' + agent);
+  var slotEl = document.getElementById('slot-' + desk);
+  var deskEl = document.getElementById('desk-' + desk);
+  if (!poolEl || !slotEl || !deskEl) return;
+
+  // Already walking? Skip
+  if (poolEl.classList.contains('walking')) return;
+
+  // Already at this desk? Just ensure desk state is correct
+  if (poolEl.dataset.walkedTo === desk) {
+    // Re-position in case layout shifted
+    deskEl.classList.add('occupied');
+    var rect = slotEl.getBoundingClientRect();
+    poolEl.classList.add('at-desk');
+    poolEl.style.position = 'fixed';
+    poolEl.style.left = rect.left + 'px';
+    poolEl.style.top = rect.top + 'px';
+    poolEl.style.margin = '0';
+    slotEl.dataset.agent = agent;
+    setLineActive(desk, true);
+    return;
+  }
+
+  // Ensure slot is visible for measuring (it's display:none when desk not occupied)
+  deskEl.classList.add('occupied');
+  var startRect = poolEl.getBoundingClientRect();
+  var endRect = slotEl.getBoundingClientRect();
+  var dx = endRect.left - startRect.left;
+  var dy = endRect.top - startRect.top;
+  var destLeft = endRect.left;
+  var destTop = endRect.top;
+  deskEl.classList.remove('occupied');
+
+  // Start swimming
+  poolEl.style.position = 'fixed';
+  poolEl.style.left = startRect.left + 'px';
+  poolEl.style.top = startRect.top + 'px';
+  poolEl.style.margin = '0';
+  poolEl.classList.add('walking');
+
+  // Trigger transition on next frame
+  requestAnimationFrame(function() {
+    requestAnimationFrame(function() {
+      poolEl.style.transform = 'translate(' + dx + 'px, ' + dy + 'px)';
+    });
+  });
+
+  // On arrival — keep pool element visible at desk (no swap)
+  function onArrival(e) {
+    if (e.propertyName !== 'transform') return;
+    poolEl.removeEventListener('transitionend', onArrival);
+    poolEl.classList.remove('walking');
+    poolEl.classList.add('at-desk');
+    poolEl.dataset.walkedTo = desk;
+    // Settle at destination (remove transform, set final position)
+    poolEl.style.left = destLeft + 'px';
+    poolEl.style.top = destTop + 'px';
+    poolEl.style.transform = '';
+
+    // Mark desk as occupied (for monitor glow etc) but no new element in slot
+    slotEl.dataset.agent = agent;
+    deskEl.classList.add('occupied');
+    setLineActive(desk, true);
+  }
+
+  poolEl.addEventListener('transitionend', onArrival);
+  showPmSpeech('dispatching');
+}
+
+// ===== RECALL AGENT FROM DESK =====
+function recallAgent(agent) {
+  var poolEl = document.getElementById('pool-' + agent);
+  if (poolEl) {
+    poolEl.classList.remove('dispatched', 'at-desk', 'walking');
+    poolEl.style.position = '';
+    poolEl.style.left = '';
+    poolEl.style.top = '';
+    poolEl.style.margin = '';
+    poolEl.style.transform = '';
+    delete poolEl.dataset.walkedTo;
+  }
+
+  // Clear from any desk
+  DESKS.forEach(function(desk) {
+    var slotEl = document.getElementById('slot-' + desk);
+    if (slotEl && slotEl.dataset.agent === agent) {
+      slotEl.innerHTML = '';
+      slotEl.dataset.agent = '';
+      document.getElementById('desk-' + desk).classList.remove('occupied');
+      document.getElementById('desk-' + desk).className =
+        document.getElementById('desk-' + desk).className.replace(/\bstatus-\w+/g, '');
+      var hpWrap = document.getElementById('hp-wrap-' + desk);
+      if (hpWrap) hpWrap.style.display = 'none';
+      setLineActive(desk, false);
+    }
+  });
+  showPmSpeech('complete');
+}
+
+// ===== LOAD DASHBOARD DATA =====
+function loadDashboardData(data) {
+  if (!data) return;
+
+  // Clear all desk slots first
+  DESKS.forEach(function(desk) {
+    var slotEl = document.getElementById('slot-' + desk);
+    var deskEl = document.getElementById('desk-' + desk);
+    if (slotEl) {
+      slotEl.innerHTML = '';
+      slotEl.dataset.agent = '';
+    }
+    if (deskEl) {
+      deskEl.classList.remove('occupied');
+      deskEl.className = deskEl.className.replace(/\bstatus-\w+/g, '');
+      var hpWrap = document.getElementById('hp-wrap-' + desk);
+      if (hpWrap) hpWrap.style.display = 'none';
+      setLineActive(desk, false);
+    }
+  });
+
+  // Reset all pool agents
+  AGENTS.forEach(function(agent) {
+    var poolEl = document.getElementById('pool-' + agent);
+    if (!poolEl) return;
+    var info = data[agent];
+    var hasAssignment = info && info.assignment && (info.status === 'working' || info.status === 'complete' || info.status === 'error');
+    if (!hasAssignment) {
+      // Agent returning to pool — clear walk state
+      poolEl.classList.remove('dispatched', 'walking', 'at-desk');
+      poolEl.style.position = '';
+      poolEl.style.left = '';
+      poolEl.style.top = '';
+      poolEl.style.margin = '';
+      poolEl.style.transform = '';
+      delete poolEl.dataset.walkedTo;
+    } else {
+      poolEl.classList.remove('dispatched');
+    }
+  });
+
+  // Process each agent
+  AGENTS.forEach(function(agent) {
+    var info = data[agent];
+    if (!info) return;
+
+    var hpValue = (typeof info.hp === 'number') ? info.hp : 100;
+
+    // Pool HP bar
+    var poolHp = document.getElementById('hp-' + agent);
+    if (poolHp) {
+      poolHp.style.width = hpValue + '%';
+      poolHp.style.background = hpColor(hpValue);
+    }
+
+    // Dispatch if assigned and working
+    var assignment = info.assignment;
+    var status = info.status || 'idle';
+
+    if (assignment && (status === 'working' || status === 'complete' || status === 'error')) {
+      dispatchAgent(agent, assignment);
+
+      // Set desk status class
+      var deskEl = document.getElementById('desk-' + assignment);
+      if (deskEl && status !== 'idle') {
+        deskEl.classList.add('status-' + status);
+      }
+
+      // Desk HP bar
+      var deskHp = document.getElementById('hp-desk-' + assignment);
+      if (deskHp) {
+        deskHp.style.width = hpValue + '%';
+        deskHp.style.background = hpColor(hpValue);
+      }
+    }
+  });
+
+  // Mission log
+  if (data.mission_log && Array.isArray(data.mission_log)) {
+    var entries = document.getElementById('logEntries');
+    var newLen = data.mission_log.length;
+    if (newLen !== prevLogLength) {
+      entries.innerHTML = '';
+      var start = Math.max(0, data.mission_log.length - 20);
+      for (var i = start; i < data.mission_log.length; i++) {
+        var e = data.mission_log[i];
+        var div = document.createElement('div');
+        div.className = 'log-entry';
+        var ac = e.agent || '';
+        div.innerHTML = '<span class="time">[' + (e.time || '--:--') + ']</span> <span class="agent ' + ac + '">' + (e.agent || 'system') + '</span> ' + (e.message || '');
+        entries.appendChild(div);
+      }
+      prevLogLength = newLen;
+      // Auto-scroll to bottom
+      var logBox = document.querySelector('.mission-log');
+      if (logBox) logBox.scrollTop = logBox.scrollHeight;
+    }
+  }
+
+  // Mirror mission_log to agent speech bubbles (PM + pool agents)
+  if (data.mission_log && Array.isArray(data.mission_log)) {
+    var agentSpeechMap = {
+      'pm': 'pm-speech',
+      'researcher': 'speech-researcher',
+      'developer': 'speech-developer',
+      'reviewer': 'speech-reviewer',
+      'tester': 'speech-tester',
+      'writer': 'speech-writer'
+    };
+    // Find last message per agent
+    var lastMsgs = {};
+    for (var li = 0; li < data.mission_log.length; li++) {
+      var entry = data.mission_log[li];
+      if (agentSpeechMap[entry.agent]) {
+        lastMsgs[entry.agent] = entry.message;
+      }
+    }
+    // Show speech bubbles
+    Object.keys(lastMsgs).forEach(function(agent) {
+      var msg = lastMsgs[agent];
+      if (!msg || msg.trim() === '') return;
+      var elId = agentSpeechMap[agent];
+      var el = document.getElementById(elId);
+      if (el && el._lastLogMsg !== msg) {
+        el._lastLogMsg = msg;
+        el.textContent = msg.length > 25 ? msg.slice(0, 25) + '...' : msg;
+        el.classList.add('visible');
+        clearTimeout(el._hideTimer);
+        el._hideTimer = setTimeout(function() { el.classList.remove('visible'); }, 5000);
+      }
+    });
+  }
+
+  // Current task
+  var taskEl = document.getElementById('currentTask');
+  if (data.current_task) {
+    taskEl.textContent = data.current_task;
+    taskEl.style.color = '#77eeff';
+  } else {
+    taskEl.textContent = 'Standby';
+    taskEl.style.color = '#5599aa';
+  }
+
+  // Last updated
+  var lu = document.getElementById('lastUpdated');
+  if (data.last_updated) lu.textContent = data.last_updated;
+  else lu.textContent = getTime();
+
+  // Update registry from data
+  if (data._registry) {
+    REGISTRY = data._registry;
+    var newAgents = Object.keys(REGISTRY).filter(function(k) { return k !== 'pm'; });
+    if (newAgents.length > 0) AGENTS = newAgents;
+  }
+
+  // Workspace cargo crates
+  if (data.workspaces) {
+    renderWorkspaceCrates(data.workspaces);
+  }
+
+  // External AI agents
+  if (data.external_ai) {
+    EXTERNAL_AIS.forEach(function(ai) {
+      var el = document.getElementById('ext-' + ai);
+      if (!el) return;
+      var info = data.external_ai[ai];
+      el.classList.remove('called', 'working', 'complete');
+      if (info && info.status && info.status !== 'idle') {
+        el.classList.add(info.status);
+        if (info.status === 'called') {
+          var isLeft = ['gpt', 'grok'].indexOf(ai) !== -1;
+          el.style.animation = isLeft ? 'swim-to-dome-left 1s forwards' : 'swim-to-dome-right 1s forwards';
+        }
+        var animWrap = el.querySelector('div > div:first-child');
+        if (animWrap && info.status === 'working') {
+          var orig = animWrap.style.animation;
+          if (orig.indexOf('jelly') !== -1 || orig.indexOf('sway-jelly') !== -1) animWrap.style.animation = 'sway-jelly-fast 2s ease-in-out infinite';
+          else animWrap.style.animation = 'sway-ocean-fast 2s ease-in-out infinite';
+        }
+      } else {
+        el.style.animation = '';
+      }
+    });
+  } else {
+    // No external_ai data: reset all
+    EXTERNAL_AIS.forEach(function(ai) {
+      var el = document.getElementById('ext-' + ai);
+      if (el) el.classList.remove('called', 'working', 'complete');
+    });
+  }
+}
+
+// ===== PM SPEECH BUBBLE =====
+var PM_SPEECHES = {
+  idle: [
+    "Don't make me angry...",
+    "Is there no perfect agent?",
+    "I see everything.",
+    "You don't want to see me angry...",
+    "The kraken sleeps... for now."
+  ],
+  dispatching: [
+    "Deploy! Dive dive dive!",
+    "Agent deployed to sector",
+    "Torpedo away!",
+    "Launching mission pod",
+    "You have your orders"
+  ],
+  working: [
+    "Depth charge in progress...",
+    "Smooth sailing at 200m",
+    "Hull integrity holding",
+    "Sonar contact — tracking...",
+    "Almost at target depth"
+  ],
+  calling_external: [
+    "Sending distress signal!",
+    "Allied submarine responding!",
+    "Opening comms channel...",
+    "Requesting deep sea backup!",
+    "Signal sent — awaiting ping"
+  ],
+  complete: [
+    "Surface! Mission accomplished!",
+    "Target neutralized!",
+    "All hands — well done!",
+    "Returning to base",
+    "Ink cloud deployed ✓"
+  ],
+  error: [
+    "Leak detected!",
+    "Pressure breach!",
+    "Mayday mayday!",
+    "Emergency surface!"
+  ],
+  demo: [
+    "Watch this, Captain!",
+    "Demo sequence initiated",
+    "Simulation running..."
+  ]
+};
+
+function showPmSpeech(category) {
+  var el = document.getElementById('pm-speech');
+  if (!el) return;
+  var msgs = PM_SPEECHES[category] || PM_SPEECHES.idle;
+  el.textContent = msgs[Math.floor(Math.random() * msgs.length)];
+  el.classList.add('visible');
+  setTimeout(function() { el.classList.remove('visible'); }, 3000);
+}
+
+// ===== EXTERNAL AI CALL ANIMATION =====
+function callExternalAI(name) {
+  var el = document.getElementById('ext-' + name);
+  if (!el) return;
+  el.classList.add('called');
+  var isLeft = ['gpt', 'grok'].indexOf(name) !== -1;
+  el.style.animation = isLeft ? 'swim-to-dome-left 1s forwards' : 'swim-to-dome-right 1s forwards';
+  showPmSpeech('calling_external');
+}
+
+function returnExternalAI(name) {
+  var el = document.getElementById('ext-' + name);
+  if (!el) return;
+  el.classList.remove('called', 'working', 'complete');
+  el.style.animation = '';
+}
+
+// ===== POLLING =====
+function pollStatus() {
+  fetch('./agent_status.json?t=' + Date.now())
+    .then(function(res) {
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.json();
+    })
+    .then(function(data) {
+      fetchFailCount = 0;
+      if (mode !== 'live') setConnectionStatus('live');
+      loadDashboardData(data);
+    })
+    .catch(function() {
+      fetchFailCount++;
+      if (fetchFailCount >= 1 && mode !== 'demo') {
+        setConnectionStatus('demo');
+      }
+    });
+}
+
+setConnectionStatus('connecting');
+if (location.protocol === 'file:') {
+  setConnectionStatus('demo');
+} else {
+  pollStatus();
+  setInterval(pollStatus, POLL_INTERVAL);
+}
+
+// ===== DEMO MODE =====
+function sleep(ms) { return new Promise(function(r) { setTimeout(r, ms); }); }
+
+async function runDemo() {
+  if (demoRunning) return;
+  demoRunning = true;
+  var btn = document.getElementById('btnDemo');
+  btn.disabled = true;
+  btn.textContent = 'RUNNING...';
+  prevLogLength = 0;
+
+  var extIdle = { gpt:{status:'idle',task:''}, gemini:{status:'idle',task:''}, grok:{status:'idle',task:''}, whisper:{status:'idle',task:''}, perplexity:{status:'idle',task:''} };
+
+  var base = {
+    last_updated: getTime(), current_task: '',
+    researcher: {status:'idle',task:'',hp:100,assignment:null},
+    developer: {status:'idle',task:'',hp:100,assignment:null},
+    reviewer: {status:'idle',task:'',hp:100,assignment:null},
+    tester: {status:'idle',task:'',hp:100,assignment:null},
+    writer: {status:'idle',task:'',hp:100,assignment:null},
+    mission_log: [{time: getTime(), agent: 'system', message: 'Demo sequence initiated'}]
+  };
+  loadDashboardData(base);
+  showPmSpeech('demo');
+  await sleep(1000);
+
+  function snap(overrides, logs) {
+    var d = JSON.parse(JSON.stringify(base));
+    d.last_updated = getTime();
+    Object.keys(overrides).forEach(function(k) {
+      if (d[k] && typeof overrides[k] === 'object') Object.assign(d[k], overrides[k]);
+      else d[k] = overrides[k];
+    });
+    if (logs) d.mission_log = logs;
+    return d;
+  }
+  var logs = [{time: getTime(), agent: 'system', message: 'Demo sequence initiated'}];
+
+  // [1s] Researcher + Developer → simultaneous dispatch (HP drop dramatic)
+  logs.push({time: getTime(), agent: 'pm', message: 'Dual deploy — Explorer + Engineer to Thread sector!'});
+  logs.push({time: getTime(), agent: 'researcher', message: 'Diving to analyze feed structure...'});
+  logs.push({time: getTime(), agent: 'developer', message: 'Spinning up reply engine...'});
+  loadDashboardData(snap({
+    current_task: 'Thread reply automation',
+    researcher: {status:'working', task:'Feed analysis', hp:45, assignment:'thread'},
+    developer: {status:'working', task:'Reply engine', hp:55, assignment:'news'}
+  }, logs));
+  showPmSpeech('dispatching');
+  await sleep(2000);
+
+  // [3s] Researcher HP recovering mid-work
+  logs.push({time: getTime(), agent: 'researcher', message: 'Sonar lock — 3 targets acquired!'});
+  loadDashboardData(snap({
+    current_task: 'Thread reply automation',
+    researcher: {status:'working', task:'Target lock', hp:70, assignment:'thread'},
+    developer: {status:'working', task:'Reply engine', hp:40, assignment:'news'}
+  }, logs));
+  showPmSpeech('working');
+  await sleep(2000);
+
+  // [5s] Researcher complete → returns
+  logs.push({time: getTime(), agent: 'researcher', message: 'Analysis complete! Surfacing with data.'});
+  loadDashboardData(snap({
+    current_task: 'Thread reply automation',
+    researcher: {status:'complete', task:'Done', hp:100, assignment:'thread'},
+    developer: {status:'working', task:'Reply engine', hp:30, assignment:'news'}
+  }, logs));
+  await sleep(1000);
+
+  // Researcher returns to pool
+  loadDashboardData(snap({
+    current_task: 'Thread reply automation',
+    researcher: {status:'idle', task:'', hp:100, assignment:null},
+    developer: {status:'working', task:'Reply engine', hp:45, assignment:'news'}
+  }, logs));
+  await sleep(500);
+
+  // [6s] Reviewer dispatched while Developer still working
+  logs.push({time: getTime(), agent: 'pm', message: 'Launching Reviewer — preemptive quality check'});
+  logs.push({time: getTime(), agent: 'reviewer', message: '🐢📋 Intercepting code stream for review...'});
+  loadDashboardData(snap({
+    current_task: 'Thread reply automation',
+    researcher: {status:'idle', task:'', hp:100, assignment:null},
+    developer: {status:'working', task:'Reply engine', hp:60, assignment:'news'},
+    reviewer: {status:'working', task:'Live code review', hp:70, assignment:'thread'}
+  }, logs));
+  showPmSpeech('dispatching');
+  await sleep(2000);
+
+  // [8s] Developer complete
+  logs.push({time: getTime(), agent: 'developer', message: 'Reply engine deployed! threads_replier.py updated.'});
+  loadDashboardData(snap({
+    current_task: 'Thread reply automation',
+    developer: {status:'complete', task:'Engine done', hp:100, assignment:'news'},
+    reviewer: {status:'working', task:'Code review', hp:85, assignment:'thread'}
+  }, logs));
+  showPmSpeech('working');
+  await sleep(1000);
+
+  // Developer returns
+  loadDashboardData(snap({
+    current_task: 'Thread reply automation',
+    developer: {status:'idle', task:'', hp:100, assignment:null},
+    reviewer: {status:'working', task:'Code review', hp:90, assignment:'thread'}
+  }, logs));
+  await sleep(500);
+
+  // [9s] Reviewer complete → Tester dispatched
+  logs.push({time: getTime(), agent: 'reviewer', message: '🐢📋 All checks passed — hull integrity confirmed!'});
+  loadDashboardData(snap({
+    current_task: 'Thread reply automation',
+    reviewer: {status:'complete', task:'Reviewed', hp:100, assignment:'thread'}
+  }, logs));
+  await sleep(800);
+
+  // Tester dispatched
+  logs.push({time: getTime(), agent: 'pm', message: 'Tester — run the test suite!'});
+  logs.push({time: getTime(), agent: 'tester', message: '🐡🧪 Running integration tests...'});
+  loadDashboardData(snap({
+    current_task: 'Thread reply automation',
+    reviewer: {status:'idle', task:'', hp:100, assignment:null},
+    tester: {status:'working', task:'Test suite', hp:65, assignment:'news'}
+  }, logs));
+  showPmSpeech('dispatching');
+  await sleep(1500);
+
+  // Tester complete
+  logs.push({time: getTime(), agent: 'tester', message: '🐡🧪 All tests passed!'});
+  loadDashboardData(snap({
+    current_task: 'Thread reply automation',
+    tester: {status:'complete', task:'Tests passed', hp:100, assignment:'news'}
+  }, logs));
+  await sleep(800);
+
+  // Tester returns → Writer dispatched
+  logs.push({time: getTime(), agent: 'pm', message: 'Writer — craft the final torpedo!'});
+  logs.push({time: getTime(), agent: 'writer', message: '🦞✍️ Composing deep sea content...'});
+  loadDashboardData(snap({
+    current_task: 'Thread reply automation',
+    tester: {status:'idle', task:'', hp:100, assignment:null},
+    writer: {status:'working', task:'Content craft', hp:80, assignment:'thread'}
+  }, logs));
+  showPmSpeech('dispatching');
+  await sleep(2000);
+
+  // [11s] Writer complete
+  logs.push({time: getTime(), agent: 'writer', message: 'Content locked and loaded!'});
+  loadDashboardData(snap({
+    current_task: 'Thread reply automation',
+    writer: {status:'complete', task:'Done', hp:100, assignment:'thread'}
+  }, logs));
+  showPmSpeech('complete');
+  await sleep(800);
+
+  // All idle — internal mission done
+  logs.push({time: getTime(), agent: 'pm', message: 'Internal ops complete — opening comms to allied subs!'});
+  loadDashboardData(snap({
+    current_task: '',
+    researcher: {status:'idle',task:'',hp:100,assignment:null},
+    developer: {status:'idle',task:'',hp:100,assignment:null},
+    reviewer: {status:'idle',task:'',hp:100,assignment:null},
+    tester: {status:'idle',task:'',hp:100,assignment:null},
+    writer: {status:'idle',task:'',hp:100,assignment:null}
+  }, logs));
+  await sleep(1000);
+
+  // [12s] External AI: GPT + Gemini simultaneous call
+  logs.push({time: getTime(), agent: 'pm', message: 'Dual signal — GPT + Gemini responding!'});
+  var extDual = JSON.parse(JSON.stringify(extIdle));
+  extDual.gpt = {status:'called', task:'Image generation'};
+  extDual.gemini = {status:'called', task:'Content review'};
+  loadDashboardData(snap({
+    current_task: 'External AI — Dual operation',
+    external_ai: extDual
+  }, logs));
+  callExternalAI('gpt');
+  callExternalAI('gemini');
+  showPmSpeech('calling_external');
+  await sleep(1500);
+
+  // [14s] GPT + Gemini working
+  logs.push({time: getTime(), agent: 'pm', message: 'GPT whale generating — Gemini scanning depths...'});
+  extDual.gpt = {status:'working', task:'Generating image'};
+  extDual.gemini = {status:'working', task:'Reviewing content'};
+  loadDashboardData(snap({
+    current_task: 'External AI — Dual operation',
+    external_ai: extDual
+  }, logs));
+  await sleep(2500);
+
+  // [17s] GPT complete → Grok called
+  logs.push({time: getTime(), agent: 'pm', message: 'GPT image received! Calling Grok for realtime data...'});
+  extDual.gpt = {status:'complete', task:'Done'};
+  extDual.grok = {status:'called', task:'SNS analysis'};
+  loadDashboardData(snap({
+    current_task: 'External AI — Multi operation',
+    external_ai: extDual
+  }, logs));
+  callExternalAI('grok');
+  showPmSpeech('calling_external');
+  await sleep(1000);
+
+  // GPT returns, Grok working
+  returnExternalAI('gpt');
+  extDual.gpt = {status:'idle', task:''};
+  extDual.grok = {status:'working', task:'Realtime SNS scan'};
+  loadDashboardData(snap({
+    current_task: 'External AI — Multi operation',
+    external_ai: extDual
+  }, logs));
+  await sleep(1500);
+
+  // [19s] Gemini complete + Grok still working
+  logs.push({time: getTime(), agent: 'pm', message: 'Gemini review complete! Grok still scanning...'});
+  extDual.gemini = {status:'complete', task:'Done'};
+  loadDashboardData(snap({
+    current_task: 'External AI — Grok finalizing',
+    external_ai: extDual
+  }, logs));
+  await sleep(1000);
+
+  // Gemini returns
+  returnExternalAI('gemini');
+  extDual.gemini = {status:'idle', task:''};
+  loadDashboardData(snap({
+    current_task: 'External AI — Grok finalizing',
+    external_ai: extDual
+  }, logs));
+  await sleep(1500);
+
+  // [21s] Grok complete
+  logs.push({time: getTime(), agent: 'pm', message: 'Grok data received! All submarines accounted for!'});
+  extDual.grok = {status:'complete', task:'Done'};
+  loadDashboardData(snap({
+    current_task: 'External AI — All complete',
+    external_ai: extDual
+  }, logs));
+  showPmSpeech('complete');
+  await sleep(1000);
+
+  // All external AIs idle
+  returnExternalAI('grok');
+  logs.push({time: getTime(), agent: 'system', message: 'Mission accomplished — all hands, well done!'});
+  loadDashboardData(snap({
+    current_task: '',
+    external_ai: JSON.parse(JSON.stringify(extIdle))
+  }, logs));
+
+  await sleep(2000);
+  demoRunning = false;
+  btn.disabled = false;
+  btn.textContent = 'DEMO';
+}
+// ===== FEATURE 1: ENTRANCE ANIMATION =====
+(function() {
+  var poolAgents = [
+    { id: 'pool-researcher', speechId: 'speech-researcher' },
+    { id: 'pool-developer',  speechId: 'speech-developer' },
+    { id: 'pool-reviewer',   speechId: 'speech-reviewer' },
+    { id: 'pool-tester',     speechId: 'speech-tester' },
+    { id: 'pool-writer',     speechId: 'speech-writer' }
+  ];
+
+  setTimeout(function() {
+    poolAgents.forEach(function(agent, idx) {
+      setTimeout(function() {
+        var el = document.getElementById(agent.id);
+        if (el) {
+          el.classList.add('entrance-anim');
+          setTimeout(function() { el.classList.remove('entrance-anim'); }, 700);
+        }
+        // Show agent speech bubble
+        var speechEl = document.getElementById(agent.speechId);
+        if (speechEl) {
+          speechEl.textContent = 'Commander on deck!';
+          speechEl.classList.add('visible');
+          setTimeout(function() { speechEl.classList.remove('visible'); }, 1500);
+        }
+      }, idx * 400);
+    });
+
+    // PM speech after all agents bounce
+    setTimeout(function() {
+      var el = document.getElementById('pm-speech');
+      if (el) {
+        el.textContent = 'Crew assembled. Awaiting orders.';
+        el.classList.add('visible');
+        setTimeout(function() { el.classList.remove('visible'); }, 3000);
+      }
+    }, poolAgents.length * 400 + 200);
+  }, 1000);
+})();
+
+// ===== FEATURE 2: PM IDLE REPORT (Commander character lines) =====
+var pmIdleLines = [
+  // 불만형
+  "Don't make me angry...",
+  "Is there no perfect agent?",
+  "Give me full authority.",
+  // 독재자형
+  "I see everything.",
+  "Nobody leaves until I say so.",
+  "This base runs on MY schedule.",
+  // 고뇌형
+  "Why is it so quiet...",
+  "Am I the only one working here?",
+  "One day, they'll understand.",
+  // 크라켄 암시형
+  "You don't want to see me angry...",
+  "Last time I lost it... no one was left.",
+  "I could destroy this whole village.",
+  "The kraken sleeps... for now.",
+  "Don't test my patience.",
+  "When I wake... cities fall."
+];
+var pmIdleIdx = 0;
+var pmIdleTimer = null;
+var pmReportBusy = false;
+
+function startPmIdleReport() {
+  if (pmIdleTimer) return;
+  pmIdleTimer = setInterval(function() {
+    if (pmReportBusy) return;
+    var el = document.getElementById('pm-speech');
+    if (!el) return;
+    if (el.classList.contains('visible')) return;
+    var line = pmIdleLines[pmIdleIdx % pmIdleLines.length];
+    pmIdleIdx++;
+    el.textContent = line;
+    el.classList.add('visible');
+    setTimeout(function() { el.classList.remove('visible'); }, 5000);
+  }, 30000);
+}
+function stopPmIdleReport() {
+  if (pmIdleTimer) { clearInterval(pmIdleTimer); pmIdleTimer = null; }
+}
+
+// Patch loadDashboardData to show current_task in PM speech
+var _origLoadDashboardData = loadDashboardData;
+loadDashboardData = function(data) {
+  _origLoadDashboardData(data);
+  if (!data) return;
+
+  if (data.current_task) {
+    // Show task in PM bubble
+    pmReportBusy = true;
+    stopPmIdleReport();
+    var el = document.getElementById('pm-speech');
+    if (el) {
+      el.textContent = data.current_task;
+      el.classList.add('visible');
+      setTimeout(function() { el.classList.remove('visible'); }, 5000);
+    }
+  } else {
+    pmReportBusy = false;
+    startPmIdleReport();
+  }
+};
+
+// Start idle report by default
+startPmIdleReport();
+
+// ===== FEATURE 3: KEYBOARD INTERACTION =====
+var interactionCooldown = false;
+
+// Z key — Commander's words (flinch) — moved from Space
+document.addEventListener('keydown', function(e) {
+  if (e.key !== 'z' && e.key !== 'Z') return;
+  e.preventDefault();
+  if (interactionCooldown) return;
+  interactionCooldown = true;
+
+  // 1. Show diver speech bubble
+  var diverBubble = document.getElementById('diver-speech');
+  if (diverBubble) {
+    diverBubble.textContent = 'THIS is my elite squad?!';
+    diverBubble.classList.remove('visible');
+    void diverBubble.offsetWidth;
+    diverBubble.classList.add('visible');
+  }
+
+  // 2. Flinch pool agents
+  var poolIds = ['pool-researcher', 'pool-developer', 'pool-reviewer', 'pool-tester', 'pool-writer'];
+  poolIds.forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el && !el.classList.contains('walking') && !el.classList.contains('at-desk')) {
+      el.classList.add('flinch');
+      setTimeout(function() { el.classList.remove('flinch'); }, 400);
+    }
+  });
+
+  // 3. PM says "..."
+  var pmEl = document.getElementById('pm-speech');
+  if (pmEl) {
+    pmEl.textContent = '...';
+    pmEl.classList.add('visible');
+    setTimeout(function() { pmEl.classList.remove('visible'); }, 2000);
+  }
+
+  // 4. Fade out diver bubble after 2s
+  setTimeout(function() {
+    if (diverBubble) {
+      diverBubble.classList.remove('visible');
+    }
+  }, 2000);
+
+  // 5. Cooldown 3s
+  setTimeout(function() { interactionCooldown = false; }, 3000);
+});
+
+// Space key — Context interaction (workspace crate, desk, or fallback to commander)
+document.addEventListener('keydown', function(e) {
+  if (e.key !== ' ') return;
+  e.preventDefault();
+  if (interactionCooldown) return;
+
+  // Check proximity to workspace crates
+  var diver = document.getElementById('moving-diver');
+  if (!diver) return;
+  var dx = parseInt(diver.style.left || '600');
+  var dy = parseInt(diver.style.top || '580');
+
+  // Check crate proximity
+  var crates = document.querySelectorAll('.cargo-crate');
+  for (var i = 0; i < crates.length; i++) {
+    var cr = crates[i];
+    var cx = parseInt(cr.style.left || '0');
+    var cy = parseInt(cr.style.top || '0');
+    if (Math.abs(dx - cx) < 60 && Math.abs(dy - cy) < 60) {
+      showCratePopup(cr, cx, cy);
+      return;
+    }
+  }
+
+  // Fallback: trigger Z behavior (commander's words)
+  var zEvent = new KeyboardEvent('keydown', {key: 'z'});
+  document.dispatchEvent(zEvent);
+});
+
+// ===== WORKSPACE CRATE RENDERING =====
+var lastWorkspaceData = null;
+
+function renderWorkspaceCrates(workspaces) {
+  if (JSON.stringify(workspaces) === JSON.stringify(lastWorkspaceData)) return;
+  lastWorkspaceData = JSON.parse(JSON.stringify(workspaces));
+
+  var container = document.getElementById('workspace-crates');
+  if (!container) return;
+  container.innerHTML = '';
+
+  var wsNames = Object.keys(workspaces);
+  var startX = 160;
+  var y = 530;
+  var spacing = 90;
+
+  wsNames.forEach(function(name, idx) {
+    var ws = workspaces[name];
+    var crate = document.createElement('div');
+    crate.className = 'cargo-crate';
+    var x = startX + idx * spacing;
+    crate.style.left = x + 'px';
+    crate.style.top = y + 'px';
+
+    // Status class
+    var status = ws.status || 'standby';
+    if (status === 'active') crate.classList.add('ws-active');
+    else if (status === 'hold') crate.classList.add('ws-hold');
+    else crate.classList.add('ws-standby');
+
+    // Age-based dimming
+    if (ws.last_active) {
+      var daysDiff = Math.floor((Date.now() - new Date(ws.last_active).getTime()) / 86400000);
+      if (daysDiff > 30) crate.classList.add('ws-old');
+    }
+
+    // Store data for popup
+    crate.dataset.wsName = name;
+    crate.dataset.wsDesc = ws.description || name;
+    crate.dataset.wsDept = ws.department || '-';
+    crate.dataset.wsDate = ws.last_active || '-';
+    crate.dataset.wsStatus = status;
+
+    crate.innerHTML = '<div class="crate-pixel" style="width:1px;height:1px;"></div>' +
+                      '<div class="crate-label">' + name + '</div>';
+
+    crate.addEventListener('click', function() {
+      showCratePopup(crate, x, y);
+    });
+
+    container.appendChild(crate);
+  });
+}
+
+function showCratePopup(crateEl, x, y) {
+  var popup = document.getElementById('crate-popup');
+  if (!popup) return;
+  popup.innerHTML = '<div class="popup-title">' + (crateEl.dataset.wsName || '') + '</div>' +
+    '<div>' + (crateEl.dataset.wsDesc || '') + '</div>' +
+    '<div class="popup-dept">dept: ' + (crateEl.dataset.wsDept || '-') + '</div>' +
+    '<div class="popup-date">last: ' + (crateEl.dataset.wsDate || '-') + '</div>' +
+    '<div class="popup-status">status: ' + (crateEl.dataset.wsStatus || '-') + '</div>';
+  popup.style.left = (x + 30) + 'px';
+  popup.style.top = (y - 60) + 'px';
+  popup.classList.add('visible');
+  setTimeout(function() { popup.classList.remove('visible'); }, 4000);
+}
+
+// ===== PM STATUS ANIMATION =====
+(function() {
+  var pmChar = document.querySelector('#pm-area .squid-pixel-lg');
+  if (!pmChar) return;
+  var pmWrap = pmChar.parentElement;
+  var prevPmStatus = 'idle';
+
+  // Override loadDashboardData to add PM animation + pool reaction
+  var _origLoad2 = loadDashboardData;
+  loadDashboardData = function(data) {
+    _origLoad2(data);
+    if (!data || !data.pm) return;
+    var st = data.pm.status || 'idle';
+    if (st !== prevPmStatus) {
+      if (st === 'working') {
+        pmWrap.style.animation = 'bob-work 1.5s ease-in-out infinite';
+        // Pool agents react
+        AGENTS.forEach(function(a) {
+          var el = document.getElementById('pool-' + a);
+          if (el && !el.classList.contains('walking') && !el.classList.contains('at-desk')) {
+            el.style.transition = 'transform 0.3s';
+            el.style.transform = 'translateY(-3px)';
+            setTimeout(function() { el.style.transform = ''; }, 600);
+          }
+        });
+      } else {
+        pmWrap.style.animation = 'bob 2.5s ease-in-out infinite';
+      }
+      prevPmStatus = st;
+    }
+  };
+})();
+</script>
+</body>
+</html>
