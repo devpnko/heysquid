@@ -25,23 +25,6 @@ case "${1:-}" in
     start)
         echo "heysquid 데몬 시작..."
 
-        # tmux 세션 생성 (2분할: 상단=executor 실행, 하단=실시간 로그)
-        if ! tmux has-session -t heysquid 2>/dev/null; then
-            tmux new-session -d -s heysquid -x 200 -y 50
-
-            # 하단 패널: 실시간 로그 모니터 (20% 높이)
-            tmux split-window -t heysquid -v -l 12
-            tmux send-keys -t heysquid:0.1 \
-                "echo '📡 heysquid 로그 모니터 시작...' && tail -f $ROOT/logs/executor.log 2>/dev/null || echo '(로그 파일 대기 중)'" Enter
-
-            # 상단 패널을 활성 패널으로 (executor가 여기서 실행됨)
-            tmux select-pane -t heysquid:0.0
-
-            echo "[OK] tmux 세션 'heysquid' 생성 (2분할: 실행 + 로그)"
-        else
-            echo "[OK] tmux 세션 'heysquid' 이미 존재"
-        fi
-
         # LaunchAgents 디렉토리 확인
         mkdir -p "$LAUNCH_AGENTS"
 
@@ -64,8 +47,9 @@ case "${1:-}" in
         echo "[OK] listener 데몬 시작 (10초 폴링 + 즉시 executor 트리거)"
         echo "[OK] briefing 스케줄 등록 (매일 09:00)"
         echo ""
-        echo "실시간 모니터: tmux attach -t heysquid"
         echo "대시보드: http://localhost:8420/dashboard_v4.html"
+        echo "TUI 모니터: bash scripts/monitor.sh"
+        echo "로그: tail -f logs/executor.log"
         echo "상태 확인: bash scripts/run.sh status"
         ;;
 
@@ -83,14 +67,11 @@ case "${1:-}" in
         pkill -f "claude.*append-system-prompt-file" 2>/dev/null || true
         pkill -f "tee.*executor.stream" 2>/dev/null || true
 
-        # tmux 세션 종료
-        tmux kill-session -t heysquid 2>/dev/null || true
-
         # 잠금 파일 정리 (대기 루프 중 executor.lock이 남을 수 있음)
         rm -f "$ROOT/data/executor.lock" 2>/dev/null
         rm -f "$ROOT/data/working.json" 2>/dev/null
 
-        echo "[OK] 데몬 + tmux 세션 + 잠금 파일 정리 완료"
+        echo "[OK] 데몬 + 잠금 파일 정리 완료"
         ;;
 
     restart)
@@ -118,14 +99,6 @@ case "${1:-}" in
             launchctl list | grep "com.heysquid.briefing"
         else
             echo "  상태: 미등록"
-        fi
-
-        echo ""
-        echo "--- tmux ---"
-        if tmux has-session -t heysquid 2>/dev/null; then
-            echo "  heysquid 세션: 활성 (tmux attach -t heysquid)"
-        else
-            echo "  heysquid 세션: 없음"
         fi
 
         echo ""

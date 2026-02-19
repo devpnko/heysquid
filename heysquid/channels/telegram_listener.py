@@ -484,31 +484,8 @@ def _retry_unprocessed():
     _trigger_executor()
 
 
-TMUX_SESSION = "heysquid"
-
-
-def _ensure_tmux_session():
-    """tmux 세션이 없으면 생성"""
-    try:
-        result = subprocess.run(
-            ["tmux", "has-session", "-t", TMUX_SESSION],
-            capture_output=True
-        )
-        if result.returncode != 0:
-            subprocess.run(
-                ["tmux", "new-session", "-d", "-s", TMUX_SESSION,
-                 "-x", "200", "-y", "50"],
-                capture_output=True
-            )
-            print(f"[TMUX] 세션 '{TMUX_SESSION}' 생성")
-        return True
-    except FileNotFoundError:
-        print("[ERROR] tmux가 설치되지 않았습니다. brew install tmux")
-        return False
-
-
 def _trigger_executor():
-    """tmux 세션에서 executor.sh 실행 (실시간 모니터링 + 개입 가능)"""
+    """executor.sh를 백그라운드 프로세스로 실행"""
     lockfile = EXECUTOR_LOCK_FILE
     if os.path.exists(lockfile):
         print("[TRIGGER] executor 이미 실행 중 — 스킵")
@@ -519,15 +496,19 @@ def _trigger_executor():
         print(f"[ERROR] executor.sh not found: {executor}")
         return
 
-    if not _ensure_tmux_session():
-        return
+    log_dir = os.path.join(PROJECT_ROOT, "logs")
+    os.makedirs(log_dir, exist_ok=True)
+    log_file = os.path.join(log_dir, "executor.log")
 
-    print("[TRIGGER] tmux에서 executor.sh 트리거!")
-    subprocess.run(
-        ["tmux", "send-keys", "-t", f"{TMUX_SESSION}:0.0",
-         f"bash {executor}", "Enter"],
-        capture_output=True
-    )
+    print("[TRIGGER] executor.sh 백그라운드 실행!")
+    with open(log_file, "a") as lf:
+        subprocess.Popen(
+            ["bash", executor],
+            stdout=lf,
+            stderr=lf,
+            cwd=PROJECT_ROOT,
+            start_new_session=True,
+        )
 
 
 async def listen_loop():

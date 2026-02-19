@@ -1,18 +1,12 @@
 #!/bin/bash
-# heysquid 실시간 모니터링
+# heysquid TUI 모니터
 # 사용법: bash scripts/monitor.sh
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-STREAM_LOG="$ROOT/logs/executor.stream.jsonl"
+VENV_PYTHON="$ROOT/venv/bin/python3"
 
-echo "============================================"
-echo "  heysquid 실시간 모니터"
-echo "  stream: $STREAM_LOG"
-echo "  Ctrl+C로 종료"
-echo "============================================"
-echo ""
+if [ ! -f "$VENV_PYTHON" ]; then
+    VENV_PYTHON="python3"
+fi
 
-# stream log가 없으면 생성
-touch "$STREAM_LOG"
-
-tail -f "$STREAM_LOG" | python3 "$ROOT/scripts/stream_viewer.py"
+exec "$VENV_PYTHON" "$ROOT/scripts/tui_monitor.py"
