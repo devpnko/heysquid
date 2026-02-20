@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-🦑 SQUID TUI Monitor — curses 기반 채팅 + 파티 + 통합 로그
+🦑 SQUID TUI Monitor — curses 기반 채팅 + 토론 + 통합 로그
 
 사용법:
     python3 scripts/tui_monitor.py
@@ -8,7 +8,7 @@
 
 모드 (Tab/Shift+Tab 순환):
     Chat  — 텔레그램 채팅 인터페이스 (기본)
-    Party — 에이전트 상태 + 토론 뷰 (Squid/Kraken 모드)
+    Squad — 에이전트 상태 + 토론 뷰 (Squid/Kraken 모드)
     Log   — SQUID LOG + Stream LOG 통합
 
 Chat 모드:
@@ -21,11 +21,11 @@ Chat 모드:
     q         — 버퍼 비어있으면 종료
     /stop     — 작업 중단
     /resume   — executor 재시작
-    /squid @a1 @a2 주제 — Squid 모드 파티 시작
+    /squid @a1 @a2 주제 — Squid 모드 토론 시작
     /kraken [주제]      — Kraken 모드 (전원+Kraken Crew)
-    /endparty           — 파티 종료
+    /endsquad           — 토론 종료
 
-Party/Log 모드:
+Squad/Log 모드:
     :         — 커맨드 모드 진입
     q         — TUI 종료
     Tab       — 다음 모드
@@ -77,10 +77,10 @@ AGENT_SHORT = {"pm": "PM", "researcher": "researcher", "developer": "developer",
 
 # --- 모드 ---
 MODE_CHAT = 0
-MODE_PARTY = 1
+MODE_SQUAD = 1
 MODE_LOG = 2
 MODE_COUNT = 3
-MODE_NAMES = {MODE_CHAT: "CHAT", MODE_PARTY: "PARTY", MODE_LOG: "LOG"}
+MODE_NAMES = {MODE_CHAT: "CHAT", MODE_SQUAD: "SQUAD", MODE_LOG: "LOG"}
 
 # --- 채널 이모지 ---
 CHANNEL_TAG = {
@@ -811,7 +811,7 @@ def render_chat(win, chat_lines, input_buf, flash_msg, status):
 
 
 def _render_agent_panel(win, status, start_row, left_w, max_rows):
-    """에이전트 상태 패널 (Party 모드 왼쪽)"""
+    """에이전트 상태 패널 (Squad 모드 왼쪽)"""
     row = start_row
     for agent_name in AGENT_ORDER:
         if row >= start_row + max_rows:
@@ -837,7 +837,7 @@ def _render_agent_panel(win, status, start_row, left_w, max_rows):
     return row
 
 
-def _get_party_agent_info(agent_key):
+def _get_squad_agent_info(agent_key):
     """party entry의 agent 키 → (emoji, name, color, is_crew)"""
     if agent_key.startswith("kraken:"):
         expert_name = agent_key[7:]  # len("kraken:") == 7
@@ -862,21 +862,22 @@ ENTRY_TYPE_LABELS = {
     "disagree": "반대",
     "proposal": "제안",
     "conclusion": "결론",
+    "risk": "리스크",
 }
 
 
-def render_party(win, status):
-    """Party 모드 렌더링 — 왼쪽 에이전트 상태 + 오른쪽 토론 뷰"""
+def render_squad(win, status):
+    """Squad 모드 렌더링 — 왼쪽 에이전트 상태 + 오른쪽 토론 뷰"""
     h, w = win.getmaxyx()
     if h < 10 or w < 40:
         _safe_addstr(win, 0, 0, "Terminal too small")
         return
 
-    party = status.get("party_log")
+    party = status.get("squad_log")
 
     # 헤더
     _safe_addstr(win, 0, 1, "🦑 SQUID", curses.A_BOLD)
-    _safe_addstr(win, 0, 11, "[PARTY]",
+    _safe_addstr(win, 0, 11, "[SQUAD]",
                  COLOR_PAIRS.get("pm", curses.A_NORMAL) | curses.A_BOLD)
 
     now = datetime.now().strftime("%H:%M:%S")
@@ -922,7 +923,7 @@ def render_party(win, status):
         _safe_addstr(win, 3, right_x, "DISCUSSION", curses.A_BOLD)
         _safe_addstr(win, 5, right_x, "토론이 없습니다.", curses.A_DIM)
         _safe_addstr(win, 7, right_x, ":squid @agent1 @agent2 주제", curses.A_DIM)
-        _safe_addstr(win, 8, right_x, "  → Squid 모드 파티 시작", curses.A_DIM)
+        _safe_addstr(win, 8, right_x, "  → Squid 모드 토론 시작", curses.A_DIM)
         _safe_addstr(win, 10, right_x, ":kraken [주제]", curses.A_DIM)
         _safe_addstr(win, 11, right_x, "  → Kraken 모드 (전원+Crew)", curses.A_DIM)
         return
@@ -964,7 +965,7 @@ def render_party(win, status):
         msg = entry.get("message", "")
         etime = entry.get("time", "")
 
-        emoji, display, color, is_crew = _get_party_agent_info(agent_key)
+        emoji, display, color, is_crew = _get_squad_agent_info(agent_key)
         type_label = ENTRY_TYPE_LABELS.get(etype, etype)
 
         header = f"{etime} {emoji} {display} [{type_label}]"
@@ -1109,15 +1110,15 @@ def _send_chat_message(text, stream_buffer):
         return msg
 
     if text.startswith("/squid "):
-        return _start_squid_party(text[7:], stream_buffer)
+        return _start_squid_squad(text[7:], stream_buffer)
 
     if text.startswith("/kraken"):
-        return _start_kraken_party(text[7:], stream_buffer)
+        return _start_kraken_squad(text[7:], stream_buffer)
 
-    if text == "/endparty":
-        from heysquid.dashboard import clear_party
-        clear_party()
-        return "Party 종료"
+    if text == "/endsquad":
+        from heysquid.dashboard import clear_squad
+        clear_squad()
+        return "Squad 종료"
 
     # 일반 메시지
     mid = inject_local_message(text)
@@ -1134,9 +1135,9 @@ def _send_chat_message(text, stream_buffer):
 
 # --- 커맨드 실행 (Dashboard/Stream) ---
 
-def _start_squid_party(args_str, stream_buffer):
-    """Squid 모드 파티 시작. args: '@agent1 @agent2 주제'"""
-    from heysquid.dashboard import init_party
+def _start_squid_squad(args_str, stream_buffer):
+    """Squid 모드 토론 시작. args: '@agent1 @agent2 주제'"""
+    from heysquid.dashboard import init_squad
     parts = args_str.strip().split()
     participants = []
     topic_parts = []
@@ -1148,21 +1149,21 @@ def _start_squid_party(args_str, stream_buffer):
     topic = " ".join(topic_parts) or "자유 토론"
     if not participants:
         return "참가 에이전트를 지정하세요: :squid @agent1 @agent2 주제"
-    init_party(topic, participants, mode="squid")
+    init_squad(topic, participants, mode="squid")
     names = " ".join(f"@{p}" for p in participants)
-    _log_commander_message(f"[Party] Squid 모드: {names} — {topic}", stream_buffer)
-    return f"Squid Party 시작: {names}"
+    _log_commander_message(f"[Squad] Squid 모드: {names} — {topic}", stream_buffer)
+    return f"Squid Squad 시작: {names}"
 
 
-def _start_kraken_party(args_str, stream_buffer):
+def _start_kraken_squad(args_str, stream_buffer):
     """Kraken 모드 파티 시작. args: '[주제]'"""
-    from heysquid.dashboard import init_party
+    from heysquid.dashboard import init_squad
     from heysquid.core.agents import KRAKEN_CREW_NAMES
     topic = args_str.strip() or "프로젝트 종합 평가"
     participants = [a for a in AGENT_ORDER if a != "pm"]
-    init_party(topic, participants, mode="kraken", virtual_experts=KRAKEN_CREW_NAMES)
-    _log_commander_message(f"[Party] Kraken 모드: 전원+Crew — {topic}", stream_buffer)
-    return f"Kraken Party 시작: 전원+Kraken Crew"
+    init_squad(topic, participants, mode="kraken", virtual_experts=KRAKEN_CREW_NAMES)
+    _log_commander_message(f"[Squad] Kraken 모드: 전원+Crew — {topic}", stream_buffer)
+    return f"Kraken Squad 시작: 전원+Kraken Crew"
 
 
 def _execute_command(cmd, stream_buffer):
@@ -1180,15 +1181,15 @@ def _execute_command(cmd, stream_buffer):
         return msg
 
     elif cmd.startswith("squid "):
-        return _start_squid_party(cmd[6:], stream_buffer)
+        return _start_squid_squad(cmd[6:], stream_buffer)
 
     elif cmd.startswith("kraken"):
-        return _start_kraken_party(cmd[6:], stream_buffer)
+        return _start_kraken_squad(cmd[6:], stream_buffer)
 
-    elif cmd == "endparty":
-        from heysquid.dashboard import clear_party
-        clear_party()
-        return "Party 종료"
+    elif cmd == "endsquad":
+        from heysquid.dashboard import clear_squad
+        clear_squad()
+        return "Squad 종료"
 
     elif cmd.startswith("msg "):
         text = cmd[4:].strip()
@@ -1260,9 +1261,9 @@ def tui_main(stdscr):
             else:
                 curses.curs_set(0)
 
-        elif mode == MODE_PARTY:
+        elif mode == MODE_SQUAD:
             status = load_agent_status()
-            render_party(stdscr, status)
+            render_squad(stdscr, status)
             if h > 2:
                 _safe_addstr(stdscr, h - 2, 0, "─" * (w - 1))
             render_status_bar_legacy(stdscr, mode, cmd_mode, cmd_buf, flash_msg)
@@ -1310,7 +1311,7 @@ def tui_main(stdscr):
                         tab_index += 1
                 else:
                     # 다음 모드
-                    mode = MODE_PARTY
+                    mode = MODE_SQUAD
                     chat_buf = ""
                     tab_index = 0
             elif ch_ord == curses.KEY_BTAB:  # Shift+Tab

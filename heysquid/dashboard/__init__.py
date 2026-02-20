@@ -231,10 +231,10 @@ print("OK")
     return None
 
 
-def init_party(topic, participants, mode="squid", virtual_experts=None):
-    """party_log 초기화. mode: 'squid' or 'kraken'."""
+def init_squad(topic, participants, mode="squid", virtual_experts=None):
+    """squad_log 초기화. mode: 'squid' or 'kraken'."""
     data = _load_status()
-    data['party_log'] = {
+    data['squad_log'] = {
         "topic": topic,
         "mode": mode,
         "participants": participants,
@@ -244,19 +244,19 @@ def init_party(topic, participants, mode="squid", virtual_experts=None):
         "entries": [],
     }
     _save_status(data)
-    return data['party_log']
+    return data['squad_log']
 
 
-def add_party_entry(agent, entry_type, message):
-    """party_log.entries에 토론 엔트리 추가.
+def add_squad_entry(agent, entry_type, message):
+    """squad_log.entries에 토론 엔트리 추가.
 
     Args:
         agent: 기존 에이전트명 or 'kraken:name' 형태
-        entry_type: opinion | agree | disagree | proposal | conclusion
+        entry_type: opinion | agree | disagree | risk | proposal | conclusion
         message: 발언 내용
     """
     data = _load_status()
-    party = data.get('party_log')
+    party = data.get('squad_log')
     if not party or party.get('status') != 'active':
         return None
     entry = {
@@ -270,10 +270,10 @@ def add_party_entry(agent, entry_type, message):
     return entry
 
 
-def conclude_party(conclusion):
-    """party_log.status = 'concluded', 결론 메시지 추가."""
+def conclude_squad(conclusion):
+    """squad_log.status = 'concluded', 결론 메시지 추가."""
     data = _load_status()
-    party = data.get('party_log')
+    party = data.get('squad_log')
     if not party:
         return
     party['status'] = 'concluded'
@@ -286,16 +286,16 @@ def conclude_party(conclusion):
     _save_status(data)
 
 
-def get_party_log():
-    """현재 party_log dict 반환. 없으면 None."""
+def get_squad_log():
+    """현재 squad_log dict 반환. 없으면 None."""
     data = _load_status()
-    return data.get('party_log')
+    return data.get('squad_log')
 
 
-def clear_party():
-    """party_log 제거."""
+def clear_squad():
+    """squad_log 제거."""
     data = _load_status()
-    data.pop('party_log', None)
+    data.pop('squad_log', None)
     _save_status(data)
 
 
