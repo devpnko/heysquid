@@ -15,6 +15,16 @@
     (launchd로 매일 09:00 자동 실행)
 """
 
+# --- Skill plugin interface ---
+SKILL_META = {
+    "name": "briefing",
+    "description": "일일 브리핑 (프로젝트 현황 + 뉴스)",
+    "trigger": "schedule",
+    "schedule": "09:00",
+    "enabled": True,
+    "workspace": "threads",
+}
+
 import os
 import json
 import subprocess
@@ -339,6 +349,11 @@ def send_briefing():
     except Exception as e:
         print(f"[ERROR] 브리핑 전송 오류: {e}")
         return False
+
+
+def execute(**kwargs):
+    """Skill plugin 진입점"""
+    return send_briefing()
 
 
 if __name__ == "__main__":

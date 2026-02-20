@@ -13,12 +13,16 @@ ROOT="$(dirname "$SCRIPT_DIR")"
 LAUNCH_AGENTS="$HOME/Library/LaunchAgents"
 
 WATCHER_PLIST="com.heysquid.watcher.plist"
-BRIEFING_PLIST="com.heysquid.briefing.plist"
+SCHEDULER_PLIST="com.heysquid.scheduler.plist"
 
 WATCHER_SRC="$SCRIPT_DIR/$WATCHER_PLIST"
-BRIEFING_SRC="$SCRIPT_DIR/$BRIEFING_PLIST"
+SCHEDULER_SRC="$SCRIPT_DIR/$SCHEDULER_PLIST"
 
 WATCHER_DST="$LAUNCH_AGENTS/$WATCHER_PLIST"
+SCHEDULER_DST="$LAUNCH_AGENTS/$SCHEDULER_PLIST"
+
+# Legacy briefing plist (for cleanup)
+BRIEFING_PLIST="com.heysquid.briefing.plist"
 BRIEFING_DST="$LAUNCH_AGENTS/$BRIEFING_PLIST"
 
 case "${1:-}" in
@@ -28,26 +32,30 @@ case "${1:-}" in
         # LaunchAgents 디렉토리 확인
         mkdir -p "$LAUNCH_AGENTS"
 
+        # 레거시 briefing plist 제거
+        launchctl unload "$BRIEFING_DST" 2>/dev/null || true
+        rm -f "$BRIEFING_DST" 2>/dev/null
+
         # 심볼릭 링크 생성 (이미 있으면 덮어쓰기)
         ln -sf "$WATCHER_SRC" "$WATCHER_DST"
-        ln -sf "$BRIEFING_SRC" "$BRIEFING_DST"
+        ln -sf "$SCHEDULER_SRC" "$SCHEDULER_DST"
 
         # launchd에 등록
         launchctl load "$WATCHER_DST" 2>/dev/null || true
-        launchctl load "$BRIEFING_DST" 2>/dev/null || true
+        launchctl load "$SCHEDULER_DST" 2>/dev/null || true
 
         # 대시보드 HTTP 서버
         if ! lsof -i :8420 > /dev/null 2>&1; then
             nohup bash "$SCRIPT_DIR/serve_dashboard.sh" > "$ROOT/logs/dashboard_server.log" 2>&1 &
-            echo "[OK] 대시보드 서버 (http://localhost:8420/dashboard_v4.html)"
+            echo "[OK] 대시보드 서버 (http://localhost:8420/dashboard.html)"
         else
             echo "[OK] 대시보드 서버 이미 실행 중"
         fi
 
         echo "[OK] listener 데몬 시작 (10초 폴링 + 즉시 executor 트리거)"
-        echo "[OK] briefing 스케줄 등록 (매일 09:00)"
+        echo "[OK] scheduler 등록 (1분 간격 — 스킬 자동 실행)"
         echo ""
-        echo "대시보드: http://localhost:8420/dashboard_v4.html"
+        echo "대시보드: http://localhost:8420/dashboard.html"
         echo "TUI 모니터: bash scripts/monitor.sh"
         echo "로그: tail -f logs/executor.log"
         echo "상태 확인: bash scripts/run.sh status"
@@ -57,6 +65,7 @@ case "${1:-}" in
         echo "heysquid 데몬 중지..."
 
         launchctl unload "$WATCHER_DST" 2>/dev/null || true
+        launchctl unload "$SCHEDULER_DST" 2>/dev/null || true
         launchctl unload "$BRIEFING_DST" 2>/dev/null || true
 
         # 대시보드 서버 종료
@@ -93,12 +102,12 @@ case "${1:-}" in
         fi
 
         echo ""
-        echo "--- briefing (일일 브리핑) ---"
-        if launchctl list 2>/dev/null | grep -q "com.heysquid.briefing"; then
-            echo "  상태: 등록됨"
-            launchctl list | grep "com.heysquid.briefing"
+        echo "--- scheduler (스킬 자동 실행) ---"
+        if launchctl list 2>/dev/null | grep -q "com.heysquid.scheduler"; then
+            echo "  상태: 실행 중"
+            launchctl list | grep "com.heysquid.scheduler"
         else
-            echo "  상태: 미등록"
+            echo "  상태: 중지됨"
         fi
 
         echo ""
@@ -124,7 +133,7 @@ case "${1:-}" in
         echo ""
         echo "--- 대시보드 서버 ---"
         if lsof -i :8420 > /dev/null 2>&1; then
-            echo "  상태: 실행 중 (http://localhost:8420/dashboard_v4.html)"
+            echo "  상태: 실행 중 (http://localhost:8420/dashboard.html)"
         else
             echo "  상태: 중지됨"
         fi
@@ -143,6 +152,24 @@ case "${1:-}" in
         else
             echo "  working.json: 없음"
         fi
+
+        echo ""
+        echo "--- 등록된 스킬 ---"
+        "$ROOT/venv/bin/python" -c "
+from heysquid.skills._base import discover_skills
+skills = discover_skills()
+if not skills:
+    print('  (등록된 스킬 없음)')
+else:
+    for name, meta in skills.items():
+        trigger = meta.get('trigger', '?')
+        schedule = meta.get('schedule', '')
+        desc = meta.get('description', '')
+        info = f'{trigger}'
+        if schedule:
+            info += f' @ {schedule}'
+        print(f'  {name}: {desc} [{info}]')
+" 2>/dev/null || echo "  (스킬 목록 조회 실패)"
         ;;
 
     logs)

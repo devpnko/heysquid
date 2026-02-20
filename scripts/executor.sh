@@ -60,21 +60,26 @@ log "CWD=$(pwd)"
 # 프로세스 중복 실행 방지 (3중 안전장치)
 # ========================================
 
-# 1. executor.sh 중복 실행 방지 (자기 자신 제외)
-#    - Claude 프로세스 OR executor.sh 프로세스가 이미 있으면 차단
-#    - executor.sh는 Claude 대기 루프 중에도 살아있으므로 이걸로 체크
+# 1. executor.sh 중복 실행 방지
+#    - 실제 Claude 바이너리만 감지 (caffeinate 래퍼 제외)
+#    - stream log 활성도로 stale 판정 (1시간)
 SELF_PID=$$
-# executor.lock이 더 신뢰성 높은 중복 방지 (pgrep은 zsh 래퍼에 오탐)
-# Claude PM 세션은 append-system-prompt-file 플래그로 정확히 식별 가능
 HAS_CLAUDE_PM=false
-pgrep -f "claude.*append-system-prompt-file" > /dev/null 2>&1 && HAS_CLAUDE_PM=true
+CLAUDE_PIDS=$(pgrep -f "claude.*append-system-prompt-file" 2>/dev/null || true)
+for pid in $CLAUDE_PIDS; do
+    CMD=$(ps -p "$pid" -o comm= 2>/dev/null)
+    if [ "$CMD" = "claude" ]; then
+        HAS_CLAUDE_PM=true
+        break
+    fi
+done
 
 if [ "$HAS_CLAUDE_PM" = true ]; then
     # Claude PM 세션이 돌고 있으면 — stale 체크
     if [ -f "$STREAM_LOG" ]; then
         LOG_AGE=$(( $(date +%s) - $(stat -f %m "$STREAM_LOG" 2>/dev/null || echo 0) ))
-        if [ "$LOG_AGE" -gt 14400 ]; then
-            log "[STALE] Claude PM idle >4h. Force-killing..."
+        if [ "$LOG_AGE" -gt 3600 ]; then
+            log "[STALE] Claude PM idle >1h. Force-killing..."
             pkill -f "claude.*append-system-prompt-file" 2>/dev/null || true
             sleep 2
             rm -f "$LOCKFILE" 2>/dev/null

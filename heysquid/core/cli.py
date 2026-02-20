@@ -25,7 +25,7 @@ def cmd_init(args):
         "env.example": os.path.join(data_dir, ".env"),
         "identity.json": os.path.join(data_dir, "identity.json"),
         "team_playbook.md": os.path.join(data_dir, "team_playbook.md"),
-        "dashboard_v4.html": os.path.join(data_dir, "dashboard_v4.html"),
+        "dashboard.html": os.path.join(data_dir, "dashboard.html"),
     }
 
     for tmpl_name, dest in templates.items():

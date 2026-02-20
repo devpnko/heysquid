@@ -53,7 +53,14 @@ ChatInput:focus {
     padding: 0 1;
 }
 
-#squad-discussion {
+#squad-history-list {
+    height: 8;
+    border-bottom: solid $surface;
+    scrollbar-size: 1 1;
+}
+
+#squad-entry-view {
+    height: 1fr;
     scrollbar-size: 1 1;
     padding: 0 1;
 }

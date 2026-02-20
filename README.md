@@ -146,7 +146,7 @@ bash scripts/run.sh logs      # 최근 로그 보기
 `start` 시 다음이 실행된다:
 - **listener** 데몬 등록 (launchd, 10초 폴링)
 - **briefing** 스케줄 등록 (매일 09:00)
-- **대시보드 서버** 시작 (`http://localhost:8420/dashboard_v4.html`)
+- **대시보드 서버** 시작 (`http://localhost:8420/dashboard.html`)
 
 ### 동작 흐름
 
@@ -185,7 +185,7 @@ SQUID:  "작업 중단했어요."
 bash scripts/monitor.sh
 
 # 대시보드 (브라우저)
-open http://localhost:8420/dashboard_v4.html
+open http://localhost:8420/dashboard.html
 
 # 로그 실시간 확인
 tail -f logs/executor.log
@@ -231,7 +231,7 @@ bash scripts/executor.sh
 | `telegram_messages.json` | 수신 메시지 저장 |
 | `permanent_memory.md` | 영구 기억 (사용자 선호, 교훈) |
 | `session_memory.md` | 세션 기억 (대화 로그, 활성 작업) |
-| `dashboard_v4.html` | 대시보드 HTML |
+| `dashboard.html` | 대시보드 HTML |
 | `threads_storage.json` | Threads 세션 (쿠키/스토리지) |
 | `team_playbook.md` | 에이전트 배치 가이드 |
 

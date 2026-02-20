@@ -16,6 +16,7 @@ STREAM_FILE = os.path.join(ROOT, "logs", "executor.stream.jsonl")
 MESSAGES_FILE = os.path.join(ROOT, "data", "messages.json")
 EXECUTOR_LOCK = os.path.join(ROOT, "data", "executor.lock")
 
+SQUAD_HISTORY_FILE = os.path.join(ROOT, "data", "squad_history.json")
 CHAT_MAX_MESSAGES = 200
 STREAM_BUFFER_SIZE = 200
 
@@ -77,6 +78,29 @@ def poll_chat_messages() -> list[dict]:
         pass
 
     return _chat_cache["messages"]
+
+
+_squad_history_cache = {"mtime": 0.0, "data": []}
+
+
+def load_squad_history() -> list[dict]:
+    """squad_history.json 로드 (mtime 캐시)"""
+    try:
+        mtime = os.path.getmtime(SQUAD_HISTORY_FILE)
+    except OSError:
+        return _squad_history_cache["data"]
+
+    if mtime <= _squad_history_cache["mtime"]:
+        return _squad_history_cache["data"]
+
+    try:
+        with open(SQUAD_HISTORY_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        _squad_history_cache["mtime"] = mtime
+        _squad_history_cache["data"] = data
+        return data
+    except (FileNotFoundError, json.JSONDecodeError):
+        return _squad_history_cache["data"]
 
 
 def invalidate_chat_cache():

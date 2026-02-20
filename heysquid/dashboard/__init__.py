@@ -15,9 +15,10 @@ from ..core.config import DATA_DIR_STR as DATA_DIR, get_template_path
 from ..core.agents import VALID_AGENTS, AGENTS, AGENT_NAMES
 
 STATUS_FILE = os.path.join(DATA_DIR, 'agent_status.json')
+SQUAD_HISTORY_FILE = os.path.join(DATA_DIR, 'squad_history.json')
 # User's data/ copy takes priority; fall back to bundled template
-_user_html = os.path.join(DATA_DIR, 'dashboard_v4.html')
-GAMEBOARD_HTML = _user_html if os.path.exists(_user_html) else get_template_path('dashboard_v4.html')
+_user_html = os.path.join(DATA_DIR, 'dashboard.html')
+GAMEBOARD_HTML = _user_html if os.path.exists(_user_html) else get_template_path('dashboard.html')
 
 VALID_STATUSES = ['idle', 'working', 'complete', 'error']
 
@@ -53,6 +54,7 @@ def _default_status():
     status = {
         "last_updated": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         "current_task": "",
+        "skills": {},
         "mission_log": [
             {"time": datetime.now().strftime('%H:%M:%S'), "agent": "system", "message": "시스템 대기중..."}
         ],
@@ -292,8 +294,44 @@ def get_squad_log():
     return data.get('squad_log')
 
 
+def _load_history():
+    """squad_history.json 로드"""
+    try:
+        with open(SQUAD_HISTORY_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []
+
+
+def _save_history(history):
+    """squad_history.json 저장"""
+    with open(SQUAD_HISTORY_FILE, 'w', encoding='utf-8') as f:
+        json.dump(history, f, ensure_ascii=False, indent=2)
+
+
+def archive_squad():
+    """현재 squad_log를 squad_history.json에 아카이브."""
+    data = _load_status()
+    squad = data.get('squad_log')
+    if not squad:
+        return None
+    history = _load_history()
+    squad['id'] = str(len(history) + 1)
+    squad['archived_at'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    history.append(squad)
+    _save_history(history)
+    return squad
+
+
+def get_squad_history():
+    """히스토리 목록 반환 (최신순)."""
+    history = _load_history()
+    return list(reversed(history))
+
+
 def clear_squad():
-    """squad_log 제거."""
+    """squad_log 아카이브 후 제거."""
+    archive_squad()
     data = _load_status()
     data.pop('squad_log', None)
     _save_status(data)
@@ -336,6 +374,91 @@ def sync_workspaces():
                     'status': 'standby', 'department': None,
                     'last_active': '', 'description': name,
                 }
+    _save_status(data)
+
+
+def _compute_next_run(meta):
+    """schedule 스킬의 다음 실행 시각 계산 (HH:MM → 내일 ISO 8601)."""
+    schedule = meta.get("schedule", "")
+    if not schedule:
+        return None
+    try:
+        now = datetime.now()
+        hour, minute = map(int, schedule.split(":"))
+        from datetime import timedelta
+        next_dt = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        if next_dt <= now:
+            next_dt += timedelta(days=1)
+        return next_dt.strftime("%Y-%m-%dT%H:%M:%S")
+    except (ValueError, AttributeError):
+        return None
+
+
+def sync_skills():
+    """discover_skills() → agent_status.json skills 섹션 동기화.
+
+    - 새 스킬: 메타 + 초기 런타임 상태로 추가
+    - 기존 스킬: 메타 업데이트 + 런타임 상태(status, last_run 등) 보존
+    - 삭제된 스킬: skills 섹션에서 제거
+    """
+    from ..skills._base import discover_skills
+
+    registry = discover_skills()
+    data = _load_status()
+    if 'skills' not in data:
+        data['skills'] = {}
+
+    existing = data['skills']
+
+    # 삭제된 스킬 제거
+    removed = [k for k in existing if k not in registry]
+    for k in removed:
+        del existing[k]
+
+    # 추가/업데이트
+    for name, meta in registry.items():
+        runtime = existing.get(name, {})
+        existing[name] = {
+            "name": name,
+            "description": meta.get("description", ""),
+            "trigger": meta.get("trigger", "manual"),
+            "schedule": meta.get("schedule", ""),
+            "enabled": meta.get("enabled", True),
+            "workspace": meta.get("workspace", ""),
+            # 런타임 상태 보존
+            "status": runtime.get("status", "idle"),
+            "last_run": runtime.get("last_run", ""),
+            "last_result": runtime.get("last_result", None),
+            "last_error": runtime.get("last_error", None),
+            "next_run": _compute_next_run(meta) if meta.get("trigger") == "schedule" else None,
+            "run_count": runtime.get("run_count", 0),
+        }
+
+    _save_status(data)
+
+
+def update_skill_status(skill_name, status, last_result=None, last_error=None):
+    """스킬 런타임 상태 업데이트 (running/idle/error)."""
+    data = _load_status()
+    if 'skills' not in data:
+        data['skills'] = {}
+
+    skill = data['skills'].get(skill_name)
+    if not skill:
+        return
+
+    skill['status'] = status
+    if status in ('idle', 'error'):
+        skill['last_run'] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+        skill['run_count'] = skill.get('run_count', 0) + 1
+    if last_result is not None:
+        skill['last_result'] = last_result
+    if last_error is not None:
+        skill['last_error'] = last_error
+    # 다음 실행 시각 갱신
+    if skill.get('trigger') == 'schedule':
+        skill['next_run'] = _compute_next_run(skill)
+
     _save_status(data)
 
 

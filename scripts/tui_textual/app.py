@@ -14,6 +14,7 @@ sys.path.insert(0, ROOT)
 from scripts.tui_textual.screens.chat import ChatScreen
 from scripts.tui_textual.screens.squad import SquadScreen
 from scripts.tui_textual.screens.log import LogScreen
+from scripts.tui_textual.screens.skill import SkillScreen
 from scripts.tui_textual.widgets.chat_input import ChatInput
 from scripts.tui_textual.widgets.command_input import CommandInput
 from scripts.tui_textual.commands import send_chat_message, execute_command
@@ -22,7 +23,9 @@ from scripts.tui_textual.data_poller import load_stream_lines, STREAM_BUFFER_SIZ
 MODE_CHAT = 0
 MODE_SQUAD = 1
 MODE_LOG = 2
-MODE_NAMES = {MODE_CHAT: "CHAT", MODE_SQUAD: "SQUAD", MODE_LOG: "LOG"}
+MODE_SKILL = 3
+MODE_NAMES = {MODE_CHAT: "CHAT", MODE_SQUAD: "SQUAD", MODE_LOG: "LOG", MODE_SKILL: "SKILL"}
+MODE_COUNT = 4
 
 CSS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "squid.tcss")
 
@@ -37,9 +40,12 @@ class SquidApp(App):
         Binding("ctrl+1", "mode_chat", "Chat", priority=True),
         Binding("ctrl+2", "mode_squad", "Squad", priority=True),
         Binding("ctrl+3", "mode_log", "Log", priority=True),
+        Binding("ctrl+4", "mode_skill", "Skill", priority=True),
+        Binding("ctrl+left", "mode_prev", "Prev", priority=True),
+        Binding("ctrl+right", "mode_next", "Next", priority=True),
         Binding("ctrl+q", "quit_app", "Quit", priority=True),
         Binding("q", "quit_app", "Quit", priority=False),
-        Binding("colon", "command_mode", "Command", priority=False),
+        Binding("slash", "command_mode", "Command", priority=False),
     ]
 
     def __init__(self):
@@ -59,12 +65,14 @@ class SquidApp(App):
         chat = ChatScreen()
         squad = SquadScreen()
         log = LogScreen()
+        skill = SkillScreen()
 
         self.install_screen(chat, name="chat")
         self.install_screen(squad, name="squad")
         self.install_screen(log, name="log")
+        self.install_screen(skill, name="skill")
 
-        self._screens = {"chat": chat, "squad": squad, "log": log}
+        self._screens = {"chat": chat, "squad": squad, "log": log, "skill": skill}
 
         self.push_screen("chat")
         self._mode = MODE_CHAT
@@ -90,12 +98,14 @@ class SquidApp(App):
                 screen.refresh_data(flash=flash)
             elif isinstance(screen, LogScreen):
                 screen.refresh_data(self._stream_buffer, flash=flash)
+            elif isinstance(screen, SkillScreen):
+                screen.refresh_data(flash=flash)
         except Exception:
             pass  # compose 완료 전이면 무시
 
     def _switch_mode(self, new_mode: int) -> None:
         """모드 전환"""
-        mode_map = {MODE_CHAT: "chat", MODE_SQUAD: "squad", MODE_LOG: "log"}
+        mode_map = {MODE_CHAT: "chat", MODE_SQUAD: "squad", MODE_LOG: "log", MODE_SKILL: "skill"}
         self._mode = new_mode
         self.switch_screen(mode_map[new_mode])
         # Chat 모드로 돌아오면 Input에 포커스
@@ -119,6 +129,18 @@ class SquidApp(App):
         """Ctrl+3 → Log 모드"""
         self._switch_mode(MODE_LOG)
 
+    def action_mode_skill(self) -> None:
+        """Ctrl+4 → Skill 모드"""
+        self._switch_mode(MODE_SKILL)
+
+    def action_mode_prev(self) -> None:
+        """Ctrl+← → 이전 모드"""
+        self._switch_mode((self._mode - 1) % MODE_COUNT)
+
+    def action_mode_next(self) -> None:
+        """Ctrl+→ → 다음 모드"""
+        self._switch_mode((self._mode + 1) % MODE_COUNT)
+
     def action_quit_app(self) -> None:
         """q → 종료 (Chat 모드에서 입력 중이면 무시)"""
         if isinstance(self.screen, ChatScreen):
@@ -131,13 +153,25 @@ class SquidApp(App):
         self.exit()
 
     def action_command_mode(self) -> None:
-        """Squad/Log 모드에서 : 커맨드 모드"""
-        if isinstance(self.screen, (SquadScreen, LogScreen)):
+        """Squad/Log 모드에서 / 커맨드 모드"""
+        if isinstance(self.screen, (SquadScreen, LogScreen, SkillScreen)):
             try:
                 cmd_input = self.screen.query_one(CommandInput)
                 cmd_input.show()
             except Exception:
                 pass
+
+    def copy_to_clipboard(self, text: str) -> None:
+        """macOS pbcopy로 클립보드 복사 (OSC 52 대신)"""
+        import subprocess
+        try:
+            subprocess.run(
+                ["pbcopy"], input=text.encode("utf-8"),
+                capture_output=True, timeout=5,
+            )
+        except Exception:
+            pass
+        super().copy_to_clipboard(text)
 
     def _set_flash(self, msg: str) -> None:
         """flash 메시지 설정 (5초 후 자동 클리어)"""
