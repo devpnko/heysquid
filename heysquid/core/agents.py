@@ -90,15 +90,6 @@ SUBAGENT_MAP = {
     "Bash": None,
 }
 
-# 외부 AI 레지스트리
-EXTERNAL_AIS = {
-    "gpt": {"creature": "whale", "emoji": "🐳", "color_hex": "#4488ff"},
-    "gemini": {"creature": "jellyfish", "emoji": "🪼", "color_hex": "#cc66ff"},
-    "grok": {"creature": "eel", "emoji": "⚡", "color_hex": "#ffdd44"},
-    "whisper": {"creature": "dolphin", "emoji": "🐬", "color_hex": "#66ddee"},
-    "perplexity": {"creature": "stingray", "emoji": "🔶", "color_hex": "#ff7744"},
-}
-
 # 편의 상수/함수
 AGENT_NAMES = [k for k in AGENTS if k != "pm"]
 VALID_AGENTS = list(AGENTS.keys())

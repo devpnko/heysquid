@@ -697,7 +697,7 @@ body {
 /* === MISSION LOG === */
 .mission-log {
   position: absolute;
-  bottom: 30px; left: 90px; right: 90px;
+  bottom: 30px; left: 280px; right: 90px;
   height: 58px;
   background: rgba(5,15,35,0.7);
   border-radius: 6px 6px 0 0;
@@ -796,10 +796,6 @@ body {
   animation: none !important;
 }
 
-/* candlestick bars */
-.candle { display: inline-block; width: 3px; margin: 0 1px; border-radius: 1px; vertical-align: bottom; }
-.candle-wrap { position: absolute; bottom: 3px; left: 3px; right: 3px; height: 16px; display: flex; align-items: flex-end; gap: 1px; }
-
 /* === AGENT NAME (pool) === */
 .agent-name-label {
   position: absolute;
@@ -822,98 +818,6 @@ body {
   box-shadow: 0 4px 0 #1a1008, 0 0 8px rgba(255,204,51,0.3);
 }
 
-/* === EXTERNAL AI POOL === */
-.external-ai-pool {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  pointer-events: none;
-}
-.external-agent {
-  position: absolute;
-  text-align: center;
-  opacity: 0.7;
-  transition: opacity 0.5s, filter 0.5s;
-  z-index: 2;
-}
-.external-agent.right-side .external-agent-label {
-  position: relative;
-  left: -16px;
-}
-.external-agent-label {
-  font-size: 8px;
-  white-space: nowrap;
-  text-shadow: 1px 1px 0 #0a1a2e;
-  margin-top: 2px;
-  transition: color 0.3s;
-}
-.external-agent.called {
-  opacity: 1;
-  filter: drop-shadow(0 0 8px currentColor);
-}
-.external-agent.called .external-agent-label {
-  filter: brightness(1.5);
-}
-.external-agent.working {
-  opacity: 1;
-  filter: drop-shadow(0 0 12px currentColor);
-}
-.external-agent.working .external-agent-label {
-  filter: brightness(1.5);
-}
-.external-agent.complete {
-  opacity: 1;
-  filter: drop-shadow(0 0 6px currentColor) brightness(1.2);
-}
-
-@keyframes bob-ocean {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-6px); }
-}
-@keyframes bob-ocean-fast {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-8px); }
-}
-@keyframes sway-ocean {
-  0%, 100% { transform: translateX(0) translateY(0); }
-  25% { transform: translateX(4px) translateY(-4px); }
-  50% { transform: translateX(0) translateY(-6px); }
-  75% { transform: translateX(-4px) translateY(-4px); }
-}
-@keyframes sway-ocean-fast {
-  0%, 100% { transform: translateX(0) translateY(0); }
-  25% { transform: translateX(6px) translateY(-5px); }
-  50% { transform: translateX(0) translateY(-8px); }
-  75% { transform: translateX(-6px) translateY(-5px); }
-}
-@keyframes sway-jelly {
-  0%, 100% { transform: translateX(0) translateY(0) rotate(-2deg); }
-  25% { transform: translateX(5px) translateY(-5px) rotate(0deg); }
-  50% { transform: translateX(0) translateY(-8px) rotate(2deg); }
-  75% { transform: translateX(-5px) translateY(-5px) rotate(0deg); }
-}
-@keyframes sway-jelly-fast {
-  0%, 100% { transform: translateX(0) translateY(0) rotate(-3deg); }
-  25% { transform: translateX(7px) translateY(-6px) rotate(0deg); }
-  50% { transform: translateX(0) translateY(-10px) rotate(3deg); }
-  75% { transform: translateX(-7px) translateY(-6px) rotate(0deg); }
-}
-@keyframes swim-to-dome-left {
-  0% { transform: translateX(0); }
-  100% { transform: translateX(60px); }
-}
-@keyframes swim-to-dome-right {
-  0% { transform: translateX(0); }
-  100% { transform: translateX(-60px); }
-}
-@keyframes jelly-drift {
-  0%, 100% { transform: translateY(0) rotate(-2deg); }
-  50% { transform: translateY(-8px) rotate(2deg); }
-}
-@keyframes jelly-drift-fast {
-  0%, 100% { transform: translateY(0) rotate(-3deg); }
-  50% { transform: translateY(-10px) rotate(3deg); }
-}
 /* Walk animation for agents moving to desk */
 .pool-agent.walking {
   position: fixed !important;
@@ -935,128 +839,6 @@ body {
   50% { transform: translateY(-4px) rotate(0deg); }
   75% { transform: translateY(-2px) rotate(-2deg); }
 }
-@keyframes eel-spark {
-  0%, 90%, 100% { filter: brightness(1); }
-  95% { filter: brightness(1.8) drop-shadow(0 0 4px #ffdd44); }
-}
-
-/* === GPT WHALE (scale 1.5) === */
-.whale-pixel {
-  transform: scale(2);
-  transform-origin: top left;
-  margin-right: 30px;
-  margin-bottom: 24px;
-  color: #4488ff;
-  box-shadow:
-    7px 0 0 #4488ff, 8px 0 0 #4488ff, 9px 0 0 #4488ff, 10px 0 0 #4488ff,
-    5px 1px 0 #4488ff, 6px 1px 0 #66aaff, 7px 1px 0 #88bbff, 8px 1px 0 #88bbff, 9px 1px 0 #88bbff, 10px 1px 0 #66aaff, 11px 1px 0 #4488ff,
-    4px 2px 0 #4488ff, 5px 2px 0 #66aaff, 6px 2px 0 #88bbff, 7px 2px 0 #88bbff, 8px 2px 0 #aaddff, 9px 2px 0 #88bbff, 10px 2px 0 #88bbff, 11px 2px 0 #66aaff, 12px 2px 0 #4488ff,
-    3px 3px 0 #4488ff, 4px 3px 0 #66aaff, 5px 3px 0 #88bbff, 6px 3px 0 #88bbff, 7px 3px 0 #aaddff, 8px 3px 0 #aaddff, 9px 3px 0 #aaddff, 10px 3px 0 #88bbff, 11px 3px 0 #88bbff, 12px 3px 0 #66aaff, 13px 3px 0 #4488ff,
-    2px 4px 0 #4488ff, 3px 4px 0 #66aaff, 4px 4px 0 #88bbff, 5px 4px 0 #aaddff, 6px 4px 0 #aaddff, 7px 4px 0 #aaddff, 8px 4px 0 #aaddff, 9px 4px 0 #aaddff, 10px 4px 0 #aaddff, 11px 4px 0 #88bbff, 12px 4px 0 #66aaff, 13px 4px 0 #4488ff, 14px 4px 0 #4488ff,
-    2px 5px 0 #4488ff, 3px 5px 0 #88bbff, 4px 5px 0 #aaddff, 5px 5px 0 #ffffff, 6px 5px 0 #112244, 7px 5px 0 #aaddff, 8px 5px 0 #aaddff, 9px 5px 0 #aaddff, 10px 5px 0 #aaddff, 11px 5px 0 #88bbff, 12px 5px 0 #66aaff, 13px 5px 0 #4488ff, 14px 5px 0 #2266cc, 15px 5px 0 #4488ff,
-    2px 6px 0 #4488ff, 3px 6px 0 #66aaff, 4px 6px 0 #88bbff, 5px 6px 0 #aaddff, 6px 6px 0 #aaddff, 7px 6px 0 #aaddff, 8px 6px 0 #aaddff, 9px 6px 0 #aaddff, 10px 6px 0 #88bbff, 11px 6px 0 #66aaff, 12px 6px 0 #4488ff, 13px 6px 0 #2266cc, 14px 6px 0 #4488ff,
-    2px 7px 0 #4488ff, 3px 7px 0 #66aaff, 4px 7px 0 #88bbff, 5px 7px 0 #ccddff, 6px 7px 0 #ccddff, 7px 7px 0 #88bbff, 8px 7px 0 #88bbff, 9px 7px 0 #ccddff, 10px 7px 0 #ccddff, 11px 7px 0 #66aaff, 12px 7px 0 #4488ff,
-    3px 8px 0 #4488ff, 4px 8px 0 #66aaff, 5px 8px 0 #88bbff, 6px 8px 0 #88bbff, 7px 8px 0 #66aaff, 8px 8px 0 #66aaff, 9px 8px 0 #88bbff, 10px 8px 0 #88bbff, 11px 8px 0 #4488ff,
-    4px 9px 0 #4488ff, 5px 9px 0 #4488ff, 6px 9px 0 #66aaff, 7px 9px 0 #66aaff, 8px 9px 0 #66aaff, 9px 9px 0 #66aaff, 10px 9px 0 #4488ff, 11px 9px 0 #4488ff,
-    3px 10px 0 #2266cc, 4px 10px 0 #4488ff, 5px 10px 0 #4488ff, 10px 10px 0 #4488ff, 11px 10px 0 #4488ff, 12px 10px 0 #2266cc,
-    2px 11px 0 #2266cc, 3px 11px 0 #4488ff, 11px 11px 0 #4488ff, 12px 11px 0 #2266cc;
-}
-
-/* === GEMINI JELLYFISH (scale 1.5) === */
-.jellyfish-pixel {
-  transform: scale(2);
-  transform-origin: top left;
-  margin-right: 24px;
-  margin-bottom: 30px;
-  color: #cc66ff;
-  box-shadow:
-    6px 0px 0 #cc66ff, 7px 0px 0 #cc66ff, 8px 0px 0 #cc66ff,
-    5px 1px 0 #cc66ff, 6px 1px 0 #dd99ff, 7px 1px 0 #eeccff, 8px 1px 0 #dd99ff, 9px 1px 0 #cc66ff,
-    4px 2px 0 #cc66ff, 5px 2px 0 #dd99ff, 6px 2px 0 #eeccff, 7px 2px 0 #eeccff, 8px 2px 0 #eeccff, 9px 2px 0 #dd99ff, 10px 2px 0 #cc66ff,
-    4px 3px 0 #cc66ff, 5px 3px 0 #eeccff, 6px 3px 0 #ffffff, 7px 3px 0 #220044, 8px 3px 0 #eeccff, 9px 3px 0 #ffffff, 10px 3px 0 #220044,
-    4px 4px 0 #9944cc, 5px 4px 0 #cc66ff, 6px 4px 0 #dd99ff, 7px 4px 0 #dd99ff, 8px 4px 0 #dd99ff, 9px 4px 0 #dd99ff, 10px 4px 0 #9944cc,
-    5px 5px 0 #9944cc, 6px 5px 0 #cc66ff, 7px 5px 0 #cc66ff, 8px 5px 0 #cc66ff, 9px 5px 0 #9944cc,
-    4px 6px 0 #9944cc, 6px 6px 0 #cc66ff, 8px 6px 0 #cc66ff, 10px 6px 0 #9944cc,
-    4px 7px 0 #cc66ff, 6px 7px 0 #9944cc, 8px 7px 0 #9944cc, 10px 7px 0 #cc66ff,
-    3px 8px 0 #9944cc, 7px 8px 0 #9944cc, 11px 8px 0 #9944cc,
-    4px 9px 0 #cc66ff, 6px 9px 0 #cc66ff, 8px 9px 0 #cc66ff, 10px 9px 0 #cc66ff,
-    3px 10px 0 #9944cc, 5px 10px 0 #9944cc, 7px 10px 0 #9944cc, 9px 10px 0 #9944cc, 11px 10px 0 #9944cc,
-    4px 11px 0 #cc66ff, 6px 11px 0 #9944cc, 8px 11px 0 #9944cc, 10px 11px 0 #cc66ff,
-    3px 12px 0 #9944cc, 7px 12px 0 #cc66ff, 11px 12px 0 #9944cc,
-    4px 13px 0 #9944cc, 6px 13px 0 #9944cc, 8px 13px 0 #9944cc, 10px 13px 0 #9944cc;
-}
-
-/* === GROK EEL (scale 1.5) === */
-.eel-pixel {
-  transform: scale(2);
-  transform-origin: top left;
-  margin-right: 24px;
-  margin-bottom: 24px;
-  color: #ffdd44;
-  animation: eel-spark 3s ease-in-out infinite;
-  box-shadow:
-    3px 0px 0 #ffdd44, 4px 0px 0 #ffee66,
-    2px 1px 0 #ffdd44, 3px 1px 0 #ffee66, 4px 1px 0 #ffee66, 5px 1px 0 #ffdd44,
-    1px 2px 0 #ccaa22, 2px 2px 0 #ffee66, 3px 2px 0 #ffffff, 4px 2px 0 #332200, 5px 2px 0 #ffee66, 6px 2px 0 #ccaa22,
-    2px 3px 0 #ffdd44, 3px 3px 0 #ffee66, 4px 3px 0 #ffee66, 5px 3px 0 #ffdd44,
-    3px 4px 0 #ffdd44, 4px 4px 0 #ffee66, 5px 4px 0 #ccaa22,
-    4px 5px 0 #ffdd44, 5px 5px 0 #ffee66, 6px 5px 0 #ccaa22,
-    5px 6px 0 #ffdd44, 6px 6px 0 #ffee66, 7px 6px 0 #ffdd44,
-    6px 7px 0 #ccaa22, 7px 7px 0 #ffee66, 8px 7px 0 #ffdd44,
-    7px 8px 0 #ffdd44, 8px 8px 0 #ffee66, 9px 8px 0 #ccaa22,
-    8px 9px 0 #ffdd44, 9px 9px 0 #ffee66, 10px 9px 0 #ffdd44,
-    9px 10px 0 #ccaa22, 10px 10px 0 #ffee66, 11px 10px 0 #ccaa22,
-    10px 11px 0 #ffdd44, 11px 11px 0 #ffdd44,
-    11px 12px 0 #ccaa22, 12px 12px 0 #ffdd44,
-    12px 13px 0 #ccaa22, 13px 13px 0 #ccaa22;
-}
-
-/* === WHISPER DOLPHIN (scale 1.5) === */
-.dolphin-pixel {
-  transform: scale(2);
-  transform-origin: top left;
-  margin-right: 24px;
-  margin-bottom: 24px;
-  color: #66ddee;
-  box-shadow:
-    10px 0px 0 #66ddee, 11px 0px 0 #66ddee, 12px 0px 0 #66ddee,
-    8px 1px 0 #66ddee, 9px 1px 0 #88eeff, 10px 1px 0 #88eeff, 11px 1px 0 #88eeff, 12px 1px 0 #66ddee, 13px 1px 0 #44aabb,
-    6px 2px 0 #66ddee, 7px 2px 0 #88eeff, 8px 2px 0 #88eeff, 9px 2px 0 #aaf4ff, 10px 2px 0 #aaf4ff, 11px 2px 0 #88eeff, 12px 2px 0 #66ddee,
-    4px 3px 0 #44aabb, 5px 3px 0 #66ddee, 6px 3px 0 #88eeff, 7px 3px 0 #aaf4ff, 8px 3px 0 #aaf4ff, 9px 3px 0 #aaf4ff, 10px 3px 0 #88eeff, 11px 3px 0 #66ddee,
-    3px 4px 0 #44aabb, 4px 4px 0 #66ddee, 5px 4px 0 #88eeff, 6px 4px 0 #aaf4ff, 7px 4px 0 #ffffff, 8px 4px 0 #113344, 9px 4px 0 #88eeff, 10px 4px 0 #66ddee,
-    2px 5px 0 #44aabb, 3px 5px 0 #66ddee, 4px 5px 0 #88eeff, 5px 5px 0 #88eeff, 6px 5px 0 #88eeff, 7px 5px 0 #88eeff, 8px 5px 0 #66ddee, 9px 5px 0 #44aabb,
-    1px 6px 0 #44aabb, 2px 6px 0 #66ddee, 3px 6px 0 #88eeff, 4px 6px 0 #88eeff, 5px 6px 0 #ccddff, 6px 6px 0 #ccddff, 7px 6px 0 #66ddee, 8px 6px 0 #44aabb,
-    2px 7px 0 #44aabb, 3px 7px 0 #66ddee, 4px 7px 0 #88eeff, 5px 7px 0 #ccddff, 6px 7px 0 #ccddff, 7px 7px 0 #66ddee,
-    3px 8px 0 #44aabb, 4px 8px 0 #66ddee, 5px 8px 0 #66ddee, 6px 8px 0 #44aabb,
-    4px 9px 0 #44aabb, 5px 9px 0 #66ddee, 6px 9px 0 #44aabb,
-    3px 10px 0 #44aabb, 4px 10px 0 #66ddee, 5px 10px 0 #44aabb, 8px 10px 0 #66ddee, 9px 10px 0 #66ddee,
-    2px 11px 0 #44aabb, 3px 11px 0 #44aabb, 8px 11px 0 #44aabb, 9px 11px 0 #44aabb, 10px 11px 0 #66ddee;
-}
-
-/* === PERPLEXITY STINGRAY (scale 1.5) === */
-.stingray-pixel {
-  transform: scale(2);
-  transform-origin: top left;
-  margin-right: 24px;
-  margin-bottom: 24px;
-  color: #ff7744;
-  box-shadow:
-    7px 0px 0 #ff7744, 8px 0px 0 #ff7744,
-    5px 1px 0 #ff7744, 6px 1px 0 #ffaa88, 7px 1px 0 #ffaa88, 8px 1px 0 #ffaa88, 9px 1px 0 #ffaa88, 10px 1px 0 #ff7744,
-    3px 2px 0 #cc5522, 4px 2px 0 #ff7744, 5px 2px 0 #ffaa88, 6px 2px 0 #ffcc99, 7px 2px 0 #ffcc99, 8px 2px 0 #ffcc99, 9px 2px 0 #ffcc99, 10px 2px 0 #ffaa88, 11px 2px 0 #ff7744, 12px 2px 0 #cc5522,
-    2px 3px 0 #cc5522, 3px 3px 0 #ff7744, 4px 3px 0 #ffaa88, 5px 3px 0 #ffcc99, 6px 3px 0 #ffffff, 7px 3px 0 #331100, 8px 3px 0 #ffcc99, 9px 3px 0 #ffffff, 10px 3px 0 #331100, 11px 3px 0 #ffaa88, 12px 3px 0 #ff7744, 13px 3px 0 #cc5522,
-    1px 4px 0 #cc5522, 2px 4px 0 #ff7744, 3px 4px 0 #ffaa88, 4px 4px 0 #ffcc99, 5px 4px 0 #ffcc99, 6px 4px 0 #ffcc99, 7px 4px 0 #ffcc99, 8px 4px 0 #ffcc99, 9px 4px 0 #ffcc99, 10px 4px 0 #ffcc99, 11px 4px 0 #ffaa88, 12px 4px 0 #ff7744, 13px 4px 0 #cc5522, 14px 4px 0 #cc5522,
-    2px 5px 0 #cc5522, 3px 5px 0 #ff7744, 4px 5px 0 #ffaa88, 5px 5px 0 #ffaa88, 6px 5px 0 #cc5522, 7px 5px 0 #cc5522, 8px 5px 0 #cc5522, 9px 5px 0 #cc5522, 10px 5px 0 #ffaa88, 11px 5px 0 #ffaa88, 12px 5px 0 #ff7744, 13px 5px 0 #cc5522,
-    3px 6px 0 #cc5522, 4px 6px 0 #ff7744, 5px 6px 0 #ff7744, 6px 6px 0 #ff7744, 7px 6px 0 #cc5522, 8px 6px 0 #cc5522, 9px 6px 0 #ff7744, 10px 6px 0 #ff7744, 11px 6px 0 #ff7744, 12px 6px 0 #cc5522,
-    5px 7px 0 #cc5522, 6px 7px 0 #cc5522, 7px 7px 0 #ff7744, 8px 7px 0 #ff7744, 9px 7px 0 #cc5522, 10px 7px 0 #cc5522,
-    7px 8px 0 #cc5522, 8px 8px 0 #cc5522,
-    7px 9px 0 #ff7744, 8px 9px 0 #cc5522,
-    7px 10px 0 #cc5522, 8px 10px 0 #ff7744,
-    8px 11px 0 #cc5522,
-    8px 12px 0 #cc5522,
-    8px 13px 0 #993311;
-}
-
 /* === SEAHORSE Writer (scale 2.5 for pool) === */
 .seahorse-pixel {
   transform: scale(2.5);
@@ -1128,102 +910,7 @@ body {
     4px 10px 0 #8855cc, 11px 10px 0 #8855cc;
 }
 
-/* === WORKSPACE CARGO CRATE === */
-.cargo-crate {
-  position: absolute;
-  z-index: 12;
-  cursor: pointer;
-  transition: filter 0.5s, opacity 0.5s;
-}
-.cargo-crate .crate-pixel {
-  transform: scale(2);
-  transform-origin: top left;
-  box-shadow:
-    /* top */
-    2px 0 0 #8B6914, 3px 0 0 #A0792B, 4px 0 0 #A0792B, 5px 0 0 #A0792B, 6px 0 0 #A0792B, 7px 0 0 #A0792B, 8px 0 0 #A0792B, 9px 0 0 #8B6914,
-    /* body */
-    1px 1px 0 #8B6914, 2px 1px 0 #C4943E, 3px 1px 0 #D4A44E, 4px 1px 0 #D4A44E, 5px 1px 0 #8B6914, 6px 1px 0 #D4A44E, 7px 1px 0 #D4A44E, 8px 1px 0 #C4943E, 9px 1px 0 #8B6914, 10px 1px 0 #8B6914,
-    1px 2px 0 #8B6914, 2px 2px 0 #D4A44E, 3px 2px 0 #E4B45E, 4px 2px 0 #E4B45E, 5px 2px 0 #8B6914, 6px 2px 0 #E4B45E, 7px 2px 0 #E4B45E, 8px 2px 0 #D4A44E, 9px 2px 0 #8B6914, 10px 2px 0 #8B6914,
-    1px 3px 0 #6B4914, 2px 3px 0 #8B6914, 3px 3px 0 #8B6914, 4px 3px 0 #8B6914, 5px 3px 0 #6B4914, 6px 3px 0 #8B6914, 7px 3px 0 #8B6914, 8px 3px 0 #8B6914, 9px 3px 0 #6B4914, 10px 3px 0 #6B4914,
-    1px 4px 0 #8B6914, 2px 4px 0 #C4943E, 3px 4px 0 #D4A44E, 4px 4px 0 #D4A44E, 5px 4px 0 #8B6914, 6px 4px 0 #D4A44E, 7px 4px 0 #D4A44E, 8px 4px 0 #C4943E, 9px 4px 0 #8B6914, 10px 4px 0 #8B6914,
-    1px 5px 0 #8B6914, 2px 5px 0 #D4A44E, 3px 5px 0 #E4B45E, 4px 5px 0 #E4B45E, 5px 5px 0 #8B6914, 6px 5px 0 #E4B45E, 7px 5px 0 #E4B45E, 8px 5px 0 #D4A44E, 9px 5px 0 #8B6914, 10px 5px 0 #8B6914,
-    /* bottom */
-    2px 6px 0 #6B4914, 3px 6px 0 #8B6914, 4px 6px 0 #8B6914, 5px 6px 0 #6B4914, 6px 6px 0 #8B6914, 7px 6px 0 #8B6914, 8px 6px 0 #6B4914, 9px 6px 0 #6B4914;
-}
-.cargo-crate .crate-label {
-  font-family: 'Press Start 2P', monospace;
-  font-size: 7px;
-  color: #8B6914;
-  text-align: center;
-  margin-top: 16px;
-  text-shadow: 1px 1px 0 #0a1a2e;
-  white-space: nowrap;
-}
-.cargo-crate.ws-active {
-  filter: drop-shadow(0 0 6px rgba(0,212,255,0.4));
-  animation: bob-slow 3s ease-in-out infinite;
-}
-.cargo-crate.ws-standby { opacity: 0.7; }
-.cargo-crate.ws-hold { opacity: 0.4; }
-.cargo-crate.ws-old { opacity: 0.4; filter: sepia(0.3) brightness(0.8); }
-.cargo-crate.edit-mode {
-  cursor: grab;
-  border: 1px dashed rgba(0,212,255,0.5);
-  border-radius: 4px;
-}
-.cargo-crate.edit-mode:active { cursor: grabbing; }
-.cargo-crate.dragging {
-  z-index: 200;
-  filter: drop-shadow(0 0 10px rgba(0,212,255,0.6)) !important;
-  opacity: 1 !important;
-}
-.btn-edit-crates, .btn-save-crates {
-  position: absolute;
-  bottom: 46px;
-  font-family: 'Press Start 2P', monospace;
-  font-size: 7px;
-  padding: 5px 12px;
-  border-radius: 4px;
-  cursor: pointer;
-  z-index: 101;
-}
-.btn-edit-crates { right: 180px; border: 1px solid rgba(255,159,67,0.4); background: rgba(255,159,67,0.1); color: var(--orange); }
-.btn-edit-crates.active { background: rgba(255,159,67,0.3); border-color: var(--orange); }
-.btn-save-crates { right: 260px; border: 1px solid rgba(38,222,129,0.5); background: rgba(38,222,129,0.15); color: var(--green); display: none; }
 
-/* Crate popup */
-.crate-popup {
-  position: absolute;
-  background: rgba(5,15,35,0.92);
-  border: 2px solid rgba(0,212,255,0.4);
-  border-radius: 6px;
-  padding: 8px 12px;
-  font-family: 'Press Start 2P', monospace;
-  font-size: 7px;
-  color: #88bbcc;
-  z-index: 200;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.3s;
-  min-width: 140px;
-  line-height: 2;
-}
-.crate-popup.visible { opacity: 1; }
-.crate-popup .popup-title { color: var(--cyan); font-size: 9px; margin-bottom: 4px; }
-.crate-popup .popup-dept { color: var(--pink); }
-.crate-popup .popup-date { color: #557788; }
-.crate-popup .popup-status { color: var(--green); }
-
-/* === ENTRANCE ANIMATION === */
-@keyframes entrance-bounce {
-  0% { transform: translateY(8px) scale(0.9); opacity: 0.3; }
-  50% { transform: translateY(-10px) scale(1.05); }
-  70% { transform: translateY(2px) scale(0.98); }
-  100% { transform: translateY(0) scale(1); opacity: 1; }
-}
-.pool-agent.entrance-anim > div:nth-child(2) {
-  animation: entrance-bounce 0.6s ease-out forwards !important;
-}
 
 /* === AGENT SPEECH BUBBLE === */
 .agent-speech {
@@ -1295,6 +982,115 @@ body {
 .pool-agent.flinch > div:nth-child(2) {
   animation: flinch 0.35s ease-out !important;
 }
+
+/* === WORKSPACE ZONES === */
+.workspace-zones-container {
+  position: absolute;
+  left: 10px; top: 15px;
+  width: 690px; height: 480px;
+  z-index: 5;
+  display: grid;
+  gap: 8px;
+  padding: 0;
+}
+.workspace-zones-container.cols-1 { grid-template-columns: 1fr; }
+.workspace-zones-container.cols-2 { grid-template-columns: 1fr 1fr; }
+.workspace-zones-container.cols-2x2 { grid-template-columns: 1fr 1fr; }
+.workspace-zones-container.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+.workspace-zone {
+  position: relative;
+  border-radius: 12px;
+  background: rgba(0,212,255,0.04);
+  border: 1px dashed rgba(0,212,255,0.25);
+  transition: border-color 0.3s, box-shadow 0.3s, opacity 0.3s;
+  min-height: 160px;
+  overflow: hidden;
+}
+.workspace-zone.ws-active {
+  border-color: rgba(0,212,255,0.4);
+  box-shadow: inset 0 0 20px rgba(0,212,255,0.05);
+}
+.workspace-zone.ws-standby { opacity: 0.65; }
+.workspace-zone.ws-hold { opacity: 0.4; }
+.workspace-zone.highlighted {
+  border-color: var(--pink) !important;
+  box-shadow: inset 0 0 30px rgba(255,107,157,0.1), 0 0 15px rgba(255,107,157,0.15) !important;
+}
+.workspace-zone .ws-label {
+  position: absolute;
+  top: 8px; left: 12px;
+  font-size: 11px;
+  color: var(--cyan);
+  z-index: 6;
+}
+.workspace-zone .ws-sublabel {
+  position: absolute;
+  top: 24px; left: 12px;
+  font-size: 9px;
+  color: rgba(0,212,255,0.5);
+  z-index: 6;
+}
+.workspace-zone .ws-eye {
+  display: none;
+  font-size: 10px;
+  margin-left: 6px;
+}
+.workspace-zone.highlighted .ws-eye { display: inline; }
+.no-workspaces {
+  position: absolute;
+  left: 50%; top: 200px;
+  transform: translateX(-50%);
+  font-size: 10px;
+  color: #446677;
+  z-index: 6;
+}
+
+/* === SKILLS PANEL === */
+.skills-panel {
+  position: absolute;
+  bottom: 30px; left: 90px;
+  width: 180px;
+  max-height: 58px;
+  background: rgba(5,15,35,0.7);
+  border-radius: 6px 0 0 0;
+  padding: 4px 8px;
+  z-index: 98;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.skills-panel::-webkit-scrollbar { width: 3px; }
+.skills-panel::-webkit-scrollbar-track { background: transparent; }
+.skills-panel::-webkit-scrollbar-thumb { background: rgba(100,150,200,0.3); border-radius: 2px; }
+.skills-panel-title {
+  font-size: 7px;
+  color: #557788;
+  margin-bottom: 3px;
+  letter-spacing: 2px;
+}
+.skill-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 7px;
+  color: #6688aa;
+  line-height: 1.8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.skill-dot {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.skill-dot.idle { background: #557788; }
+.skill-dot.running { background: #26de81; box-shadow: 0 0 4px rgba(38,222,129,0.6); animation: blink-dot 1.5s ease-in-out infinite; }
+.skill-dot.error { background: #ff4444; box-shadow: 0 0 4px rgba(255,68,68,0.6); }
+.skill-trigger {
+  font-size: 6px;
+  color: #446677;
+  margin-left: auto;
+}
 </style>
 </head>
 <body>
@@ -1317,156 +1113,10 @@ body {
       <defs>
         <filter id="glow"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
       </defs>
-      <path id="line-thread"    class="conn-line" d="M520,580 C350,400 150,250 90,140" />
-      <path id="line-news"      class="conn-line" d="M520,580 C450,400 350,250 300,140" />
-      <path id="line-shorts"    class="conn-line" d="M520,580 C520,400 510,250 510,140" />
-      <path id="line-trading"   class="conn-line" d="M520,580 C350,520 230,460 170,400" />
-      <path id="line-marketing" class="conn-line" d="M520,580 C550,520 540,460 525,400" />
     </svg>
 
-    <!-- ============================== -->
-    <!--  콘텐츠팀 (active, top)         -->
-    <!-- ============================== -->
-    <div class="dept-zone" id="dept-content"
-         style="left:10px; top:15px; width:660px; height:260px;
-                background: rgba(0,212,255,0.06);
-                border: 1px dashed rgba(0,212,255,0.3);">
-      <div class="dept-label" style="color: var(--cyan);">콘텐츠팀 <span class="dept-eye">👀</span></div>
-      <div class="dept-sublabel" style="color: rgba(0,212,255,0.5);">스레드 · 뉴스 · 쇼츠</div>
-
-      <!-- 스레드담당 데스크 -->
-      <div class="desk-station" id="desk-thread" style="left:20px; top:45px;">
-        <div class="desk-assignment-label" style="left:10px; top:0; color: var(--cyan);">스레드담당</div>
-        <div class="context-icon" style="left:100px; top:5px;"></div>
-        <div class="desk" style="left:0; top:85px;"><div class="desk-surface"></div></div>
-        <div class="monitor" style="left:8px; top:68px;">
-          <div class="monitor-frame"><div class="monitor-screen" id="screen-thread">
-            <div class="screen-line" style="background:#00d4ff;"></div>
-            <div class="screen-line" style="background:#ffffff; width:60%; animation-delay:0.5s;"></div>
-            <div class="screen-line" style="background:#00d4ff; animation-delay:1s;"></div>
-          </div></div><div class="monitor-stand"></div>
-        </div>
-        <div class="monitor" style="left:52px; top:72px;">
-          <div class="monitor-frame" style="width:30px; height:24px;"><div class="monitor-screen">
-            <div class="screen-line" style="background:#66ddff; height:1px;"></div>
-            <div class="screen-line" style="background:#44bbdd; height:1px; animation-delay:0.3s;"></div>
-          </div></div><div class="monitor-stand" style="width:10px;"></div>
-        </div>
-        <div class="mug" style="left:96px; top:92px;"><div class="mug-steam"></div></div>
-        <div class="agent-slot" id="slot-thread" style="left:28px; top:16px;"></div>
-        <div class="hp-bar-wrap" id="hp-wrap-thread" style="left:16px; top:58px; display:none;"><div class="hp-bar" id="hp-desk-thread"></div></div>
-      </div>
-
-      <!-- 뉴스담당 데스크 -->
-      <div class="desk-station" id="desk-news" style="left:230px; top:45px;">
-        <div class="desk-assignment-label" style="left:14px; top:0; color: var(--green);">뉴스담당</div>
-        <div class="context-icon" style="left:100px; top:5px;"></div>
-        <div class="desk" style="left:0; top:85px;"><div class="desk-surface"></div></div>
-        <div class="monitor" style="left:8px; top:68px;">
-          <div class="monitor-frame"><div class="monitor-screen" id="screen-news">
-            <div class="screen-line" style="background:#26de81;"></div>
-            <div class="screen-line" style="background:#00d4ff; animation-delay:0.4s;"></div>
-            <div class="screen-line" style="background:#26de81; width:50%; animation-delay:0.8s;"></div>
-          </div></div><div class="monitor-stand"></div>
-        </div>
-        <div class="monitor" style="left:52px; top:72px;">
-          <div class="monitor-frame" style="width:30px; height:24px;"><div class="monitor-screen">
-            <div class="screen-line" style="background:#44ddaa; height:1px;"></div>
-            <div class="screen-line" style="background:#22bb88; height:1px; animation-delay:0.5s;"></div>
-          </div></div><div class="monitor-stand" style="width:10px;"></div>
-        </div>
-        <div class="book" style="left:90px; top:92px; width:14px; height:10px; background:#c44a3f;"></div>
-        <div class="book" style="left:92px; top:86px; width:12px; height:8px; background:#3f7ac4;"></div>
-        <div class="mug" style="left:48px; top:92px;"><div class="mug-steam"></div></div>
-        <div class="agent-slot" id="slot-news" style="left:28px; top:16px;"></div>
-        <div class="hp-bar-wrap" id="hp-wrap-news" style="left:16px; top:58px; display:none;"><div class="hp-bar" id="hp-desk-news"></div></div>
-      </div>
-
-      <!-- 쇼츠담당 데스크 (dim) -->
-      <div class="desk-station" id="desk-shorts" style="left:440px; top:45px; opacity:0.5;">
-        <div class="desk-assignment-label" style="left:14px; top:0; color: var(--purple);">쇼츠담당</div>
-        <div class="context-icon" style="left:100px; top:5px;"></div>
-        <div class="desk" style="left:0; top:85px;"><div class="desk-surface"></div></div>
-        <div class="monitor" style="left:20px; top:68px;">
-          <div class="monitor-frame" style="width:42px; height:30px;">
-            <div class="monitor-screen" id="screen-shorts" style="background:#0a0a1e;">
-              <div style="position:absolute; left:8px; top:3px; width:12px; height:18px; background:rgba(153,68,204,0.2); border:1px solid rgba(153,68,204,0.3); border-radius:1px;"></div>
-            </div>
-          </div>
-          <div class="monitor-stand" style="width:14px;"></div>
-        </div>
-        <div class="mug" style="left:76px; top:92px;"></div>
-        <div class="agent-slot" id="slot-shorts" style="left:28px; top:16px;"></div>
-        <div class="hp-bar-wrap" id="hp-wrap-shorts" style="left:16px; top:58px; display:none;"><div class="hp-bar" id="hp-desk-shorts"></div></div>
-      </div>
-    </div>
-
-    <!-- ================================ -->
-    <!--  트레이딩팀 (standby, bottom-left) -->
-    <!-- ================================ -->
-    <div class="dept-zone" id="dept-trading"
-         style="left:10px; top:290px; width:330px; height:200px;
-                background: rgba(38,222,129,0.04);
-                border: 1px dashed rgba(38,222,129,0.2);
-                opacity: 0.65;">
-      <div class="dept-label" style="color: var(--green);">트레이딩팀 <span class="dept-eye">👀</span></div>
-      <div class="dept-sublabel" style="color: rgba(38,222,129,0.4);">API 키 대기</div>
-
-      <!-- 자동매매담당 데스크 -->
-      <div class="desk-station" id="desk-trading" style="left:100px; top:40px;">
-        <div class="desk-assignment-label" style="left:2px; top:0; color: var(--green);">자동매매담당</div>
-        <div class="context-icon" style="left:100px; top:5px;"></div>
-        <div class="desk" style="left:0; top:85px;"><div class="desk-surface"></div></div>
-        <div class="monitor" style="left:10px; top:68px;">
-          <div class="monitor-frame" style="width:42px; height:30px;">
-            <div class="monitor-screen" id="screen-trading" style="background:#0a0a1e;">
-              <div class="candle-wrap" id="candle-chart">
-                <div class="candle" style="height:10px; background:#ff4444;"></div>
-                <div class="candle" style="height:14px; background:#44ff66;"></div>
-                <div class="candle" style="height:8px; background:#ff4444;"></div>
-                <div class="candle" style="height:12px; background:#44ff66;"></div>
-                <div class="candle" style="height:6px; background:#ff4444;"></div>
-                <div class="candle" style="height:11px; background:#44ff66;"></div>
-                <div class="candle" style="height:9px; background:#ff4444;"></div>
-              </div>
-            </div>
-          </div>
-          <div class="monitor-stand" style="width:14px;"></div>
-        </div>
-        <div class="book" style="left:6px; top:92px; width:14px; height:8px; background:#8844aa;"></div>
-        <div class="mug" style="left:96px; top:92px;"><div class="mug-steam" style="opacity:0.15; height:5px;"></div></div>
-        <div class="agent-slot" id="slot-trading" style="left:28px; top:16px;"></div>
-        <div class="hp-bar-wrap" id="hp-wrap-trading" style="left:16px; top:58px; display:none;"><div class="hp-bar" id="hp-desk-trading"></div></div>
-      </div>
-    </div>
-
-    <!-- ======================================= -->
-    <!--  핸드폰마케팅팀 (hold, bottom-right)       -->
-    <!-- ======================================= -->
-    <div class="dept-zone" id="dept-phone"
-         style="left:360px; top:290px; width:330px; height:200px;
-                background: rgba(255,211,42,0.03);
-                border: 1px dashed rgba(255,211,42,0.15);
-                opacity: 0.4;">
-      <div class="dept-label" style="color: var(--yellow);">핸드폰마케팅팀 <span class="dept-eye">👀</span></div>
-      <div class="dept-sublabel" style="color: rgba(255,211,42,0.3);">보류</div>
-
-      <!-- 광고배포담당 데스크 -->
-      <div class="desk-station" id="desk-marketing" style="left:100px; top:40px;">
-        <div class="desk-assignment-label" style="left:2px; top:0; color: var(--yellow);">광고배포담당</div>
-        <div class="context-icon" style="left:100px; top:5px;"></div>
-        <div class="desk" style="left:0; top:85px;"><div class="desk-surface"></div></div>
-        <div class="monitor" style="left:20px; top:68px;">
-          <div class="monitor-frame" style="width:38px; height:28px;">
-            <div class="monitor-screen" id="screen-marketing" style="background:#050508;"></div>
-          </div>
-          <div class="monitor-stand" style="width:12px;"></div>
-        </div>
-        <div class="mug" style="left:76px; top:92px;"></div>
-        <div class="agent-slot" id="slot-marketing" style="left:28px; top:16px;"></div>
-        <div class="hp-bar-wrap" id="hp-wrap-marketing" style="left:16px; top:58px; display:none;"><div class="hp-bar" id="hp-desk-marketing"></div></div>
-      </div>
-    </div>
+    <!-- Dynamic Workspace Zones (rendered by JS) -->
+    <div id="workspace-zones"></div>
 
     <!-- ========================= -->
     <!--  AGENT POOL               -->
@@ -1526,8 +1176,6 @@ body {
     <!-- ========================= -->
     <!--  WORKSPACE CARGO CRATES   -->
     <!-- ========================= -->
-    <div id="workspace-crates"></div>
-    <div id="crate-popup" class="crate-popup"></div>
 
     <!-- ========================= -->
     <!--  PM — heysquid (fixed)    -->
@@ -1596,55 +1244,15 @@ body {
 
   </div><!-- end glass-dome -->
 
-  <!-- ========================= -->
-  <!--  EXTERNAL AI POOL (ocean) -->
-  <!-- ========================= -->
-  <div class="external-ai-pool">
-    <!-- GPT Whale (왼쪽 상단 바다) -->
-    <div class="external-agent" id="ext-gpt" style="left:5px; top:130px; color:#4488ff;">
-      <div style="animation: sway-ocean 5s ease-in-out infinite;">
-        <div class="pixel-char whale-pixel"></div>
-      </div>
-      <div class="external-agent-label" style="color:#4488ff;">GPT</div>
-    </div>
-
-    <!-- Grok Eel (왼쪽 하단 바다) -->
-    <div class="external-agent" id="ext-grok" style="left:8px; top:480px; color:#ffdd44;">
-      <div style="animation: sway-ocean 4s ease-in-out infinite 0.5s;">
-        <div class="pixel-char eel-pixel"></div>
-      </div>
-      <div class="external-agent-label" style="color:#ffdd44;">Grok</div>
-    </div>
-
-    <!-- Gemini Jellyfish (오른쪽 상단 바다) -->
-    <div class="external-agent right-side" id="ext-gemini" style="left:1140px; top:100px; color:#cc66ff;">
-      <div style="animation: sway-jelly 6s ease-in-out infinite;">
-        <div class="pixel-char jellyfish-pixel"></div>
-      </div>
-      <div class="external-agent-label" style="color:#cc66ff;">Gemini</div>
-    </div>
-
-    <!-- Perplexity Stingray (오른쪽 중간 바다) -->
-    <div class="external-agent right-side" id="ext-perplexity" style="left:1140px; top:360px; color:#ff7744;">
-      <div style="animation: sway-ocean 5.5s ease-in-out infinite 0.3s;">
-        <div class="pixel-char stingray-pixel"></div>
-      </div>
-      <div class="external-agent-label" style="color:#ff7744;">Perplexity</div>
-    </div>
-
-    <!-- Whisper Dolphin (오른쪽 하단 바다) -->
-    <div class="external-agent right-side" id="ext-whisper" style="left:1140px; top:580px; color:#66ddee;">
-      <div style="animation: sway-ocean 4.5s ease-in-out infinite 1s;">
-        <div class="pixel-char dolphin-pixel"></div>
-      </div>
-      <div class="external-agent-label" style="color:#66ddee;">Whisper</div>
-    </div>
-  </div>
-
   <!-- Title Bar -->
   <div class="title-bar">
     <h1>heysquid HQ</h1>
     <div class="subtitle">DEEP SEA AGENT COMMAND CENTER</div>
+  </div>
+
+  <!-- Skills Panel -->
+  <div class="skills-panel" id="skills-panel">
+    <div class="skills-panel-title">SKILLS</div>
   </div>
 
   <!-- Mission Log -->
@@ -1668,8 +1276,6 @@ body {
 
   <!-- DEMO Button -->
   <button class="btn-demo" id="btnDemo" onclick="runDemo()">DEMO</button>
-  <button class="btn-edit-crates" id="btnEditCrates">EDIT</button>
-  <button class="btn-save-crates" id="btnSaveCrates">SAVE</button>
 
   <!-- Keyboard hint -->
   <div class="keyboard-hint">↑↓←→ Patrol &nbsp; SPACE: Commander's words</div>
@@ -1682,8 +1288,7 @@ body {
 <script>
 // ===== CONSTANTS =====
 var AGENTS = ['researcher', 'developer', 'reviewer', 'tester', 'writer'];
-var DESKS = ['thread', 'news', 'shorts', 'trading', 'marketing'];
-var EXTERNAL_AIS = ['gpt', 'gemini', 'grok', 'whisper', 'perplexity'];
+var DESKS = [];
 var AGENT_PIXEL_CLASS = {
   researcher: 'octopus-pixel',
   developer: 'shark-pixel',
@@ -1698,11 +1303,7 @@ var mode = 'connecting';
 var prevLogLength = 0;
 var demoRunning = false;
 
-var DEPARTMENTS = [
-  { id: 'dept-content', left: 10, top: 15, width: 660, height: 260 },
-  { id: 'dept-trading', left: 10, top: 290, width: 330, height: 200 },
-  { id: 'dept-phone', left: 360, top: 290, width: 330, height: 200 }
-];
+var DEPARTMENTS = []; // dynamically populated
 
 // ===== BUBBLES =====
 (function() {
@@ -1751,17 +1352,6 @@ var DEPARTMENTS = [
   setInterval(createFish, 5000 + Math.random() * 4000);
 })();
 
-// ===== CANDLESTICK CHART ANIMATION =====
-setInterval(function() {
-  var chart = document.getElementById('candle-chart');
-  if (!chart) return;
-  var candles = chart.children;
-  for (var i = 0; i < candles.length; i++) {
-    var h = 4 + Math.floor(Math.random() * 13);
-    candles[i].style.height = h + 'px';
-    candles[i].style.background = Math.random() > 0.5 ? '#44ff66' : '#ff4444';
-  }
-}, 4000);
 
 // ===== SCREEN FLICKER =====
 setInterval(function() {
@@ -1775,17 +1365,6 @@ setInterval(function() {
   }
 }, 7000);
 
-// ===== MARKETING SCREEN FLICKER (every ~30s) =====
-setInterval(function() {
-  var screen = document.getElementById('screen-marketing');
-  if (!screen) return;
-  screen.style.background = '#0a1a0a';
-  screen.innerHTML = '<div class="screen-line" style="background:#553322;height:1px;margin-top:4px;"></div>';
-  setTimeout(function() {
-    screen.style.background = '#050508';
-    screen.innerHTML = '';
-  }, 300);
-}, 30000);
 
 // ===== ARROW KEY DIVER MOVEMENT =====
 (function() {
@@ -1815,18 +1394,32 @@ setInterval(function() {
     return null;
   }
 
-  // Desk bounds (relative to dome)
-  var DESK_BOUNDS = [
-    { id: 'desk-thread', left: 30, top: 60, width: 120, height: 140 },
-    { id: 'desk-news', left: 240, top: 60, width: 120, height: 140 },
-    { id: 'desk-shorts', left: 450, top: 60, width: 120, height: 140 },
-    { id: 'desk-trading', left: 110, top: 330, width: 120, height: 140 },
-    { id: 'desk-marketing', left: 460, top: 330, width: 120, height: 140 }
-  ];
+  // Desk bounds dynamically computed from rendered desks
+  function getDeskBounds() {
+    var bounds = [];
+    var domeEl = document.getElementById('dome');
+    if (!domeEl) return bounds;
+    var domeRect = domeEl.getBoundingClientRect();
+    var scale = domeRect.width / 1040;
+    DESKS.forEach(function(desk) {
+      var deskEl = document.getElementById('desk-' + desk);
+      if (!deskEl) return;
+      var r = deskEl.getBoundingClientRect();
+      bounds.push({
+        id: 'desk-' + desk,
+        left: (r.left - domeRect.left) / scale,
+        top: (r.top - domeRect.top) / scale,
+        width: r.width / scale,
+        height: r.height / scale
+      });
+    });
+    return bounds;
+  }
 
   function checkDeskProximity(cx, cy) {
-    for (var i = 0; i < DESK_BOUNDS.length; i++) {
-      var d = DESK_BOUNDS[i];
+    var bounds = getDeskBounds();
+    for (var i = 0; i < bounds.length; i++) {
+      var d = bounds[i];
       if (cx >= d.left - 20 && cx <= d.left + d.width + 20 && cy >= d.top - 20 && cy <= d.top + d.height + 20) {
         return d.id;
       }
@@ -2220,41 +1813,16 @@ function loadDashboardData(data) {
     if (newAgents.length > 0) AGENTS = newAgents;
   }
 
-  // Workspace cargo crates
+  // Workspace zones
   if (data.workspaces) {
-    renderWorkspaceCrates(data.workspaces);
+    renderWorkspaceZones(data.workspaces);
   }
 
-  // External AI agents
-  if (data.external_ai) {
-    EXTERNAL_AIS.forEach(function(ai) {
-      var el = document.getElementById('ext-' + ai);
-      if (!el) return;
-      var info = data.external_ai[ai];
-      el.classList.remove('called', 'working', 'complete');
-      if (info && info.status && info.status !== 'idle') {
-        el.classList.add(info.status);
-        if (info.status === 'called') {
-          var isLeft = ['gpt', 'grok'].indexOf(ai) !== -1;
-          el.style.animation = isLeft ? 'swim-to-dome-left 1s forwards' : 'swim-to-dome-right 1s forwards';
-        }
-        var animWrap = el.querySelector('div > div:first-child');
-        if (animWrap && info.status === 'working') {
-          var orig = animWrap.style.animation;
-          if (orig.indexOf('jelly') !== -1 || orig.indexOf('sway-jelly') !== -1) animWrap.style.animation = 'sway-jelly-fast 2s ease-in-out infinite';
-          else animWrap.style.animation = 'sway-ocean-fast 2s ease-in-out infinite';
-        }
-      } else {
-        el.style.animation = '';
-      }
-    });
-  } else {
-    // No external_ai data: reset all
-    EXTERNAL_AIS.forEach(function(ai) {
-      var el = document.getElementById('ext-' + ai);
-      if (el) el.classList.remove('called', 'working', 'complete');
-    });
+  // Skills panel
+  if (data.skills) {
+    renderSkillsPanel(data.skills);
   }
+
 }
 
 // ===== PM SPEECH BUBBLE =====
@@ -2279,13 +1847,6 @@ var PM_SPEECHES = {
     "Hull integrity holding",
     "Sonar contact — tracking...",
     "Almost at target depth"
-  ],
-  calling_external: [
-    "Sending distress signal!",
-    "Allied submarine responding!",
-    "Opening comms channel...",
-    "Requesting deep sea backup!",
-    "Signal sent — awaiting ping"
   ],
   complete: [
     "Surface! Mission accomplished!",
@@ -2314,23 +1875,6 @@ function showPmSpeech(category) {
   el.textContent = msgs[Math.floor(Math.random() * msgs.length)];
   el.classList.add('visible');
   setTimeout(function() { el.classList.remove('visible'); }, 3000);
-}
-
-// ===== EXTERNAL AI CALL ANIMATION =====
-function callExternalAI(name) {
-  var el = document.getElementById('ext-' + name);
-  if (!el) return;
-  el.classList.add('called');
-  var isLeft = ['gpt', 'grok'].indexOf(name) !== -1;
-  el.style.animation = isLeft ? 'swim-to-dome-left 1s forwards' : 'swim-to-dome-right 1s forwards';
-  showPmSpeech('calling_external');
-}
-
-function returnExternalAI(name) {
-  var el = document.getElementById('ext-' + name);
-  if (!el) return;
-  el.classList.remove('called', 'working', 'complete');
-  el.style.animation = '';
 }
 
 // ===== POLLING =====
@@ -2372,8 +1916,6 @@ async function runDemo() {
   btn.textContent = 'RUNNING...';
   prevLogLength = 0;
 
-  var extIdle = { gpt:{status:'idle',task:''}, gemini:{status:'idle',task:''}, grok:{status:'idle',task:''}, whisper:{status:'idle',task:''}, perplexity:{status:'idle',task:''} };
-
   var base = {
     last_updated: getTime(), current_task: '',
     researcher: {status:'idle',task:'',hp:100,assignment:null},
@@ -2381,6 +1923,14 @@ async function runDemo() {
     reviewer: {status:'idle',task:'',hp:100,assignment:null},
     tester: {status:'idle',task:'',hp:100,assignment:null},
     writer: {status:'idle',task:'',hp:100,assignment:null},
+    workspaces: {
+      'project-a': {status:'active', description:'Main project', last_active: new Date().toISOString().slice(0,10)},
+      'project-b': {status:'standby', description:'Side project', last_active: new Date().toISOString().slice(0,10)}
+    },
+    skills: {
+      'briefing': {name:'briefing', description:'Daily briefing', trigger:'schedule', schedule:'09:00', status:'idle', next_run:'2026-02-21T09:00:00', run_count:3, last_result:'success', enabled:true},
+      'deploy': {name:'deploy', description:'Auto deploy', trigger:'manual', schedule:'', status:'idle', next_run:null, run_count:0, last_result:null, enabled:true}
+    },
     mission_log: [{time: getTime(), agent: 'system', message: 'Demo sequence initiated'}]
   };
   loadDashboardData(base);
@@ -2399,124 +1949,134 @@ async function runDemo() {
   }
   var logs = [{time: getTime(), agent: 'system', message: 'Demo sequence initiated'}];
 
-  // [1s] Researcher + Developer → simultaneous dispatch (HP drop dramatic)
-  logs.push({time: getTime(), agent: 'pm', message: 'Dual deploy — Explorer + Engineer to Thread sector!'});
-  logs.push({time: getTime(), agent: 'researcher', message: 'Diving to analyze feed structure...'});
-  logs.push({time: getTime(), agent: 'developer', message: 'Spinning up reply engine...'});
+  // [1s] Researcher + Developer dispatched to workspace desks
+  logs.push({time: getTime(), agent: 'pm', message: 'Dual deploy \u2014 Explorer + Engineer!'});
+  logs.push({time: getTime(), agent: 'researcher', message: 'Diving to analyze structure...'});
+  logs.push({time: getTime(), agent: 'developer', message: 'Spinning up engine...'});
   loadDashboardData(snap({
-    current_task: 'Thread reply automation',
-    researcher: {status:'working', task:'Feed analysis', hp:45, assignment:'thread'},
-    developer: {status:'working', task:'Reply engine', hp:55, assignment:'news'}
+    current_task: 'Project-A automation',
+    researcher: {status:'working', task:'Analysis', hp:45, assignment:'project-a'},
+    developer: {status:'working', task:'Engine', hp:55, assignment:'project-b'}
   }, logs));
   showPmSpeech('dispatching');
   await sleep(2000);
 
-  // [3s] Researcher HP recovering mid-work
-  logs.push({time: getTime(), agent: 'researcher', message: 'Sonar lock — 3 targets acquired!'});
+  // [3s] Researcher HP recovering
+  logs.push({time: getTime(), agent: 'researcher', message: 'Sonar lock \u2014 3 targets acquired!'});
   loadDashboardData(snap({
-    current_task: 'Thread reply automation',
-    researcher: {status:'working', task:'Target lock', hp:70, assignment:'thread'},
-    developer: {status:'working', task:'Reply engine', hp:40, assignment:'news'}
+    current_task: 'Project-A automation',
+    researcher: {status:'working', task:'Target lock', hp:70, assignment:'project-a'},
+    developer: {status:'working', task:'Engine', hp:40, assignment:'project-b'}
   }, logs));
   showPmSpeech('working');
   await sleep(2000);
 
-  // [5s] Researcher complete → returns
-  logs.push({time: getTime(), agent: 'researcher', message: 'Analysis complete! Surfacing with data.'});
+  // [5s] Researcher complete
+  logs.push({time: getTime(), agent: 'researcher', message: 'Analysis complete!'});
   loadDashboardData(snap({
-    current_task: 'Thread reply automation',
-    researcher: {status:'complete', task:'Done', hp:100, assignment:'thread'},
-    developer: {status:'working', task:'Reply engine', hp:30, assignment:'news'}
+    current_task: 'Project-A automation',
+    researcher: {status:'complete', task:'Done', hp:100, assignment:'project-a'},
+    developer: {status:'working', task:'Engine', hp:30, assignment:'project-b'}
   }, logs));
   await sleep(1000);
 
   // Researcher returns to pool
   loadDashboardData(snap({
-    current_task: 'Thread reply automation',
+    current_task: 'Project-A automation',
     researcher: {status:'idle', task:'', hp:100, assignment:null},
-    developer: {status:'working', task:'Reply engine', hp:45, assignment:'news'}
+    developer: {status:'working', task:'Engine', hp:45, assignment:'project-b'}
   }, logs));
   await sleep(500);
 
-  // [6s] Reviewer dispatched while Developer still working
-  logs.push({time: getTime(), agent: 'pm', message: 'Launching Reviewer — preemptive quality check'});
-  logs.push({time: getTime(), agent: 'reviewer', message: '🐢📋 Intercepting code stream for review...'});
+  // [6s] Reviewer dispatched
+  logs.push({time: getTime(), agent: 'pm', message: 'Launching Reviewer \u2014 quality check'});
+  logs.push({time: getTime(), agent: 'reviewer', message: 'Intercepting code for review...'});
   loadDashboardData(snap({
-    current_task: 'Thread reply automation',
+    current_task: 'Project-A automation',
     researcher: {status:'idle', task:'', hp:100, assignment:null},
-    developer: {status:'working', task:'Reply engine', hp:60, assignment:'news'},
-    reviewer: {status:'working', task:'Live code review', hp:70, assignment:'thread'}
+    developer: {status:'working', task:'Engine', hp:60, assignment:'project-b'},
+    reviewer: {status:'working', task:'Code review', hp:70, assignment:'project-a'}
   }, logs));
   showPmSpeech('dispatching');
   await sleep(2000);
 
   // [8s] Developer complete
-  logs.push({time: getTime(), agent: 'developer', message: 'Reply engine deployed! threads_replier.py updated.'});
+  logs.push({time: getTime(), agent: 'developer', message: 'Engine deployed!'});
   loadDashboardData(snap({
-    current_task: 'Thread reply automation',
-    developer: {status:'complete', task:'Engine done', hp:100, assignment:'news'},
-    reviewer: {status:'working', task:'Code review', hp:85, assignment:'thread'}
+    current_task: 'Project-A automation',
+    developer: {status:'complete', task:'Done', hp:100, assignment:'project-b'},
+    reviewer: {status:'working', task:'Review', hp:85, assignment:'project-a'}
   }, logs));
-  showPmSpeech('working');
   await sleep(1000);
 
   // Developer returns
   loadDashboardData(snap({
-    current_task: 'Thread reply automation',
+    current_task: 'Project-A automation',
     developer: {status:'idle', task:'', hp:100, assignment:null},
-    reviewer: {status:'working', task:'Code review', hp:90, assignment:'thread'}
+    reviewer: {status:'working', task:'Review', hp:90, assignment:'project-a'}
   }, logs));
   await sleep(500);
 
-  // [9s] Reviewer complete → Tester dispatched
-  logs.push({time: getTime(), agent: 'reviewer', message: '🐢📋 All checks passed — hull integrity confirmed!'});
+  // [9s] Reviewer -> Tester
+  logs.push({time: getTime(), agent: 'reviewer', message: 'All checks passed!'});
   loadDashboardData(snap({
-    current_task: 'Thread reply automation',
-    reviewer: {status:'complete', task:'Reviewed', hp:100, assignment:'thread'}
+    current_task: 'Project-A automation',
+    reviewer: {status:'complete', task:'Reviewed', hp:100, assignment:'project-a'}
   }, logs));
   await sleep(800);
 
-  // Tester dispatched
-  logs.push({time: getTime(), agent: 'pm', message: 'Tester — run the test suite!'});
-  logs.push({time: getTime(), agent: 'tester', message: '🐡🧪 Running integration tests...'});
+  logs.push({time: getTime(), agent: 'tester', message: 'Running tests...'});
   loadDashboardData(snap({
-    current_task: 'Thread reply automation',
+    current_task: 'Project-A automation',
     reviewer: {status:'idle', task:'', hp:100, assignment:null},
-    tester: {status:'working', task:'Test suite', hp:65, assignment:'news'}
+    tester: {status:'working', task:'Tests', hp:65, assignment:'project-a'}
   }, logs));
   showPmSpeech('dispatching');
   await sleep(1500);
 
   // Tester complete
-  logs.push({time: getTime(), agent: 'tester', message: '🐡🧪 All tests passed!'});
+  logs.push({time: getTime(), agent: 'tester', message: 'All tests passed!'});
   loadDashboardData(snap({
-    current_task: 'Thread reply automation',
-    tester: {status:'complete', task:'Tests passed', hp:100, assignment:'news'}
+    current_task: 'Project-A automation',
+    tester: {status:'complete', task:'Passed', hp:100, assignment:'project-a'}
   }, logs));
   await sleep(800);
 
-  // Tester returns → Writer dispatched
-  logs.push({time: getTime(), agent: 'pm', message: 'Writer — craft the final torpedo!'});
-  logs.push({time: getTime(), agent: 'writer', message: '🦞✍️ Composing deep sea content...'});
+  // Writer
+  logs.push({time: getTime(), agent: 'writer', message: 'Composing content...'});
   loadDashboardData(snap({
-    current_task: 'Thread reply automation',
+    current_task: 'Project-A automation',
     tester: {status:'idle', task:'', hp:100, assignment:null},
-    writer: {status:'working', task:'Content craft', hp:80, assignment:'thread'}
+    writer: {status:'working', task:'Content', hp:80, assignment:'project-b'}
   }, logs));
   showPmSpeech('dispatching');
   await sleep(2000);
 
-  // [11s] Writer complete
-  logs.push({time: getTime(), agent: 'writer', message: 'Content locked and loaded!'});
+  logs.push({time: getTime(), agent: 'writer', message: 'Content ready!'});
   loadDashboardData(snap({
-    current_task: 'Thread reply automation',
-    writer: {status:'complete', task:'Done', hp:100, assignment:'thread'}
+    writer: {status:'complete', task:'Done', hp:100, assignment:'project-b'}
   }, logs));
   showPmSpeech('complete');
   await sleep(800);
 
-  // All idle — internal mission done
-  logs.push({time: getTime(), agent: 'pm', message: 'Internal ops complete — opening comms to allied subs!'});
+  // Skill demo
+  logs.push({time: getTime(), agent: 'pm', message: 'Running briefing skill...'});
+  var skillSnap = snap({current_task: ''}, logs);
+  skillSnap.writer = {status:'idle',task:'',hp:100,assignment:null};
+  skillSnap.skills.briefing.status = 'running';
+  loadDashboardData(skillSnap);
+  await sleep(1500);
+
+  logs.push({time: getTime(), agent: 'system', message: 'Briefing complete!'});
+  skillSnap = snap({current_task: ''}, logs);
+  skillSnap.skills.briefing.status = 'idle';
+  skillSnap.skills.briefing.last_result = 'success';
+  skillSnap.skills.briefing.run_count = 4;
+  loadDashboardData(skillSnap);
+  await sleep(1000);
+
+  // All idle
+  logs.push({time: getTime(), agent: 'system', message: 'Mission accomplished!'});
   loadDashboardData(snap({
     current_task: '',
     researcher: {status:'idle',task:'',hp:100,assignment:null},
@@ -2524,89 +2084,6 @@ async function runDemo() {
     reviewer: {status:'idle',task:'',hp:100,assignment:null},
     tester: {status:'idle',task:'',hp:100,assignment:null},
     writer: {status:'idle',task:'',hp:100,assignment:null}
-  }, logs));
-  await sleep(1000);
-
-  // [12s] External AI: GPT + Gemini simultaneous call
-  logs.push({time: getTime(), agent: 'pm', message: 'Dual signal — GPT + Gemini responding!'});
-  var extDual = JSON.parse(JSON.stringify(extIdle));
-  extDual.gpt = {status:'called', task:'Image generation'};
-  extDual.gemini = {status:'called', task:'Content review'};
-  loadDashboardData(snap({
-    current_task: 'External AI — Dual operation',
-    external_ai: extDual
-  }, logs));
-  callExternalAI('gpt');
-  callExternalAI('gemini');
-  showPmSpeech('calling_external');
-  await sleep(1500);
-
-  // [14s] GPT + Gemini working
-  logs.push({time: getTime(), agent: 'pm', message: 'GPT whale generating — Gemini scanning depths...'});
-  extDual.gpt = {status:'working', task:'Generating image'};
-  extDual.gemini = {status:'working', task:'Reviewing content'};
-  loadDashboardData(snap({
-    current_task: 'External AI — Dual operation',
-    external_ai: extDual
-  }, logs));
-  await sleep(2500);
-
-  // [17s] GPT complete → Grok called
-  logs.push({time: getTime(), agent: 'pm', message: 'GPT image received! Calling Grok for realtime data...'});
-  extDual.gpt = {status:'complete', task:'Done'};
-  extDual.grok = {status:'called', task:'SNS analysis'};
-  loadDashboardData(snap({
-    current_task: 'External AI — Multi operation',
-    external_ai: extDual
-  }, logs));
-  callExternalAI('grok');
-  showPmSpeech('calling_external');
-  await sleep(1000);
-
-  // GPT returns, Grok working
-  returnExternalAI('gpt');
-  extDual.gpt = {status:'idle', task:''};
-  extDual.grok = {status:'working', task:'Realtime SNS scan'};
-  loadDashboardData(snap({
-    current_task: 'External AI — Multi operation',
-    external_ai: extDual
-  }, logs));
-  await sleep(1500);
-
-  // [19s] Gemini complete + Grok still working
-  logs.push({time: getTime(), agent: 'pm', message: 'Gemini review complete! Grok still scanning...'});
-  extDual.gemini = {status:'complete', task:'Done'};
-  loadDashboardData(snap({
-    current_task: 'External AI — Grok finalizing',
-    external_ai: extDual
-  }, logs));
-  await sleep(1000);
-
-  // Gemini returns
-  returnExternalAI('gemini');
-  extDual.gemini = {status:'idle', task:''};
-  loadDashboardData(snap({
-    current_task: 'External AI — Grok finalizing',
-    external_ai: extDual
-  }, logs));
-  await sleep(1500);
-
-  // [21s] Grok complete
-  logs.push({time: getTime(), agent: 'pm', message: 'Grok data received! All submarines accounted for!'});
-  extDual.grok = {status:'complete', task:'Done'};
-  loadDashboardData(snap({
-    current_task: 'External AI — All complete',
-    external_ai: extDual
-  }, logs));
-  showPmSpeech('complete');
-  await sleep(1000);
-
-  // All external AIs idle
-  returnExternalAI('grok');
-  logs.push({time: getTime(), agent: 'system', message: 'Mission accomplished — all hands, well done!'});
-  loadDashboardData(snap({
-    current_task: '',
-    external_ai: JSON.parse(JSON.stringify(extIdle))
   }, logs));
 
   await sleep(2000);
@@ -2771,231 +2248,139 @@ document.addEventListener('keydown', function(e) {
   setTimeout(function() { interactionCooldown = false; }, 3000);
 });
 
-// Space key — Context interaction (workspace crate, desk, or fallback to commander)
 document.addEventListener('keydown', function(e) {
   if (e.key !== ' ') return;
   e.preventDefault();
   if (interactionCooldown) return;
-
-  // Check proximity to workspace crates
-  var diver = document.getElementById('moving-diver');
-  if (!diver) return;
-  var dx = parseInt(diver.style.left || '600');
-  var dy = parseInt(diver.style.top || '580');
-
-  // Check crate proximity
-  var crates = document.querySelectorAll('.cargo-crate');
-  for (var i = 0; i < crates.length; i++) {
-    var cr = crates[i];
-    var cx = parseInt(cr.style.left || '0');
-    var cy = parseInt(cr.style.top || '0');
-    if (Math.abs(dx - cx) < 60 && Math.abs(dy - cy) < 60) {
-      showCratePopup(cr, cx, cy);
-      return;
-    }
-  }
-
-  // Fallback: trigger Z behavior (commander's words)
   var zEvent = new KeyboardEvent('keydown', {key: 'z'});
   document.dispatchEvent(zEvent);
 });
 
-// ===== WORKSPACE CRATE RENDERING =====
-var lastWorkspaceData = null;
-var crateEditMode = false;
+// ===== DYNAMIC WORKSPACE ZONES =====
+var lastWsData = null;
+function renderWorkspaceZones(workspaces) {
+  if (JSON.stringify(workspaces) === JSON.stringify(lastWsData)) return;
+  lastWsData = JSON.parse(JSON.stringify(workspaces));
 
-function renderWorkspaceCrates(workspaces) {
-  if (crateEditMode) return;
-  if (JSON.stringify(workspaces) === JSON.stringify(lastWorkspaceData)) return;
-  lastWorkspaceData = JSON.parse(JSON.stringify(workspaces));
-
-  var container = document.getElementById('workspace-crates');
+  var container = document.getElementById('workspace-zones');
   if (!container) return;
-  container.innerHTML = '';
 
   var wsNames = Object.keys(workspaces);
-  var startX = 160;
-  var defaultY = 530;
-  var spacing = 90;
+  if (wsNames.length === 0) {
+    container.innerHTML = '<div class="no-workspaces">No workspaces</div>';
+    DESKS = [];
+    DEPARTMENTS = [];
+    return;
+  }
 
-  // Load saved positions from localStorage
-  var savedPositions = {};
-  try {
-    var stored = localStorage.getItem('heysquid_crate_positions');
-    if (stored) savedPositions = JSON.parse(stored);
-  } catch(e) {}
+  container.innerHTML = '';
+  container.className = 'workspace-zones-container';
+  if (wsNames.length <= 2) container.classList.add('cols-' + wsNames.length);
+  else if (wsNames.length <= 4) container.classList.add('cols-2x2');
+  else container.classList.add('cols-3');
+
+  // Update dynamic DESKS
+  DESKS = wsNames.slice();
+
+  // Clear old SVG lines
+  var svg = document.querySelector('.conn-svg');
+  if (svg) {
+    svg.querySelectorAll('.conn-line.dynamic').forEach(function(l) { l.remove(); });
+  }
 
   wsNames.forEach(function(name, idx) {
     var ws = workspaces[name];
-    var crate = document.createElement('div');
-    crate.className = 'cargo-crate';
-
-    // Use saved position or default layout
-    var x, y;
-    if (savedPositions[name]) {
-      x = savedPositions[name].x;
-      y = savedPositions[name].y;
-    } else {
-      x = startX + idx * spacing;
-      y = defaultY;
-    }
-    crate.style.left = x + 'px';
-    crate.style.top = y + 'px';
-
-    // Status class
     var status = ws.status || 'standby';
-    if (status === 'active') crate.classList.add('ws-active');
-    else if (status === 'hold') crate.classList.add('ws-hold');
-    else crate.classList.add('ws-standby');
+    var zone = document.createElement('div');
+    zone.className = 'workspace-zone ws-' + status;
+    zone.id = 'dept-ws-' + name;
+    zone.innerHTML =
+      '<div class="ws-label">' + name + ' <span class="ws-eye">&#128064;</span></div>' +
+      '<div class="ws-sublabel">' + (ws.description || '') + '</div>' +
+      '<div class="desk-station" id="desk-' + name + '" style="position:absolute; left:60px; top:45px;">' +
+        '<div class="desk-assignment-label" style="left:10px; top:0; color: var(--cyan);">' + name + '</div>' +
+        '<div class="desk" style="left:0; top:85px;"><div class="desk-surface"></div></div>' +
+        '<div class="monitor" style="left:8px; top:68px;">' +
+          '<div class="monitor-frame"><div class="monitor-screen" id="screen-' + name + '">' +
+            '<div class="screen-line" style="background:#00d4ff;"></div>' +
+            '<div class="screen-line" style="background:#ffffff; width:60%; animation-delay:0.5s;"></div>' +
+            '<div class="screen-line" style="background:#00d4ff; animation-delay:1s;"></div>' +
+          '</div></div><div class="monitor-stand"></div>' +
+        '</div>' +
+        '<div class="mug" style="left:96px; top:92px;"><div class="mug-steam"></div></div>' +
+        '<div class="agent-slot" id="slot-' + name + '" style="left:28px; top:16px;"></div>' +
+        '<div class="hp-bar-wrap" id="hp-wrap-' + name + '" style="left:16px; top:58px; display:none;"><div class="hp-bar" id="hp-desk-' + name + '"></div></div>' +
+      '</div>';
+    container.appendChild(zone);
 
-    // Age-based dimming
-    if (ws.last_active) {
-      var daysDiff = Math.floor((Date.now() - new Date(ws.last_active).getTime()) / 86400000);
-      if (daysDiff > 30) crate.classList.add('ws-old');
-    }
-
-    // Store data for popup
-    crate.dataset.wsName = name;
-    crate.dataset.wsDesc = ws.description || name;
-    crate.dataset.wsDept = ws.department || '-';
-    crate.dataset.wsDate = ws.last_active || '-';
-    crate.dataset.wsStatus = status;
-
-    crate.innerHTML = '<div class="crate-pixel" style="width:1px;height:1px;"></div>' +
-                      '<div class="crate-label">' + name + '</div>';
-
-    crate.addEventListener('click', function() {
-      if (crateEditMode || crate._isDragging) return;
-      showCratePopup(crate, parseInt(crate.style.left), parseInt(crate.style.top));
-    });
-
-    container.appendChild(crate);
-  });
-}
-
-function showCratePopup(crateEl, x, y) {
-  var popup = document.getElementById('crate-popup');
-  if (!popup) return;
-  popup.innerHTML = '<div class="popup-title">' + (crateEl.dataset.wsName || '') + '</div>' +
-    '<div>' + (crateEl.dataset.wsDesc || '') + '</div>' +
-    '<div class="popup-dept">dept: ' + (crateEl.dataset.wsDept || '-') + '</div>' +
-    '<div class="popup-date">last: ' + (crateEl.dataset.wsDate || '-') + '</div>' +
-    '<div class="popup-status">status: ' + (crateEl.dataset.wsStatus || '-') + '</div>';
-  popup.style.left = (x + 30) + 'px';
-  popup.style.top = (y - 60) + 'px';
-  popup.classList.add('visible');
-  setTimeout(function() { popup.classList.remove('visible'); }, 4000);
-}
-
-// ===== WORKSPACE CRATE DRAG & DROP =====
-(function() {
-  var btnEdit = document.getElementById('btnEditCrates');
-  var btnSave = document.getElementById('btnSaveCrates');
-  var viewport = document.querySelector('.viewport');
-  if (!btnEdit || !btnSave || !viewport) return;
-
-  var dragTarget = null;
-  var dragOffsetX = 0;
-  var dragOffsetY = 0;
-
-  // EDIT / CANCEL toggle
-  btnEdit.addEventListener('click', function() {
-    if (crateEditMode) {
-      // CANCEL: exit edit mode without saving
-      crateEditMode = false;
-      btnEdit.textContent = 'EDIT';
-      btnEdit.classList.remove('active');
-      btnSave.style.display = 'none';
-      removeCrateEditClasses();
-      // Force re-render to restore positions from data
-      lastWorkspaceData = null;
-    } else {
-      // Enter edit mode
-      crateEditMode = true;
-      btnEdit.textContent = 'CANCEL';
-      btnEdit.classList.add('active');
-      btnSave.style.display = 'block';
-      addCrateEditClasses();
+    // Add dynamic SVG line from PM to zone
+    if (svg) {
+      var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.classList.add('conn-line', 'dynamic');
+      path.id = 'line-' + name;
+      // Approximate paths based on zone index
+      var endX = 100 + (idx % 2) * 350;
+      var endY = 100 + Math.floor(idx / 2) * 240;
+      path.setAttribute('d', 'M520,580 C' + (300 + idx * 50) + ',400 ' + (endX + 50) + ',' + (endY + 50) + ' ' + endX + ',' + endY);
+      svg.appendChild(path);
     }
   });
 
-  // SAVE handler
-  btnSave.addEventListener('click', function() {
-    var positions = {};
-    var crates = document.querySelectorAll('#workspace-crates .cargo-crate');
-    crates.forEach(function(c) {
-      if (c.dataset.wsName) {
-        positions[c.dataset.wsName] = {
-          x: parseInt(c.style.left) || 0,
-          y: parseInt(c.style.top) || 0
-        };
-      }
+  // Update DEPARTMENTS for diver collision
+  DEPARTMENTS = [];
+  var zones = container.querySelectorAll('.workspace-zone');
+  zones.forEach(function(z) {
+    var rect = z.getBoundingClientRect();
+    var containerRect = container.getBoundingClientRect();
+    var domeEl = document.getElementById('dome');
+    var domeRect = domeEl ? domeEl.getBoundingClientRect() : containerRect;
+    var scale = domeRect.width / 1040;
+    DEPARTMENTS.push({
+      id: z.id,
+      left: (rect.left - domeRect.left) / scale,
+      top: (rect.top - domeRect.top) / scale,
+      width: rect.width / scale,
+      height: rect.height / scale
     });
-    localStorage.setItem('heysquid_crate_positions', JSON.stringify(positions));
-
-    // Exit edit mode
-    crateEditMode = false;
-    btnEdit.textContent = 'EDIT';
-    btnEdit.classList.remove('active');
-    btnSave.style.display = 'none';
-    removeCrateEditClasses();
-    // Force re-render with saved positions
-    lastWorkspaceData = null;
   });
+}
 
-  function addCrateEditClasses() {
-    document.querySelectorAll('#workspace-crates .cargo-crate').forEach(function(c) {
-      c.classList.add('edit-mode');
-    });
+// ===== SKILLS PANEL RENDERING =====
+var lastSkillsData = null;
+function renderSkillsPanel(skills) {
+  if (JSON.stringify(skills) === JSON.stringify(lastSkillsData)) return;
+  lastSkillsData = JSON.parse(JSON.stringify(skills));
+
+  var panel = document.getElementById('skills-panel');
+  if (!panel) return;
+
+  var names = Object.keys(skills);
+  if (names.length === 0) {
+    panel.innerHTML = '<div class="skills-panel-title">SKILLS</div><div class="skill-item" style="color:#446677;">No skills</div>';
+    return;
   }
 
-  function removeCrateEditClasses() {
-    document.querySelectorAll('#workspace-crates .cargo-crate').forEach(function(c) {
-      c.classList.remove('edit-mode', 'dragging');
-      c._isDragging = false;
-    });
-  }
+  var html = '<div class="skills-panel-title">SKILLS</div>';
+  names.forEach(function(name) {
+    var sk = skills[name];
+    var status = sk.status || 'idle';
+    var triggerLabel = '';
+    if (sk.trigger === 'schedule' && sk.schedule) triggerLabel = sk.schedule;
+    else if (sk.trigger === 'manual') triggerLabel = 'manual';
 
-  // Drag: mousedown on viewport
-  viewport.addEventListener('mousedown', function(e) {
-    if (!crateEditMode) return;
-    var crate = e.target.closest('.cargo-crate.edit-mode');
-    if (!crate) return;
-    e.preventDefault();
-    dragTarget = crate;
-    dragTarget.classList.add('dragging');
-    var rect = viewport.getBoundingClientRect();
-    var scale = rect.width / 1200;
-    dragOffsetX = (e.clientX - rect.left) / scale - parseInt(crate.style.left);
-    dragOffsetY = (e.clientY - rect.top) / scale - parseInt(crate.style.top);
-  });
+    var resultIcon = '';
+    if (sk.last_result === 'success') resultIcon = ' \u2713';
+    else if (sk.last_result === 'error') resultIcon = ' \u2717';
 
-  // Drag: mousemove
-  document.addEventListener('mousemove', function(e) {
-    if (!dragTarget) return;
-    e.preventDefault();
-    var rect = viewport.getBoundingClientRect();
-    var scale = rect.width / 1200;
-    var newX = Math.round((e.clientX - rect.left) / scale - dragOffsetX);
-    var newY = Math.round((e.clientY - rect.top) / scale - dragOffsetY);
-    // Clamp to viewport bounds
-    newX = Math.max(0, Math.min(1170, newX));
-    newY = Math.max(0, Math.min(870, newY));
-    dragTarget.style.left = newX + 'px';
-    dragTarget.style.top = newY + 'px';
+    html += '<div class="skill-item">' +
+      '<span class="skill-dot ' + status + '"></span>' +
+      '<span>' + (sk.name || name) + resultIcon + '</span>' +
+      (sk.run_count ? '<span style="color:#446677;"> x' + sk.run_count + '</span>' : '') +
+      '<span class="skill-trigger">' + triggerLabel + '</span>' +
+      '</div>';
   });
-
-  // Drag: mouseup
-  document.addEventListener('mouseup', function() {
-    if (!dragTarget) return;
-    dragTarget.classList.remove('dragging');
-    // Prevent click popup from firing
-    dragTarget._isDragging = true;
-    var dt = dragTarget;
-    setTimeout(function() { dt._isDragging = false; }, 100);
-    dragTarget = null;
-  });
-})();
+  panel.innerHTML = html;
+}
 
 // ===== PM STATUS ANIMATION =====
 (function() {

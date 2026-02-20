@@ -148,15 +148,6 @@ def reset_all():
     _save_status(data)
 
 
-def update_external_ai(name: str, status: str, task: str = ''):
-    """Update external AI character status (shown on dashboard)."""
-    data = _load_status()
-    if 'external_ai' not in data:
-        data['external_ai'] = {}
-    data['external_ai'][name] = {'status': status, 'task': task}
-    _save_status(data)
-
-
 def set_pm_speech(text: str):
     """Set PM speech bubble text (shown for ~5s on dashboard)."""
     data = _load_status()
@@ -337,21 +328,19 @@ def clear_squad():
     _save_status(data)
 
 
-def update_workspace(name, status=None, department=None, description=None):
+def update_workspace(name, status=None, description=None):
     """Update workspace status in agent_status.json for dashboard visualization."""
     data = _load_status()
     if 'workspaces' not in data:
         data['workspaces'] = {}
     if name not in data['workspaces']:
         data['workspaces'][name] = {
-            'status': 'standby', 'department': None,
+            'status': 'standby',
             'last_active': '', 'description': '',
         }
     ws = data['workspaces'][name]
     if status is not None:
         ws['status'] = status
-    if department is not None:
-        ws['department'] = department
     if description is not None:
         ws['description'] = description
     ws['last_active'] = datetime.now().strftime('%Y-%m-%d')
@@ -371,7 +360,7 @@ def sync_workspaces():
             ws_path = os.path.join(ws_dir, name)
             if os.path.isdir(ws_path) and name not in data['workspaces']:
                 data['workspaces'][name] = {
-                    'status': 'standby', 'department': None,
+                    'status': 'standby',
                     'last_active': '', 'description': name,
                 }
     _save_status(data)
