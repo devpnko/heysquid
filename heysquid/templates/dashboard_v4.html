@@ -1166,6 +1166,30 @@ body {
 .cargo-crate.ws-standby { opacity: 0.7; }
 .cargo-crate.ws-hold { opacity: 0.4; }
 .cargo-crate.ws-old { opacity: 0.4; filter: sepia(0.3) brightness(0.8); }
+.cargo-crate.edit-mode {
+  cursor: grab;
+  border: 1px dashed rgba(0,212,255,0.5);
+  border-radius: 4px;
+}
+.cargo-crate.edit-mode:active { cursor: grabbing; }
+.cargo-crate.dragging {
+  z-index: 200;
+  filter: drop-shadow(0 0 10px rgba(0,212,255,0.6)) !important;
+  opacity: 1 !important;
+}
+.btn-edit-crates, .btn-save-crates {
+  position: absolute;
+  bottom: 46px;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 7px;
+  padding: 5px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  z-index: 101;
+}
+.btn-edit-crates { right: 180px; border: 1px solid rgba(255,159,67,0.4); background: rgba(255,159,67,0.1); color: var(--orange); }
+.btn-edit-crates.active { background: rgba(255,159,67,0.3); border-color: var(--orange); }
+.btn-save-crates { right: 260px; border: 1px solid rgba(38,222,129,0.5); background: rgba(38,222,129,0.15); color: var(--green); display: none; }
 
 /* Crate popup */
 .crate-popup {
@@ -1231,6 +1255,9 @@ body {
 }
 .agent-speech.visible {
   opacity: 1;
+}
+.agent-speech.fading, .pm-speech-bubble.fading {
+  opacity: 0.3;
 }
 #pool-researcher .agent-speech { border: 1px solid var(--cyan); color: var(--cyan); }
 #pool-developer .agent-speech  { border: 1px solid var(--orange); color: var(--orange); }
@@ -1505,7 +1532,7 @@ body {
     <!-- ========================= -->
     <!--  PM — heysquid (fixed)    -->
     <!-- ========================= -->
-    <div class="pm-area" id="pm-area" style="left:460px; top:570px;">
+    <div class="pm-area" id="pm-area" style="left:460px; top:510px;">
       <div class="pm-speech-bubble" id="pm-speech"></div>
       <div class="char-wrapper" style="position:relative !important; animation: bob 2.5s ease-in-out infinite;">
         <div style="animation: crown-shine 3s ease-in-out infinite; display:inline-block;">
@@ -1641,6 +1668,8 @@ body {
 
   <!-- DEMO Button -->
   <button class="btn-demo" id="btnDemo" onclick="runDemo()">DEMO</button>
+  <button class="btn-edit-crates" id="btnEditCrates">EDIT</button>
+  <button class="btn-save-crates" id="btnSaveCrates">SAVE</button>
 
   <!-- Keyboard hint -->
   <div class="keyboard-hint">↑↓←→ Patrol &nbsp; SPACE: Commander's words</div>
@@ -2100,26 +2129,71 @@ function loadDashboardData(data) {
       'tester': 'speech-tester',
       'writer': 'speech-writer'
     };
-    // Find last message per agent
-    var lastMsgs = {};
+    function truncMsg(m) { return m.length > 25 ? m.slice(0,25) + '...' : m; }
+
+    // Collect last 5 messages per agent
+    var agentRecentMsgs = {};
     for (var li = 0; li < data.mission_log.length; li++) {
       var entry = data.mission_log[li];
       if (agentSpeechMap[entry.agent]) {
-        lastMsgs[entry.agent] = entry.message;
+        if (!agentRecentMsgs[entry.agent]) agentRecentMsgs[entry.agent] = [];
+        agentRecentMsgs[entry.agent].push(entry.message);
       }
     }
-    // Show speech bubbles
-    Object.keys(lastMsgs).forEach(function(agent) {
-      var msg = lastMsgs[agent];
-      if (!msg || msg.trim() === '') return;
-      var elId = agentSpeechMap[agent];
-      var el = document.getElementById(elId);
-      if (el && el._lastLogMsg !== msg) {
-        el._lastLogMsg = msg;
-        el.textContent = msg.length > 25 ? msg.slice(0, 25) + '...' : msg;
+    Object.keys(agentRecentMsgs).forEach(function(agent) {
+      agentRecentMsgs[agent] = agentRecentMsgs[agent].slice(-5);
+    });
+
+    // Update speech bubbles
+    Object.keys(agentSpeechMap).forEach(function(agent) {
+      var el = document.getElementById(agentSpeechMap[agent]);
+      if (!el) return;
+      var msgs = agentRecentMsgs[agent] || [];
+      if (msgs.length === 0) return;
+      var isWorking = (data[agent] || {}).status === 'working';
+      var msgsKey = msgs.join('|');
+
+      if (isWorking && msgs.length > 1) {
+        // Cycling mode — rotate through recent messages
         el.classList.add('visible');
         clearTimeout(el._hideTimer);
-        el._hideTimer = setTimeout(function() { el.classList.remove('visible'); }, 5000);
+        el._hideTimer = null;
+        if (el._msgsKey !== msgsKey) {
+          el._msgsKey = msgsKey;
+          clearInterval(el._cycleTimer);
+          el._cycleIdx = 0;
+          el.textContent = truncMsg(msgs[0]);
+          el.classList.remove('fading');
+          el._cycleTimer = setInterval(function() {
+            el._cycleIdx = (el._cycleIdx + 1) % msgs.length;
+            el.classList.add('fading');
+            setTimeout(function() {
+              el.textContent = truncMsg(msgs[el._cycleIdx]);
+              el.classList.remove('fading');
+            }, 200);
+          }, 800);
+        }
+      } else {
+        // Static mode (idle or single message)
+        clearInterval(el._cycleTimer);
+        el._cycleTimer = null;
+        el._msgsKey = null;
+        var msg = msgs[msgs.length - 1];
+        if (el._lastLogMsg !== msg) {
+          el._lastLogMsg = msg;
+          el.textContent = truncMsg(msg);
+          el.classList.add('visible');
+          el.classList.remove('fading');
+        }
+        clearTimeout(el._hideTimer);
+        if (isWorking) {
+          el._hideTimer = null;
+          el.classList.add('visible');
+        } else {
+          el._hideTimer = setTimeout(function() {
+            el.classList.remove('visible');
+          }, 5000);
+        }
       }
     });
   }
@@ -2728,8 +2802,10 @@ document.addEventListener('keydown', function(e) {
 
 // ===== WORKSPACE CRATE RENDERING =====
 var lastWorkspaceData = null;
+var crateEditMode = false;
 
 function renderWorkspaceCrates(workspaces) {
+  if (crateEditMode) return;
   if (JSON.stringify(workspaces) === JSON.stringify(lastWorkspaceData)) return;
   lastWorkspaceData = JSON.parse(JSON.stringify(workspaces));
 
@@ -2739,14 +2815,30 @@ function renderWorkspaceCrates(workspaces) {
 
   var wsNames = Object.keys(workspaces);
   var startX = 160;
-  var y = 530;
+  var defaultY = 530;
   var spacing = 90;
+
+  // Load saved positions from localStorage
+  var savedPositions = {};
+  try {
+    var stored = localStorage.getItem('heysquid_crate_positions');
+    if (stored) savedPositions = JSON.parse(stored);
+  } catch(e) {}
 
   wsNames.forEach(function(name, idx) {
     var ws = workspaces[name];
     var crate = document.createElement('div');
     crate.className = 'cargo-crate';
-    var x = startX + idx * spacing;
+
+    // Use saved position or default layout
+    var x, y;
+    if (savedPositions[name]) {
+      x = savedPositions[name].x;
+      y = savedPositions[name].y;
+    } else {
+      x = startX + idx * spacing;
+      y = defaultY;
+    }
     crate.style.left = x + 'px';
     crate.style.top = y + 'px';
 
@@ -2773,7 +2865,8 @@ function renderWorkspaceCrates(workspaces) {
                       '<div class="crate-label">' + name + '</div>';
 
     crate.addEventListener('click', function() {
-      showCratePopup(crate, x, y);
+      if (crateEditMode || crate._isDragging) return;
+      showCratePopup(crate, parseInt(crate.style.left), parseInt(crate.style.top));
     });
 
     container.appendChild(crate);
@@ -2793,6 +2886,116 @@ function showCratePopup(crateEl, x, y) {
   popup.classList.add('visible');
   setTimeout(function() { popup.classList.remove('visible'); }, 4000);
 }
+
+// ===== WORKSPACE CRATE DRAG & DROP =====
+(function() {
+  var btnEdit = document.getElementById('btnEditCrates');
+  var btnSave = document.getElementById('btnSaveCrates');
+  var viewport = document.querySelector('.viewport');
+  if (!btnEdit || !btnSave || !viewport) return;
+
+  var dragTarget = null;
+  var dragOffsetX = 0;
+  var dragOffsetY = 0;
+
+  // EDIT / CANCEL toggle
+  btnEdit.addEventListener('click', function() {
+    if (crateEditMode) {
+      // CANCEL: exit edit mode without saving
+      crateEditMode = false;
+      btnEdit.textContent = 'EDIT';
+      btnEdit.classList.remove('active');
+      btnSave.style.display = 'none';
+      removeCrateEditClasses();
+      // Force re-render to restore positions from data
+      lastWorkspaceData = null;
+    } else {
+      // Enter edit mode
+      crateEditMode = true;
+      btnEdit.textContent = 'CANCEL';
+      btnEdit.classList.add('active');
+      btnSave.style.display = 'block';
+      addCrateEditClasses();
+    }
+  });
+
+  // SAVE handler
+  btnSave.addEventListener('click', function() {
+    var positions = {};
+    var crates = document.querySelectorAll('#workspace-crates .cargo-crate');
+    crates.forEach(function(c) {
+      if (c.dataset.wsName) {
+        positions[c.dataset.wsName] = {
+          x: parseInt(c.style.left) || 0,
+          y: parseInt(c.style.top) || 0
+        };
+      }
+    });
+    localStorage.setItem('heysquid_crate_positions', JSON.stringify(positions));
+
+    // Exit edit mode
+    crateEditMode = false;
+    btnEdit.textContent = 'EDIT';
+    btnEdit.classList.remove('active');
+    btnSave.style.display = 'none';
+    removeCrateEditClasses();
+    // Force re-render with saved positions
+    lastWorkspaceData = null;
+  });
+
+  function addCrateEditClasses() {
+    document.querySelectorAll('#workspace-crates .cargo-crate').forEach(function(c) {
+      c.classList.add('edit-mode');
+    });
+  }
+
+  function removeCrateEditClasses() {
+    document.querySelectorAll('#workspace-crates .cargo-crate').forEach(function(c) {
+      c.classList.remove('edit-mode', 'dragging');
+      c._isDragging = false;
+    });
+  }
+
+  // Drag: mousedown on viewport
+  viewport.addEventListener('mousedown', function(e) {
+    if (!crateEditMode) return;
+    var crate = e.target.closest('.cargo-crate.edit-mode');
+    if (!crate) return;
+    e.preventDefault();
+    dragTarget = crate;
+    dragTarget.classList.add('dragging');
+    var rect = viewport.getBoundingClientRect();
+    var scale = rect.width / 1200;
+    dragOffsetX = (e.clientX - rect.left) / scale - parseInt(crate.style.left);
+    dragOffsetY = (e.clientY - rect.top) / scale - parseInt(crate.style.top);
+  });
+
+  // Drag: mousemove
+  document.addEventListener('mousemove', function(e) {
+    if (!dragTarget) return;
+    e.preventDefault();
+    var rect = viewport.getBoundingClientRect();
+    var scale = rect.width / 1200;
+    var newX = Math.round((e.clientX - rect.left) / scale - dragOffsetX);
+    var newY = Math.round((e.clientY - rect.top) / scale - dragOffsetY);
+    // Clamp to viewport bounds
+    newX = Math.max(0, Math.min(1170, newX));
+    newY = Math.max(0, Math.min(870, newY));
+    dragTarget.style.left = newX + 'px';
+    dragTarget.style.top = newY + 'px';
+  });
+
+  // Drag: mouseup
+  document.addEventListener('mouseup', function() {
+    if (!dragTarget) return;
+    dragTarget.classList.remove('dragging');
+    // Prevent click popup from firing
+    dragTarget._isDragging = true;
+    var dt = dragTarget;
+    setTimeout(function() { dt._isDragging = false; }, 100);
+    dragTarget = null;
+  });
+})();
 
 // ===== PM STATUS ANIMATION =====
 (function() {
