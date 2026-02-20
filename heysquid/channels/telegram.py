@@ -194,17 +194,26 @@ def run_async_safe(coro):
 
 
 # 동기 함수 래퍼
-def send_message_sync(chat_id, text, parse_mode="Markdown"):
+def send_message_sync(chat_id, text, parse_mode="Markdown", _save=True):
     """
     동기 방식 메시지 전송
 
     메시지 전송 시마다:
-    1. working.json의 last_activity 갱신
-    2. 새 메시지 확인 및 저장 (작업 중일 때만)
+    1. messages.json에 자동 저장 (_save=True일 때)
+    2. working.json의 last_activity 갱신
+    3. 새 메시지 확인 및 저장 (작업 중일 때만)
     """
     result = run_async_safe(send_message(chat_id, text, parse_mode))
 
     if result:
+        if _save:
+            try:
+                import time
+                from ._msg_store import save_bot_response
+                msg_id = f"bot_progress_{int(time.time() * 1000)}"
+                save_bot_response(chat_id, text, [msg_id], channel="telegram")
+            except Exception:
+                pass
         try:
             from .._working_lock import (
                 update_working_activity,

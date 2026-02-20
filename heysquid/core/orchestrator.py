@@ -111,7 +111,7 @@ def reply_telegram(chat_id, message_id, text):
     """
     from ..channels.telegram import send_message_sync
 
-    success = send_message_sync(chat_id, text)
+    success = send_message_sync(chat_id, text, _save=False)
 
     ids = message_id if isinstance(message_id, list) else [message_id]
 
@@ -222,7 +222,7 @@ def check_telegram():
                     f"마지막 활동: {lock_info.get('last_activity')}\n\n"
                     "처음부터 다시 시작합니다."
                 )
-                send_message_sync(chat_id, alert_msg)
+                send_message_sync(chat_id, alert_msg, _save=False)
                 save_bot_response(chat_id, alert_msg, message_ids, channel="system")
 
             try:
