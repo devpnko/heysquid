@@ -212,8 +212,8 @@ def send_message_sync(chat_id, text, parse_mode="Markdown", _save=True):
                 from ._msg_store import save_bot_response
                 msg_id = f"bot_progress_{int(time.time() * 1000)}"
                 save_bot_response(chat_id, text, [msg_id], channel="telegram")
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"[WARN] 봇 응답 저장 실패: {e}")
         try:
             from .._working_lock import (
                 update_working_activity,
@@ -234,8 +234,8 @@ def send_message_sync(chat_id, text, parse_mode="Markdown", _save=True):
 
                 run_async_safe(send_message(chat_id, alert_text, parse_mode))
 
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[WARN] working lock 업데이트 실패: {e}")
 
     return result
 
