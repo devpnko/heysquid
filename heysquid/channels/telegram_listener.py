@@ -37,7 +37,7 @@ from ..paths import MESSAGES_FILE, INTERRUPTED_FILE, WORKING_LOCK_FILE, EXECUTOR
 # 중단 명령어 — 이 중 하나가 메시지 전체와 일치하면 중단
 STOP_KEYWORDS = ["멈춰", "스탑", "중단", "/stop", "잠깐만", "스톱", "그만", "취소"]
 
-from ._msg_store import load_telegram_messages as load_messages, save_telegram_messages as save_messages
+from ._msg_store import load_telegram_messages as load_messages, save_telegram_messages as save_messages, save_bot_response
 
 
 def _is_stop_command(text):
@@ -444,6 +444,7 @@ async def fetch_new_messages():
                         text="✓",
                         reply_to_message_id=msg['message_id']
                     )
+                    save_bot_response(msg['chat_id'], "✓", [msg['message_id']], channel="system")
                 except Exception:
                     pass  # 수신 확인 실패해도 무시
 
@@ -486,11 +487,23 @@ def _retry_unprocessed():
 
 
 def _trigger_executor():
-    """executor.sh를 백그라운드 프로세스로 실행"""
+    """executor.sh를 백그라운드 프로세스로 실행 (stale lock 자동 정리)"""
     lockfile = EXECUTOR_LOCK_FILE
     if os.path.exists(lockfile):
-        print("[TRIGGER] executor 이미 실행 중 — 스킵")
-        return
+        # stale lock 감지: Claude PM 프로세스가 실제로 살아있는지 확인
+        has_claude = subprocess.run(
+            ["pgrep", "-f", "claude.*append-system-prompt-file"],
+            capture_output=True,
+        ).returncode == 0
+        if has_claude:
+            print("[TRIGGER] executor 이미 실행 중 — 스킵")
+            return
+        # stale lock 제거
+        try:
+            os.remove(lockfile)
+            print("[TRIGGER] stale executor.lock 제거됨")
+        except OSError:
+            pass
 
     executor = os.path.join(PROJECT_ROOT, "scripts", "executor.sh")
     if not os.path.exists(executor):
