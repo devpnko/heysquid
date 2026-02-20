@@ -1,0 +1,45 @@
+"""에이전트 색상 매핑 — agents.py에서 hex 색상 직접 사용"""
+
+import os
+import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, ROOT)
+
+from heysquid.core.agents import AGENTS, KRAKEN_CREW
+
+# 에이전트 이름 → hex 색상
+AGENT_COLORS: dict[str, str] = {
+    name: info["color_hex"] for name, info in AGENTS.items()
+}
+
+# 특수 색상
+COLORS = {
+    "commander": "#ffffff",
+    "system": "#888888",
+    "dim": "#666666",
+    "date_sep": "#555555",
+    "status_bar": "#333333",
+    "live": "#26de81",
+    "idle_indicator": "#888888",
+    "input_prompt": "#00d4ff",
+}
+
+# entry type → 색상/아이콘
+ENTRY_TYPE_STYLE = {
+    "opinion": ("💬", "#ffffff"),
+    "agree": ("👍", "#26de81"),
+    "disagree": ("👎", "#ff6b6b"),
+    "proposal": ("💡", "#ffd32a"),
+    "conclusion": ("✅", "#26de81"),
+    "risk": ("⚠️", "#ff9f43"),
+}
+
+# 채널 태그
+CHANNEL_TAG = {
+    "telegram": "[TG]",
+    "tui": "[TUI]",
+    "system": "[SYS]",
+    "discord": "[DC]",
+    "slack": "[SL]",
+}

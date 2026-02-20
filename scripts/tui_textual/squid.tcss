@@ -1,0 +1,87 @@
+/* SQUID TUI — Textual CSS */
+
+Screen {
+    background: $background;
+}
+
+/* === Chat Mode === */
+
+#chat-header {
+    background: $surface;
+    color: $text;
+}
+
+#chat-sep-top, #chat-sep-bottom {
+    color: $text-muted;
+    height: 1;
+}
+
+#chat-messages {
+    scrollbar-size: 1 1;
+}
+
+.date-sep {
+    text-align: center;
+    color: $text-muted;
+    margin: 1 0;
+}
+
+.msg-header {
+    margin-top: 0;
+}
+
+.msg-body {
+    margin-bottom: 0;
+}
+
+ChatInput {
+    height: 5;
+    margin: 0 1;
+    border: round $accent;
+    background: $boost;
+    padding: 0 1;
+}
+
+ChatInput:focus {
+    border: round $accent-lighten-2;
+}
+
+/* === Squad Mode === */
+
+#squad-agent-panel {
+    scrollbar-size: 1 1;
+    padding: 0 1;
+}
+
+#squad-discussion {
+    scrollbar-size: 1 1;
+    padding: 0 1;
+}
+
+/* === Log Mode === */
+
+#log-mission {
+    scrollbar-size: 1 1;
+}
+
+#log-stream {
+    scrollbar-size: 1 1;
+}
+
+/* === Command Input === */
+
+CommandInput {
+    border: none;
+    background: $boost;
+    color: #00d4ff;
+}
+
+CommandInput:focus {
+    border: none;
+}
+
+/* === Status Bars === */
+
+#chat-status-bar, #squad-status-bar, #log-status-bar {
+    background: $surface;
+}
