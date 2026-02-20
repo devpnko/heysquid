@@ -53,7 +53,7 @@ class ChatScreen(Screen):
         return f"[bold]🦑 SQUID[/bold]  [bold {pm_color}]\\[CHAT][/bold {pm_color}]  {indicator}"
 
     def _status_bar_text(self) -> str:
-        return "[dim] q:quit  Ctrl+1/2/3/4:mode  Ctrl+\u2190\u2192  Enter:send  Tab:@완성[/dim]"
+        return "[dim] q:quit  Ctrl+1/2/3/4:mode  Ctrl+\u2190\u2192  Enter:send  Tab:/ @완성[/dim]"
 
     def refresh_data(self, flash: str = "") -> None:
         """폴링 데이터로 화면 갱신"""
