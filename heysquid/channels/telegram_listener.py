@@ -18,6 +18,7 @@ import json
 import time
 import subprocess
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 from telegram import Bot
 from telegram.request import HTTPXRequest
@@ -31,7 +32,7 @@ load_dotenv(get_env_path())
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 ALLOWED_USERS = [int(uid.strip()) for uid in os.getenv("TELEGRAM_ALLOWED_USERS", "").split(",") if uid.strip()]
-POLLING_INTERVAL = int(os.getenv("TELEGRAM_POLLING_INTERVAL", "10"))
+POLLING_INTERVAL = int(os.getenv("TELEGRAM_POLLING_INTERVAL", "3"))
 
 from ..paths import MESSAGES_FILE, INTERRUPTED_FILE, WORKING_LOCK_FILE, EXECUTOR_LOCK_FILE
 # 중단 명령어 — 이 중 하나가 메시지 전체와 일치하면 중단
@@ -411,7 +412,7 @@ async def fetch_new_messages():
                 "text": text,
                 "files": files,
                 "location": location_info,
-                "timestamp": msg.date.strftime("%Y-%m-%d %H:%M:%S"),
+                "timestamp": msg.date.astimezone(ZoneInfo("Asia/Seoul")).strftime("%Y-%m-%d %H:%M:%S"),
                 "processed": False
             }
 
