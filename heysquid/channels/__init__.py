@@ -10,5 +10,6 @@ from .telegram import (  # noqa: F401
 from ._msg_store import (  # noqa: F401
     load_telegram_messages,
     save_telegram_messages,
+    load_and_modify,
     save_bot_response,
 )

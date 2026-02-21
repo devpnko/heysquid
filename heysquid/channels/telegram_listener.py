@@ -38,7 +38,7 @@ from ..paths import MESSAGES_FILE, INTERRUPTED_FILE, WORKING_LOCK_FILE, EXECUTOR
 # 중단 명령어 — 이 중 하나가 메시지 전체와 일치하면 중단
 STOP_KEYWORDS = ["멈춰", "스탑", "중단", "/stop", "잠깐만", "스톱", "그만", "취소"]
 
-from ._msg_store import load_telegram_messages as load_messages, save_telegram_messages as save_messages, save_bot_response
+from ._msg_store import load_telegram_messages as load_messages, save_telegram_messages as save_messages, load_and_modify
 
 
 def _is_stop_command(text):
@@ -125,14 +125,16 @@ async def _handle_stop_command(msg_data):
     print(f"[STOP] interrupted.json 저장")
 
     # 모든 미처리 메시지 processed 처리 (이전 메시지가 다시 실행되지 않도록)
-    # 이전 작업 맥락은 interrupted.json에 보존됨
-    data = load_messages()
+    # 이전 작업 맥락은 interrupted.json에 보존됨 — flock 사용
     cleared = 0
-    for m in data.get("messages", []):
-        if not m.get("processed", False):
-            m["processed"] = True
-            cleared += 1
-    save_messages(data)
+    def _clear_unprocessed(data):
+        nonlocal cleared
+        for m in data.get("messages", []):
+            if not m.get("processed", False):
+                m["processed"] = True
+                cleared += 1
+        return data
+    load_and_modify(_clear_unprocessed)
     if cleared:
         print(f"[STOP] 미처리 메시지 {cleared}개 정리 완료")
 
@@ -440,7 +442,7 @@ async def fetch_new_messages():
                 # 중단 명령은 executor 트리거 안 함 — 0 반환
                 return 0
 
-            # 수신 확인 전송
+            # 수신 확인 전송 (messages.json에는 저장하지 않음 — 노이즈 방지)
             for msg in new_messages:
                 try:
                     await bot.send_message(
@@ -448,7 +450,6 @@ async def fetch_new_messages():
                         text="✓",
                         reply_to_message_id=msg['message_id']
                     )
-                    save_bot_response(msg['chat_id'], "✓", [msg['message_id']], channel="system")
                 except Exception:
                     pass  # 수신 확인 실패해도 무시
 
@@ -465,7 +466,7 @@ RETRY_MAX = 3
 
 
 def _retry_unprocessed():
-    """미처리 메시지 확인 + retry_count < 3이면 executor 재트리거"""
+    """미처리 메시지 확인 + retry_count < 3이면 executor 재트리거 — flock 사용"""
     # PM/executor 실행 중이면 retry 불필요
     if os.path.exists(EXECUTOR_LOCK_FILE):
         return
@@ -474,29 +475,35 @@ def _retry_unprocessed():
     if not os.path.exists(MESSAGES_FILE):
         return
 
-    data = load_messages()
-    retryable = [
-        msg for msg in data.get("messages", [])
-        if msg.get("type") == "user"
-        and not msg.get("processed", False)
-        and msg.get("retry_count", 0) < RETRY_MAX
-    ]
+    should_trigger = False
+    retry_info = ""
 
-    if not retryable:
-        return
+    def _bump_retry(data):
+        nonlocal should_trigger, retry_info
+        retryable = [
+            msg for msg in data.get("messages", [])
+            if msg.get("type") == "user"
+            and not msg.get("processed", False)
+            and msg.get("retry_count", 0) < RETRY_MAX
+        ]
+        if not retryable:
+            return data
+        for msg in retryable:
+            msg["retry_count"] = msg.get("retry_count", 0) + 1
+        retry_counts = [msg["retry_count"] for msg in retryable]
+        retry_info = f"미처리 메시지 {len(retryable)}개 재시도 (retry #{max(retry_counts)})"
+        should_trigger = True
+        return data
 
-    for msg in retryable:
-        msg["retry_count"] = msg.get("retry_count", 0) + 1
+    load_and_modify(_bump_retry)
 
-    save_messages(data)
-
-    retry_counts = [msg["retry_count"] for msg in retryable]
-    print(f"[RETRY] 미처리 메시지 {len(retryable)}개 재시도 (retry #{max(retry_counts)})")
-    _trigger_executor()
+    if should_trigger:
+        print(f"[RETRY] {retry_info}")
+        _trigger_executor()
 
 
 def _trigger_executor():
-    """executor.sh를 백그라운드 프로세스로 실행 (stale lock 자동 정리)"""
+    """executor.sh를 백그라운드 프로세스로 실행 (stale lock 자동 정리 + 원자적 선점)"""
     lockfile = EXECUTOR_LOCK_FILE
     if os.path.exists(lockfile):
         # stale lock 감지: Claude PM 프로세스가 실제로 살아있는지 확인
@@ -514,9 +521,23 @@ def _trigger_executor():
         except OSError:
             pass
 
+    # 원자적 lock 선점 — executor.sh 실행 전에 lock을 먼저 잡는다
+    # 다른 _trigger_executor() 호출이 동시에 진입해도 O_EXCL로 하나만 성공
+    try:
+        fd = os.open(lockfile, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        os.write(fd, f"pre-lock by listener PID {os.getpid()}\n".encode())
+        os.close(fd)
+    except FileExistsError:
+        print("[TRIGGER] 다른 트리거가 이미 lock 선점 — 스킵")
+        return
+
     executor = os.path.join(PROJECT_ROOT, "scripts", "executor.sh")
     if not os.path.exists(executor):
         print(f"[ERROR] executor.sh not found: {executor}")
+        try:
+            os.remove(lockfile)
+        except OSError:
+            pass
         return
 
     log_dir = os.path.join(PROJECT_ROOT, "logs")

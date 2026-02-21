@@ -11,7 +11,7 @@ Functions:
 import os
 from datetime import datetime
 
-from ..channels._msg_store import load_telegram_messages, save_telegram_messages, save_bot_response
+from ..channels._msg_store import load_telegram_messages, save_telegram_messages, load_and_modify, save_bot_response
 from ._working_lock import _dashboard_log, load_new_instructions, clear_new_instructions
 from ..memory.tasks import get_task_dir, update_index
 from ..channels.telegram import send_files_sync
@@ -200,7 +200,7 @@ def report_telegram(instruction, result_text, chat_id, timestamp, message_id, fi
 
 
 def mark_done_telegram(message_id):
-    """텔레그램 메시지 처리 완료 표시"""
+    """텔레그램 메시지 처리 완료 표시 — flock 사용"""
     if isinstance(message_id, list):
         message_ids = message_id
     else:
@@ -212,14 +212,15 @@ def mark_done_telegram(message_id):
         for inst in new_instructions:
             message_ids.append(inst["message_id"])
 
-    data = load_telegram_messages()
-    messages = data.get("messages", [])
+    ids_set = set(message_ids)
 
-    for msg in messages:
-        if msg["message_id"] in message_ids:
-            msg["processed"] = True
+    def _mark_done(data):
+        for msg in data.get("messages", []):
+            if msg["message_id"] in ids_set:
+                msg["processed"] = True
+        return data
 
-    save_telegram_messages(data)
+    load_and_modify(_mark_done)
     clear_new_instructions()
 
     if len(message_ids) > 1:

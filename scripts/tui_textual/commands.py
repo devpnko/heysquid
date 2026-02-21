@@ -184,6 +184,22 @@ def _kill_executor() -> bool:
     with open(INTERRUPTED_FILE, "w", encoding="utf-8") as f:
         json.dump(interrupted_data, f, ensure_ascii=False, indent=2)
 
+    # 미처리 메시지 processed 처리 (listener의 _handle_stop_command과 동일)
+    try:
+        from heysquid.channels._msg_store import load_and_modify
+
+        cleared = 0
+        def _clear_unprocessed(data):
+            nonlocal cleared
+            for m in data.get("messages", []):
+                if not m.get("processed", False):
+                    m["processed"] = True
+                    cleared += 1
+            return data
+        load_and_modify(_clear_unprocessed)
+    except Exception:
+        pass
+
     return killed
 
 

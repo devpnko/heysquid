@@ -25,6 +25,7 @@ from .config import DATA_DIR_STR as DATA_DIR
 from ..channels._msg_store import (                   # noqa: F401
     load_telegram_messages,
     save_telegram_messages,
+    load_and_modify,
     save_bot_response,
     _safe_parse_timestamp,
     _cleanup_old_messages,
@@ -114,26 +115,28 @@ def reply_telegram(chat_id, message_id, text):
     ids = message_id if isinstance(message_id, list) else [message_id]
     ids_set = set(ids)
 
-    # 1. 먼저 processed 마킹 (중복 방지)
-    data = load_telegram_messages()
-    for msg in data.get("messages", []):
-        if msg["message_id"] in ids_set:
-            msg["processed"] = True
-    save_telegram_messages(data)
+    # 1. 먼저 processed 마킹 (중복 방지) — flock 사용
+    def _mark_processed(data):
+        for msg in data.get("messages", []):
+            if msg["message_id"] in ids_set:
+                msg["processed"] = True
+        return data
+    load_and_modify(_mark_processed)
 
     # 2. 전송
     success = send_message_sync(chat_id, text, _save=False)
 
     if success:
-        # 3. 봇 응답 기록
+        # 3. 봇 응답 기록 (save_bot_response 내부에서 flock 사용)
         save_bot_response(chat_id, text, ids)
     else:
-        # 4. 전송 실패 → processed 롤백
-        data = load_telegram_messages()
-        for msg in data.get("messages", []):
-            if msg["message_id"] in ids_set:
-                msg["processed"] = False
-        save_telegram_messages(data)
+        # 4. 전송 실패 → processed 롤백 — flock 사용
+        def _rollback_processed(data):
+            for msg in data.get("messages", []):
+                if msg["message_id"] in ids_set:
+                    msg["processed"] = False
+            return data
+        load_and_modify(_rollback_processed)
 
     return success
 

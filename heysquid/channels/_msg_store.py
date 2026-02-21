@@ -10,9 +10,13 @@ Functions:
 
 import os
 import json
+import fcntl
+import tempfile
 from datetime import datetime, timedelta
 
 from ..paths import MESSAGES_FILE, DATA_DIR
+
+_LOCK_PATH = MESSAGES_FILE + '.lock'
 
 
 def load_telegram_messages():
@@ -29,16 +33,46 @@ def load_telegram_messages():
 
 
 def save_telegram_messages(data):
-    """messages.json 저장"""
+    """messages.json 원자적 저장 (tmp + fsync + rename)"""
     os.makedirs(DATA_DIR, exist_ok=True)
-    with open(MESSAGES_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+    fd, tmp_path = tempfile.mkstemp(dir=DATA_DIR, suffix='.json.tmp')
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        os.rename(tmp_path, MESSAGES_FILE)
+    except Exception:
+        # 실패 시 임시 파일 정리
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
+def load_and_modify(modifier_fn):
+    """messages.json을 잠금 하에 읽기-수정-쓰기 (fcntl.flock)
+
+    Args:
+        modifier_fn: data dict를 받아 수정된 data dict를 반환하는 함수
+    Returns:
+        modifier_fn의 반환값
+    """
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with open(_LOCK_PATH, 'w') as lock_fd:
+        fcntl.flock(lock_fd, fcntl.LOCK_EX)
+        try:
+            data = load_telegram_messages()
+            result = modifier_fn(data)
+            save_telegram_messages(result)
+            return result
+        finally:
+            fcntl.flock(lock_fd, fcntl.LOCK_UN)
 
 
 def save_bot_response(chat_id, text, reply_to_message_ids, files=None, channel="system"):
-    """봇 응답을 messages.json에 저장 (대화 컨텍스트 유지)"""
-    data = load_telegram_messages()
-
+    """봇 응답을 messages.json에 저장 (대화 컨텍스트 유지) — flock 사용"""
     bot_message = {
         "message_id": f"bot_{reply_to_message_ids[0]}",
         "type": "bot",
@@ -51,8 +85,11 @@ def save_bot_response(chat_id, text, reply_to_message_ids, files=None, channel="
         "processed": True
     }
 
-    data["messages"].append(bot_message)
-    save_telegram_messages(data)
+    def _append_bot_msg(data):
+        data["messages"].append(bot_message)
+        return data
+
+    load_and_modify(_append_bot_msg)
     print(f"[LOG] 봇 응답 저장 완료 (reply_to: {reply_to_message_ids})")
 
 

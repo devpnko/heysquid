@@ -62,7 +62,7 @@ log "CWD=$(pwd)"
 
 # 1. executor.sh 중복 실행 방지
 #    - 실제 Claude 바이너리만 감지 (caffeinate 래퍼 제외)
-#    - stream log 활성도로 stale 판정 (1시간)
+#    - stream log 활성도로 stale 판정 (30분)
 SELF_PID=$$
 HAS_CLAUDE_PM=false
 CLAUDE_PIDS=$(pgrep -f "claude.*append-system-prompt-file" 2>/dev/null || true)
@@ -78,8 +78,8 @@ if [ "$HAS_CLAUDE_PM" = true ]; then
     # Claude PM 세션이 돌고 있으면 — stale 체크
     if [ -f "$STREAM_LOG" ]; then
         LOG_AGE=$(( $(date +%s) - $(stat -f %m "$STREAM_LOG" 2>/dev/null || echo 0) ))
-        if [ "$LOG_AGE" -gt 3600 ]; then
-            log "[STALE] Claude PM idle >1h. Force-killing..."
+        if [ "$LOG_AGE" -gt 1800 ]; then
+            log "[STALE] Claude PM idle >30m. Force-killing..."
             pkill -f "claude.*append-system-prompt-file" 2>/dev/null || true
             sleep 2
             rm -f "$LOCKFILE" 2>/dev/null
@@ -94,11 +94,10 @@ if [ "$HAS_CLAUDE_PM" = true ]; then
     fi
 fi
 
-# 2. Lock 파일 확인 (Claude 프로세스 없는데 Lock 있으면 크래시 복구)
+# 2. Lock 파일 확인 (listener가 pre-lock을 생성하므로 여기서 삭제하지 않음)
+#    executor.sh가 step 4에서 lock을 덮어씀. no-message exit 시 정리함.
 if [ -f "$LOCKFILE" ]; then
-    log "[RECOVERY] Lock file exists but no Claude PM running - recovering from crash."
-    rm -f "$LOCKFILE" 2>/dev/null
-    log "[INFO] Stale lock removed."
+    log "[INFO] Lock file exists (pre-lock by listener or previous crash). Proceeding..."
 fi
 
 # 3. 빠른 메시지 확인 (Python으로 먼저 확인)
@@ -115,6 +114,7 @@ CHECK_RESULT=0
 
 if [ "$CHECK_RESULT" -eq 0 ]; then
     log "[NO_MESSAGE] No new messages. Exiting."
+    rm -f "$LOCKFILE" 2>/dev/null
     log ""
     exit 0
 fi
