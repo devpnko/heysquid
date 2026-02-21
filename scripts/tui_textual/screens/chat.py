@@ -64,7 +64,7 @@ class ChatScreen(Screen):
         return f"[bold]🦑 SQUID[/bold]  [bold {pm_color}]\\[CHAT][/bold {pm_color}]  {indicator}"
 
     def _status_bar_text(self) -> str:
-        return "[dim] q:quit  Ctrl+1/2/3/4:mode  Ctrl+\u2190\u2192  Enter:send  Tab:/ @완성  ⌥+drag:복사[/dim]"
+        return "[dim] q:quit  Ctrl+1/2/3/4:mode  Ctrl+\u2190\u2192  Enter:send  Tab:/ @완성  drag+Ctrl+C:복사[/dim]"
 
     def on_text_area_changed(self, event) -> None:
         """ChatInput 텍스트 변경 → 자동완성 힌트 업데이트"""

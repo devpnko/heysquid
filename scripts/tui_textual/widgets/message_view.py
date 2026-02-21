@@ -40,6 +40,14 @@ class MessageView(VerticalScroll):
         msg_count = len(messages)
         if msg_count == self._last_msg_count:
             return
+
+        # 선택 중이면 refresh 스킵 (위젯 파괴 방지)
+        try:
+            if self.screen.selections:
+                return
+        except Exception:
+            pass
+
         self._last_msg_count = msg_count
 
         # 기존 콘텐츠 제거 후 재구성

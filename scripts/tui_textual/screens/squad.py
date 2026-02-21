@@ -64,7 +64,7 @@ class SquadScreen(Screen):
                 yield SquadHistoryList(id="squad-history-list")
                 yield SquadEntryView(id="squad-entry-view")
         yield CommandInput(id="squad-cmd")
-        yield Static("[dim] q:quit  Ctrl+1/2/3/4:mode  /cmd  ↑↓:select  Enter:view[/dim]", id="squad-status-bar")
+        yield Static("[dim] q:quit  Ctrl+1/2/3/4:mode  /cmd  ↑↓:select  Enter:view  drag+Ctrl+C:복사[/dim]", id="squad-status-bar")
 
     def _header_text(self) -> str:
         pm_color = AGENT_COLORS.get("pm", "#ff6b9d")

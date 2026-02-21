@@ -37,6 +37,7 @@ class SquidApp(App):
     CSS_PATH = CSS_PATH
 
     BINDINGS = [
+        Binding("ctrl+c", "copy_selection", "Copy", priority=True),
         Binding("ctrl+1", "mode_chat", "Chat", priority=True),
         Binding("ctrl+2", "mode_squad", "Squad", priority=True),
         Binding("ctrl+3", "mode_log", "Log", priority=True),
@@ -140,6 +141,19 @@ class SquidApp(App):
     def action_mode_next(self) -> None:
         """Ctrl+→ → 다음 모드"""
         self._switch_mode((self._mode + 1) % MODE_COUNT)
+
+    def action_copy_selection(self) -> None:
+        """Ctrl+C → 선택된 텍스트 복사, 없으면 종료 안내"""
+        selected = self.screen.get_selected_text()
+        if selected:
+            self.copy_to_clipboard(selected)
+            self.screen.clear_selection()
+            self._set_flash(f"✓ 복사됨 ({len(selected)}자)")
+        else:
+            for key, active_binding in self.active_bindings.items():
+                if active_binding.binding.action in ("quit", "quit_app", "app.quit"):
+                    self.notify(f"Press [b]{key}[/b] to quit", title="Quit?")
+                    return
 
     def action_quit_app(self) -> None:
         """q → 종료 (Chat 모드에서 입력 중이면 무시)"""

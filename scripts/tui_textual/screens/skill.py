@@ -53,7 +53,7 @@ class SkillScreen(Screen):
         yield VerticalScroll(Static("", id="skill-content"), id="skill-table")
         yield CommandInput(id="skill-cmd")
         yield Static(
-            "[dim] q:quit  Ctrl+1/2/3/4:mode  Ctrl+\u2190\u2192  /cmd[/dim]",
+            "[dim] q:quit  Ctrl+1/2/3/4:mode  Ctrl+\u2190\u2192  /cmd  drag+Ctrl+C:복사[/dim]",
             id="skill-status-bar",
         )
 
