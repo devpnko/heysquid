@@ -276,6 +276,165 @@ def test_deco_skill_drag(page):
     return moved and position_kept
 
 
+def test_skill_reconcile_add_remove(page):
+    """스킬 추가/제거 시 reconcile이 정확히 동작하는지."""
+    print("\n🧪 Test 5: Reconcile — 스킬 추가/제거")
+
+    page.goto(f"{BASE_URL}/dashboard.html", wait_until="networkidle")
+    page.wait_for_timeout(2000)
+
+    initial_count = page.locator(".skill-machine").count()
+    print(f"  초기 스킬 수: {initial_count}")
+
+    if initial_count == 0:
+        print("  ⚠️ 스킬 없음 — 스킵")
+        return True
+
+    # 현재 스킬 데이터에 새 스킬 추가 + 기존 하나 제거 후 renderSkillMachines 호출
+    result = page.evaluate("""() => {
+        var raw = window._lastSkillsRaw;
+        if (!raw) return { error: 'no _lastSkillsRaw' };
+        var names = Object.keys(raw);
+        var removedName = names[0];
+
+        // 새 스킬 추가
+        var fakeSkills = JSON.parse(JSON.stringify(raw));
+        fakeSkills['test_reconcile_skill'] = { name: 'TestReconcile', trigger: 'manual', status: 'idle' };
+        // 기존 하나 제거
+        delete fakeSkills[removedName];
+
+        // 캐시 초기화 + 렌더
+        lastSkillsData = null;
+        renderSkillMachines(fakeSkills);
+
+        // 검증
+        var newEl = document.querySelector('.skill-machine[data-skill="test_reconcile_skill"]');
+        var removedEl = document.querySelector('.skill-machine[data-skill="' + removedName + '"]');
+        var totalCount = document.querySelectorAll('.skill-machine').length;
+
+        return {
+            newExists: !!newEl,
+            removedGone: !removedEl,
+            totalCount: totalCount,
+            expectedCount: Object.keys(fakeSkills).length,
+            removedName: removedName
+        };
+    }""")
+
+    print(f"  결과: {result}")
+
+    if result.get("error"):
+        print(f"  ❌ 에러: {result['error']}")
+        return False
+
+    new_ok = result.get("newExists", False)
+    removed_ok = result.get("removedGone", False)
+    count_ok = result.get("totalCount") == result.get("expectedCount")
+
+    if new_ok:
+        print(f"  ✅ 새 스킬 DOM 생성됨")
+    else:
+        print(f"  ❌ 새 스킬 DOM 미생성")
+
+    if removed_ok:
+        print(f"  ✅ 삭제된 스킬 [{result.get('removedName')}] DOM 제거됨")
+    else:
+        print(f"  ❌ 삭제된 스킬 DOM 잔존")
+
+    if count_ok:
+        print(f"  ✅ 총 스킬 수 일치 ({result.get('totalCount')})")
+    else:
+        print(f"  ❌ 스킬 수 불일치: {result.get('totalCount')} vs expected {result.get('expectedCount')}")
+
+    # 복원: 원래 데이터로 다시 렌더
+    page.evaluate("""() => {
+        lastSkillsData = null;
+        renderSkillMachines(window._lastSkillsRaw);
+    }""")
+
+    return new_ok and removed_ok and count_ok
+
+
+def test_skill_status_update_inplace(page):
+    """스킬 status 변경 시 DOM 재생성 없이 CSS class만 반영되는지."""
+    print("\n🧪 Test 6: Reconcile — 스킬 status in-place 업데이트")
+
+    page.goto(f"{BASE_URL}/dashboard.html", wait_until="networkidle")
+    page.wait_for_timeout(2000)
+
+    initial_count = page.locator(".skill-machine").count()
+    if initial_count == 0:
+        print("  ⚠️ 스킬 없음 — 스킵")
+        return True
+
+    result = page.evaluate("""() => {
+        var raw = window._lastSkillsRaw;
+        if (!raw) return { error: 'no _lastSkillsRaw' };
+        var names = Object.keys(raw);
+        var targetName = names[0];
+        var el = document.querySelector('.skill-machine[data-skill="' + targetName + '"]');
+        if (!el) return { error: 'no element' };
+
+        // DOM identity 기록 (같은 객체인지 확인용)
+        el._testMarker = 'reconcile_test_marker';
+        var beforeStatus = el.dataset.status;
+
+        // status를 'running'으로 변경
+        var modified = JSON.parse(JSON.stringify(raw));
+        modified[targetName].status = 'running';
+        lastSkillsData = null;
+        renderSkillMachines(modified);
+
+        // 같은 DOM 요소인지 확인 (reconcile = 같은 요소)
+        var afterEl = document.querySelector('.skill-machine[data-skill="' + targetName + '"]');
+        var sameElement = afterEl && afterEl._testMarker === 'reconcile_test_marker';
+        var afterStatus = afterEl ? afterEl.dataset.status : 'missing';
+        var pixel = afterEl ? afterEl.querySelector('.machine-pixel') : null;
+        var hasRunningClass = pixel && pixel.className.indexOf('running') >= 0;
+
+        return {
+            targetName: targetName,
+            beforeStatus: beforeStatus,
+            afterStatus: afterStatus,
+            sameElement: sameElement,
+            hasRunningClass: hasRunningClass
+        };
+    }""")
+
+    print(f"  결과: {result}")
+
+    if result.get("error"):
+        print(f"  ❌ 에러: {result['error']}")
+        return False
+
+    same = result.get("sameElement", False)
+    status_ok = result.get("afterStatus") == "running"
+    class_ok = result.get("hasRunningClass", False)
+
+    if same:
+        print(f"  ✅ 같은 DOM 요소 유지됨 (reconcile 작동)")
+    else:
+        print(f"  ❌ DOM 요소 재생성됨 (reconcile 실패)")
+
+    if status_ok:
+        print(f"  ✅ status 업데이트: {result.get('beforeStatus')} → running")
+    else:
+        print(f"  ❌ status 미반영: {result.get('afterStatus')}")
+
+    if class_ok:
+        print(f"  ✅ machine-pixel CSS class 반영됨")
+    else:
+        print(f"  ❌ machine-pixel CSS class 미반영")
+
+    # 복원
+    page.evaluate("""() => {
+        lastSkillsData = null;
+        renderSkillMachines(window._lastSkillsRaw);
+    }""")
+
+    return same and status_ok and class_ok
+
+
 def main():
     print("=" * 60)
     print("🦑 DECO 가드 — 스킬 사라짐 + 에이전트 위치 깨짐 수정 검증")
@@ -292,6 +451,8 @@ def main():
             ("agent_drag", test_deco_agent_draggable),
             ("skill_drag", test_deco_skill_drag),
             ("deco_off_rerender", test_deco_off_full_rerender),
+            ("reconcile_add_remove", test_skill_reconcile_add_remove),
+            ("reconcile_status_update", test_skill_status_update_inplace),
         ]
 
         for name, fn in tests:
