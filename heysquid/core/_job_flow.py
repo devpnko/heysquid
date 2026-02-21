@@ -14,7 +14,7 @@ from datetime import datetime
 from ..channels._msg_store import load_telegram_messages, save_telegram_messages, load_and_modify, save_bot_response
 from ._working_lock import _dashboard_log, load_new_instructions, clear_new_instructions
 from ..memory.tasks import get_task_dir, update_index
-from ..channels.telegram import send_files_sync
+from ..channels.telegram import send_files_sync, run_async_safe
 
 
 def _format_file_size(size_bytes):
@@ -181,6 +181,32 @@ def report_telegram(instruction, result_text, chat_id, timestamp, message_id, fi
     print(f"[MEM] 메모리 저장 완료: {task_dir}/task_info.txt")
 
 
+def _set_done_reactions(message_ids):
+    """Set ✅ reaction on processed messages (best-effort)."""
+    try:
+        from telegram import ReactionTypeEmoji
+        from ..channels.telegram import _get_bot
+
+        data = load_telegram_messages()
+        bot = _get_bot()
+
+        for msg in data.get("messages", []):
+            if msg["message_id"] in message_ids:
+                chat_id = msg.get("chat_id")
+                if not chat_id:
+                    continue
+                try:
+                    run_async_safe(bot.set_message_reaction(
+                        chat_id=chat_id,
+                        message_id=msg["message_id"],
+                        reaction=[ReactionTypeEmoji(emoji="✅")],
+                    ))
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+
 def mark_done_telegram(message_id):
     """텔레그램 메시지 처리 완료 표시 — flock 사용"""
     if isinstance(message_id, list):
@@ -204,6 +230,9 @@ def mark_done_telegram(message_id):
 
     load_and_modify(_mark_done)
     clear_new_instructions()
+
+    # Set ✅ reaction on completed messages
+    _set_done_reactions(ids_set)
 
     if len(message_ids) > 1:
         print(f"[DONE] 메시지 {len(message_ids)}개 처리 완료 표시: {', '.join(map(str, message_ids))}")

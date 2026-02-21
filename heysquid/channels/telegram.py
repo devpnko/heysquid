@@ -203,6 +203,13 @@ def send_message_sync(chat_id, text, parse_mode="Markdown", _save=True):
     2. working.json의 last_activity 갱신
     3. 새 메시지 확인 및 저장 (작업 중일 때만)
     """
+    # Start typing indicator (signals "still talking")
+    try:
+        from ._typing import start as _typing_start
+        _typing_start(chat_id)
+    except Exception:
+        pass
+
     result = run_async_safe(send_message(chat_id, text, parse_mode))
 
     if result:

@@ -79,7 +79,7 @@ def check_working_lock():
         return lock_info
 
 
-def create_working_lock(message_id, instruction):
+def create_working_lock(message_id, instruction, chat_id=None):
     """원자적으로 작업 잠금 파일 생성."""
     if isinstance(message_id, list):
         message_ids = message_id
@@ -95,7 +95,8 @@ def create_working_lock(message_id, instruction):
         "instruction_summary": summary,
         "started_at": now_str,
         "last_activity": now_str,
-        "count": len(message_ids)
+        "count": len(message_ids),
+        "chat_id": chat_id,
     }
 
     os.makedirs(DATA_DIR, exist_ok=True)
@@ -105,6 +106,14 @@ def create_working_lock(message_id, instruction):
             json.dump(lock_data, f, ensure_ascii=False, indent=2)
         print(f"[LOCK] 작업 잠금 생성: message_id={msg_id_str}")
         _dashboard_log('pm', f'Starting: {summary}')
+
+        # Start typing indicator
+        try:
+            from ..channels._typing import start as _typing_start
+            _typing_start(chat_id)
+        except Exception:
+            pass
+
         return True
     except FileExistsError:
         print(f"[WARN] 잠금 파일 이미 존재. 다른 작업이 진행 중입니다.")
@@ -229,6 +238,13 @@ def clear_new_instructions():
 
 def remove_working_lock():
     """작업 잠금 파일 삭제"""
+    # Stop typing indicator before removing lock
+    try:
+        from ..channels._typing import stop as _typing_stop
+        _typing_stop()
+    except Exception:
+        pass
+
     if os.path.exists(WORKING_LOCK_FILE):
         os.remove(WORKING_LOCK_FILE)
         print("[UNLOCK] 작업 잠금 해제")
