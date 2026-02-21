@@ -125,19 +125,7 @@ log "[NEW_MESSAGE] New messages found. Starting Claude Code..."
 echo "$(date '+%Y-%m-%d %H:%M:%S')" > "$LOCKFILE"
 log "Lock file created: $LOCKFILE"
 
-# 착수 알림 전송 (중단 버튼 포함) + messages.json에 저장
-cd "$ROOT"
-"$VENV_PYTHON" -c "
-from heysquid.telegram_sender import send_message_with_stop_button_sync
-from heysquid.quick_check import get_first_unprocessed_chat_id
-from heysquid.channels._msg_store import save_bot_response
-chat_id = get_first_unprocessed_chat_id()
-if chat_id:
-    msg = '✓'
-    send_message_with_stop_button_sync(chat_id, msg)
-    save_bot_response(chat_id, msg, [-1], channel='system')
-" 2>/dev/null || true
-cd "$ROOT"
+# (착수 알림은 listener가 이미 전송하므로 여기서는 생략)
 
 # CLAUDE.md 존재 확인
 if [ ! -f "$SPF" ]; then

@@ -215,25 +215,8 @@ def send_message_sync(chat_id, text, parse_mode="Markdown", _save=True):
             except Exception as e:
                 print(f"[WARN] 봇 응답 저장 실패: {e}")
         try:
-            from .._working_lock import (
-                update_working_activity,
-                check_new_messages_during_work,
-                save_new_instructions
-            )
-
+            from .._working_lock import update_working_activity
             update_working_activity()
-
-            new_msgs = check_new_messages_during_work()
-            if new_msgs:
-                save_new_instructions(new_msgs)
-
-                alert_text = f"**새로운 요청 {len(new_msgs)}개 확인**\n\n"
-                for i, msg in enumerate(new_msgs, 1):
-                    alert_text += f"{i}. {msg['instruction'][:50]}...\n"
-                alert_text += "\n진행 중인 작업에 반영하겠습니다."
-
-                run_async_safe(send_message(chat_id, alert_text, parse_mode))
-
         except Exception as e:
             print(f"[WARN] working lock 업데이트 실패: {e}")
 

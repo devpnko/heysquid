@@ -270,6 +270,7 @@ async def fetch_new_messages():
         )
 
         new_messages = []
+        existing_ids = {m["message_id"] for m in data.get("messages", [])}
 
         for update in updates:
             # 인라인 버튼 콜백 처리 (중단 버튼)
@@ -416,8 +417,10 @@ async def fetch_new_messages():
                 "processed": False
             }
 
-            new_messages.append(message_data)
-            data["messages"].append(message_data)
+            if message_data["message_id"] not in existing_ids:
+                new_messages.append(message_data)
+                data["messages"].append(message_data)
+                existing_ids.add(message_data["message_id"])
 
             if update.update_id > data["last_update_id"]:
                 data["last_update_id"] = update.update_id
@@ -463,6 +466,11 @@ RETRY_MAX = 3
 
 def _retry_unprocessed():
     """미처리 메시지 확인 + retry_count < 3이면 executor 재트리거"""
+    # PM/executor 실행 중이면 retry 불필요
+    if os.path.exists(EXECUTOR_LOCK_FILE):
+        return
+    if os.path.exists(WORKING_LOCK_FILE):
+        return
     if not os.path.exists(MESSAGES_FILE):
         return
 

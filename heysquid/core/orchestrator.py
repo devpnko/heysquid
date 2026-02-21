@@ -97,9 +97,9 @@ def reply_telegram(chat_id, message_id, text):
     """
     자연스러운 대화 응답 (가벼운 대화용)
 
+    - processed 먼저 마킹 (중복 응답 방지)
     - send_message_sync()로 전송
-    - save_bot_response()로 대화 기록 저장
-    - processed = True 표시
+    - 실패 시 processed 롤백
     - working lock/memory 없음 (가벼운 대화에는 불필요)
 
     Args:
@@ -111,19 +111,29 @@ def reply_telegram(chat_id, message_id, text):
     """
     from ..channels.telegram import send_message_sync
 
-    success = send_message_sync(chat_id, text, _save=False)
-
     ids = message_id if isinstance(message_id, list) else [message_id]
+    ids_set = set(ids)
 
-    if success:
-        save_bot_response(chat_id, text, ids)
-
-    # 메시지 processed 표시
+    # 1. 먼저 processed 마킹 (중복 방지)
     data = load_telegram_messages()
     for msg in data.get("messages", []):
-        if msg["message_id"] in ids:
+        if msg["message_id"] in ids_set:
             msg["processed"] = True
     save_telegram_messages(data)
+
+    # 2. 전송
+    success = send_message_sync(chat_id, text, _save=False)
+
+    if success:
+        # 3. 봇 응답 기록
+        save_bot_response(chat_id, text, ids)
+    else:
+        # 4. 전송 실패 → processed 롤백
+        data = load_telegram_messages()
+        for msg in data.get("messages", []):
+            if msg["message_id"] in ids_set:
+                msg["processed"] = False
+        save_telegram_messages(data)
 
     return success
 
@@ -260,7 +270,6 @@ def check_telegram():
         print(f"[WARN] 다른 작업이 진행 중입니다: message_id={lock_info.get('message_id')}")
         return []
 
-    _poll_telegram_once()
     _cleanup_old_messages()
 
     data = load_telegram_messages()
