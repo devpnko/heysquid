@@ -38,7 +38,8 @@ from ..paths import MESSAGES_FILE, INTERRUPTED_FILE, WORKING_LOCK_FILE, EXECUTOR
 # 중단 명령어 — 이 중 하나가 메시지 전체와 일치하면 중단
 STOP_KEYWORDS = ["멈춰", "스탑", "중단", "/stop", "잠깐만", "스톱", "그만", "취소"]
 
-from ._msg_store import load_telegram_messages as load_messages, save_telegram_messages as save_messages, load_and_modify
+from ._msg_store import load_telegram_messages as load_messages, save_telegram_messages as save_messages, load_and_modify, get_cursor, _migrate_cursors
+from ._base import trigger_executor as _trigger_executor
 
 
 def _is_stop_command(text):
@@ -261,8 +262,7 @@ async def fetch_new_messages():
         pool_timeout=5.0
     )
     bot = Bot(token=BOT_TOKEN, get_updates_request=request)
-    data = load_messages()
-    last_update_id = data.get("last_update_id", 0)
+    last_update_id = get_cursor("telegram", "last_update_id")
 
     try:
         updates = await bot.get_updates(
@@ -272,7 +272,7 @@ async def fetch_new_messages():
         )
 
         new_messages = []
-        existing_ids = {m["message_id"] for m in data.get("messages", [])}
+        max_update_id = last_update_id
 
         for update in updates:
             # 인라인 버튼 콜백 처리 (중단 버튼)
@@ -295,9 +295,9 @@ async def fetch_new_messages():
                         "first_name": user.first_name or "",
                     }
                     await _handle_stop_command(stop_data)
-                    if update.update_id > data["last_update_id"]:
-                        data["last_update_id"] = update.update_id
-                        save_messages(data)
+                    if update.update_id > max_update_id:
+                        from ._msg_store import set_cursor
+                        set_cursor("telegram", "last_update_id", update.update_id)
                     return 0
                 continue
 
@@ -419,16 +419,29 @@ async def fetch_new_messages():
                 "processed": False
             }
 
-            if message_data["message_id"] not in existing_ids:
-                new_messages.append(message_data)
-                data["messages"].append(message_data)
-                existing_ids.add(message_data["message_id"])
+            new_messages.append(message_data)
 
-            if update.update_id > data["last_update_id"]:
-                data["last_update_id"] = update.update_id
+            if update.update_id > max_update_id:
+                max_update_id = update.update_id
 
         if new_messages:
-            save_messages(data)
+            # flock 기반 원자적 병합 (lost update 방지)
+            def _merge_new(data):
+                data = _migrate_cursors(data)
+                existing_ids = {m["message_id"] for m in data.get("messages", [])}
+                for msg_data in new_messages:
+                    if msg_data["message_id"] not in existing_ids:
+                        data["messages"].append(msg_data)
+                # cursor 업데이트
+                if "cursors" not in data:
+                    data["cursors"] = {}
+                if "telegram" not in data["cursors"]:
+                    data["cursors"]["telegram"] = {}
+                data["cursors"]["telegram"]["last_update_id"] = max_update_id
+                data["last_update_id"] = max_update_id  # 하위 호환
+                return data
+            load_and_modify(_merge_new)
+
             for msg in new_messages:
                 text_preview = msg['text'][:50] if msg['text'] else "(파일만)" if msg['files'] else "(위치)" if msg.get('location') else ""
                 file_info = f" + {len(msg['files'])}개 파일" if msg['files'] else ""
@@ -442,16 +455,30 @@ async def fetch_new_messages():
                 # 중단 명령은 executor 트리거 안 함 — 0 반환
                 return 0
 
-            # 수신 확인 전송 (messages.json에는 저장하지 않음 — 노이즈 방지)
+            # 수신 확인 리액션 (messages.json에는 저장하지 않음 — 노이즈 방지)
+            from telegram import ReactionTypeEmoji
             for msg in new_messages:
                 try:
-                    await bot.send_message(
+                    await bot.set_message_reaction(
                         chat_id=msg['chat_id'],
-                        text="✓",
-                        reply_to_message_id=msg['message_id']
+                        message_id=msg['message_id'],
+                        reaction=[ReactionTypeEmoji(emoji="👀")]
                     )
                 except Exception:
-                    pass  # 수신 확인 실패해도 무시
+                    pass  # 리액션 실패해도 무시
+
+            # 다른 채널에 릴레이 (전체 동기화 — best-effort)
+            try:
+                from ._router import broadcast_user_message, broadcast_files
+                for msg in new_messages:
+                    if msg.get("text"):
+                        broadcast_user_message(msg["text"], "telegram", msg.get("first_name", ""))
+                    if msg.get("files"):
+                        local_paths = [f["path"] for f in msg["files"] if f.get("path")]
+                        if local_paths:
+                            broadcast_files(local_paths, exclude_channels={"telegram"})
+            except Exception as e:
+                print(f"[WARN] 브로드캐스트 실패 (TG 처리에는 영향 없음): {e}")
 
             return len(new_messages)
 
@@ -463,6 +490,41 @@ async def fetch_new_messages():
 
 
 RETRY_MAX = 3
+
+
+def _cleanup_zombie_pm():
+    """좀비 PM 세션 감지 + 정리 — 다중 PM이 동시 실행되면 전부 kill"""
+    try:
+        result = subprocess.run(
+            ["pgrep", "-f", "claude.*append-system-prompt-file"],
+            capture_output=True, text=True
+        )
+        if result.returncode != 0:
+            return  # PM 프로세스 없음
+
+        pids = [p.strip() for p in result.stdout.strip().split("\n") if p.strip()]
+        if len(pids) <= 1:
+            return  # 단일 세션 — 정상
+
+        # 다중 PM 세션 감지 → 전부 kill
+        print(f"[ZOMBIE] 다중 PM 세션 감지: {len(pids)}개 (PIDs: {', '.join(pids)})")
+        subprocess.run(
+            ["pkill", "-f", "claude.*append-system-prompt-file"],
+            capture_output=True
+        )
+        time.sleep(2)
+
+        # lock 파일 정리
+        if os.path.exists(EXECUTOR_LOCK_FILE):
+            try:
+                os.remove(EXECUTOR_LOCK_FILE)
+            except OSError:
+                pass
+
+        print(f"[ZOMBIE] {len(pids)}개 좀비 PM 세션 정리 완료. 다음 메시지에서 새 세션 시작됨.")
+
+    except Exception as e:
+        print(f"[WARN] 좀비 PM 스캔 실패: {e}")
 
 
 def _retry_unprocessed():
@@ -484,6 +546,7 @@ def _retry_unprocessed():
             msg for msg in data.get("messages", [])
             if msg.get("type") == "user"
             and not msg.get("processed", False)
+            and not msg.get("seen", False)  # seen 메시지는 PM이 처리 중
             and msg.get("retry_count", 0) < RETRY_MAX
         ]
         if not retryable:
@@ -502,57 +565,7 @@ def _retry_unprocessed():
         _trigger_executor()
 
 
-def _trigger_executor():
-    """executor.sh를 백그라운드 프로세스로 실행 (stale lock 자동 정리 + 원자적 선점)"""
-    lockfile = EXECUTOR_LOCK_FILE
-    if os.path.exists(lockfile):
-        # stale lock 감지: Claude PM 프로세스가 실제로 살아있는지 확인
-        has_claude = subprocess.run(
-            ["pgrep", "-f", "claude.*append-system-prompt-file"],
-            capture_output=True,
-        ).returncode == 0
-        if has_claude:
-            print("[TRIGGER] executor 이미 실행 중 — 스킵")
-            return
-        # stale lock 제거
-        try:
-            os.remove(lockfile)
-            print("[TRIGGER] stale executor.lock 제거됨")
-        except OSError:
-            pass
-
-    # 원자적 lock 선점 — executor.sh 실행 전에 lock을 먼저 잡는다
-    # 다른 _trigger_executor() 호출이 동시에 진입해도 O_EXCL로 하나만 성공
-    try:
-        fd = os.open(lockfile, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-        os.write(fd, f"pre-lock by listener PID {os.getpid()}\n".encode())
-        os.close(fd)
-    except FileExistsError:
-        print("[TRIGGER] 다른 트리거가 이미 lock 선점 — 스킵")
-        return
-
-    executor = os.path.join(PROJECT_ROOT, "scripts", "executor.sh")
-    if not os.path.exists(executor):
-        print(f"[ERROR] executor.sh not found: {executor}")
-        try:
-            os.remove(lockfile)
-        except OSError:
-            pass
-        return
-
-    log_dir = os.path.join(PROJECT_ROOT, "logs")
-    os.makedirs(log_dir, exist_ok=True)
-    log_file = os.path.join(log_dir, "executor.log")
-
-    print("[TRIGGER] executor.sh 백그라운드 실행!")
-    with open(log_file, "a") as lf:
-        subprocess.Popen(
-            ["bash", executor],
-            stdout=lf,
-            stderr=lf,
-            cwd=PROJECT_ROOT,
-            start_new_session=True,
-        )
+# _trigger_executor는 _base.trigger_executor에서 import됨 (상단 참조)
 
 
 async def listen_loop():
@@ -591,8 +604,9 @@ async def listen_loop():
                 if cycle_count % 30 == 0:
                     print(f"[{now}] #{cycle_count} - 대기 중...")
 
-            # 60사이클(~10분)마다 미처리 메시지 재트리거
+            # 60사이클(~10분)마다 미처리 메시지 재트리거 + 좀비 PM 스캔
             if cycle_count % 60 == 0:
+                _cleanup_zombie_pm()
                 _retry_unprocessed()
 
             await asyncio.sleep(POLLING_INTERVAL)

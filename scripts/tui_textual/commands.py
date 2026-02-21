@@ -57,15 +57,11 @@ def _get_real_user_info(messages: list[dict]) -> dict | None:
 
 
 def inject_local_message(text: str) -> int:
-    """messages.json에 TUI 메시지 주입."""
-    os.makedirs(os.path.dirname(MESSAGES_FILE), exist_ok=True)
+    """messages.json에 TUI 메시지 주입 (flock atomic)."""
+    from heysquid.channels._msg_store import load_and_modify, load_telegram_messages
 
-    try:
-        with open(MESSAGES_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        data = {"messages": [], "last_update_id": 0}
-
+    # user_info를 먼저 조회 (read-only)
+    data = load_telegram_messages()
     user_info = _get_real_user_info(data.get("messages", []))
     if user_info is None:
         allowed = os.getenv("TELEGRAM_ALLOWED_USERS", "")
@@ -78,60 +74,53 @@ def inject_local_message(text: str) -> int:
                 "first_name": "Commander",
             }
 
-    tui_ids = [
-        m["message_id"] for m in data.get("messages", [])
-        if isinstance(m.get("message_id"), int) and m["message_id"] < 0
-    ]
-    new_id = min(tui_ids) - 1 if tui_ids else -1
+    new_id = None
 
-    message = {
-        "message_id": new_id,
-        "type": "user",
-        "channel": "tui",
-        "user_id": user_info["user_id"] if user_info else 0,
-        "username": user_info["username"] if user_info else "tui",
-        "first_name": user_info["first_name"] if user_info else "TUI",
-        "last_name": "",
-        "chat_id": user_info["chat_id"] if user_info else 0,
-        "text": text,
-        "files": [],
-        "location": None,
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "processed": False,
-        "source": "tui",
-        "mentions": parse_mentions(text),
-    }
+    def _inject(data):
+        nonlocal new_id
+        tui_ids = [
+            m["message_id"] for m in data.get("messages", [])
+            if isinstance(m.get("message_id"), int) and m["message_id"] < 0
+        ]
+        new_id = min(tui_ids) - 1 if tui_ids else -1
 
-    data["messages"].append(message)
-    with open(MESSAGES_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+        message = {
+            "message_id": new_id,
+            "type": "user",
+            "channel": "tui",
+            "user_id": user_info["user_id"] if user_info else 0,
+            "username": user_info["username"] if user_info else "tui",
+            "first_name": user_info["first_name"] if user_info else "TUI",
+            "last_name": "",
+            "chat_id": user_info["chat_id"] if user_info else 0,
+            "text": text,
+            "files": [],
+            "location": None,
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "processed": False,
+            "source": "tui",
+            "mentions": parse_mentions(text),
+        }
+        data["messages"].append(message)
+        return data
 
-    # 텔레그램에 포워딩
-    chat_id = user_info["chat_id"] if user_info else 0
-    if chat_id:
-        _forward_to_telegram(chat_id, text)
+    load_and_modify(_inject)
+
+    # 모든 활성 채널에 브로드캐스트 (전체 동기화)
+    _broadcast_to_channels(text)
 
     invalidate_chat_cache()
     return new_id
 
 
-def _forward_to_telegram(chat_id: int, text: str):
-    """TUI 메시지를 텔레그램 채팅에 포워딩 (curl subprocess)"""
-    if not BOT_TOKEN or not chat_id:
-        return
-    tg_text = f"[TUI] COMMANDER: {text}"
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    payload = json.dumps({"chat_id": chat_id, "text": tg_text})
+def _broadcast_to_channels(text: str):
+    """TUI 메시지를 모든 활성 채널에 브로드캐스트"""
     try:
-        subprocess.Popen(
-            ["curl", "-s", "-X", "POST", url,
-             "-H", "Content-Type: application/json",
-             "-d", payload],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-    except Exception:
-        pass
+        from heysquid.channels._router import broadcast_user_message
+        broadcast_user_message(text, source_channel="tui", sender_name="COMMANDER")
+    except Exception as e:
+        # 브로드캐스트 실패해도 TUI 메시지 자체는 정상 동작
+        print(f"[WARN] TUI broadcast failed: {e}")
 
 
 def _kill_executor() -> bool:
@@ -298,36 +287,46 @@ def _run_doctor() -> str:
     lines = ["🩺 Doctor Report"]
     fixed = 0
 
-    # 1. Listener 확인
-    has_listener = subprocess.run(
-        ["pgrep", "-f", "telegram_listener"],
-        capture_output=True,
-    ).returncode == 0
-    if has_listener:
-        result = subprocess.run(
-            ["pgrep", "-f", "telegram_listener"],
-            capture_output=True, text=True,
-        )
-        pid = result.stdout.strip().split("\n")[0].strip()
-        lines.append(f"✅ Listener: running (PID {pid})")
-    else:
-        plist = os.path.expanduser("~/Library/LaunchAgents/com.heysquid.watcher.plist")
-        if os.path.exists(plist):
-            subprocess.run(["launchctl", "unload", plist], capture_output=True)
-            time.sleep(1)
-            subprocess.run(["launchctl", "load", plist], capture_output=True)
-            time.sleep(2)
-            alive = subprocess.run(
-                ["pgrep", "-f", "telegram_listener"],
-                capture_output=True,
-            ).returncode == 0
-            if alive:
-                lines.append("🔧 Listener: restarted")
-                fixed += 1
-            else:
-                lines.append("❌ Listener: restart failed")
+    # 1. Listeners 확인 (멀티채널)
+    listener_configs = [
+        ("TG", "telegram_listener", "com.heysquid.watcher.plist", None),
+        ("SL", "slack_listener", "com.heysquid.slack.plist", "SLACK_BOT_TOKEN"),
+        ("DC", "discord_listener", "com.heysquid.discord.plist", "DISCORD_BOT_TOKEN"),
+    ]
+    for tag, proc_name, plist_name, env_key in listener_configs:
+        # 토큰 미설정이면 스킵
+        if env_key and not os.getenv(env_key):
+            continue
+
+        has_proc = subprocess.run(
+            ["pgrep", "-f", proc_name],
+            capture_output=True,
+        ).returncode == 0
+        if has_proc:
+            result = subprocess.run(
+                ["pgrep", "-f", proc_name],
+                capture_output=True, text=True,
+            )
+            pid = result.stdout.strip().split("\n")[0].strip()
+            lines.append(f"✅ Listener [{tag}]: running (PID {pid})")
         else:
-            lines.append("❌ Listener: not running (no plist found)")
+            plist = os.path.expanduser(f"~/Library/LaunchAgents/{plist_name}")
+            if os.path.exists(plist):
+                subprocess.run(["launchctl", "unload", plist], capture_output=True)
+                time.sleep(1)
+                subprocess.run(["launchctl", "load", plist], capture_output=True)
+                time.sleep(2)
+                alive = subprocess.run(
+                    ["pgrep", "-f", proc_name],
+                    capture_output=True,
+                ).returncode == 0
+                if alive:
+                    lines.append(f"🔧 Listener [{tag}]: restarted")
+                    fixed += 1
+                else:
+                    lines.append(f"❌ Listener [{tag}]: restart failed")
+            else:
+                lines.append(f"❌ Listener [{tag}]: not running (no plist)")
 
     # 2. Executor lock 확인
     if os.path.exists(EXECUTOR_LOCK):
@@ -508,8 +507,8 @@ def send_chat_message(text: str, stream_buffer: deque) -> str:
     _clean_stale_lock_and_resume()
 
     if mentions:
-        return f"→ {' '.join('@' + m for m in mentions)}"
-    return ""
+        return f"✓ 전달됨 → {' '.join('@' + m for m in mentions)}"
+    return "✓ 전달됨"
 
 
 def execute_command(cmd: str, stream_buffer: deque) -> str:

@@ -95,7 +95,9 @@ class TestAtomicWrite:
         ctx = _make_store(tmp_data_dir)
         try:
             data = ctx.load()
-            assert data == {"messages": [], "last_update_id": 0}
+            assert data["messages"] == []
+            assert data["last_update_id"] == 0
+            assert "cursors" in data  # 멀티채널 cursor 구조 포함
         finally:
             ctx.restore()
 
@@ -106,7 +108,9 @@ class TestAtomicWrite:
             with open(ctx.file, "w") as f:
                 f.write("{invalid json...")
             data = ctx.load()
-            assert data == {"messages": [], "last_update_id": 0}
+            assert data["messages"] == []
+            assert data["last_update_id"] == 0
+            assert "cursors" in data
         finally:
             ctx.restore()
 

@@ -74,25 +74,15 @@ class TestExecutorShStaleTimeout:
 # ── _trigger_executor() 원자적 lock 선점 검증 ──────────────────
 
 class TestTriggerExecutorLock:
-    """_trigger_executor()가 O_EXCL로 원자적 lock을 선점하는지 검증"""
+    """trigger_executor()가 O_EXCL로 원자적 lock을 선점하는지 검증"""
 
     def test_trigger_creates_lock_atomically(self, tmp_path):
-        """_trigger_executor가 O_EXCL로 lock을 먼저 생성하는지"""
-        import heysquid.channels.telegram_listener as listener
+        """trigger_executor가 O_EXCL로 lock을 먼저 생성하는지"""
+        from unittest.mock import patch
+        from heysquid.channels._base import trigger_executor
 
         # 경로 패치
         lockfile = str(tmp_path / "executor.lock")
-        executor_sh = str(tmp_path / "executor.sh")
-
-        # 더미 executor.sh 생성
-        with open(executor_sh, "w") as f:
-            f.write("#!/bin/bash\nexit 0\n")
-
-        original_lock = listener.EXECUTOR_LOCK_FILE
-        original_root = listener.PROJECT_ROOT
-
-        listener.EXECUTOR_LOCK_FILE = lockfile
-        listener.PROJECT_ROOT = str(tmp_path)
 
         # scripts/ 디렉토리와 executor.sh 생성
         scripts_dir = tmp_path / "scripts"
@@ -100,43 +90,30 @@ class TestTriggerExecutorLock:
         with open(str(scripts_dir / "executor.sh"), "w") as f:
             f.write("#!/bin/bash\nexit 0\n")
 
-        try:
-            listener._trigger_executor()
+        with patch("heysquid.paths.EXECUTOR_LOCK_FILE", lockfile), \
+             patch("heysquid.config.PROJECT_ROOT_STR", str(tmp_path)):
+            trigger_executor()
             assert os.path.exists(lockfile), "lock 파일이 생성되지 않음"
 
             with open(lockfile, "r") as f:
                 content = f.read()
             assert "pre-lock" in content, "pre-lock 표시가 없음"
-        finally:
-            listener.EXECUTOR_LOCK_FILE = original_lock
-            listener.PROJECT_ROOT = original_root
 
     def test_trigger_skips_when_lock_exists(self, tmp_path, capsys):
         """이미 lock이 있으면 두 번째 trigger가 스킵되는지"""
-        import heysquid.channels.telegram_listener as listener
-
         lockfile = str(tmp_path / "executor.lock")
 
         # 먼저 lock 생성 (다른 trigger가 선점한 상황)
         with open(lockfile, "w") as f:
             f.write("pre-lock by another trigger\n")
 
-        original_lock = listener.EXECUTOR_LOCK_FILE
-        listener.EXECUTOR_LOCK_FILE = lockfile
-
+        # 직접 O_EXCL 테스트
+        fd = None
         try:
-            # Claude PM 프로세스가 없다고 가정
-            # pgrep이 실패하면 stale로 판단하고 lock 삭제 시도
-            # 하지만 O_EXCL 재생성에서 경합이 발생
-            # 여기서는 직접 O_EXCL 테스트
-            fd = None
-            try:
-                fd = os.open(lockfile, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-                pytest.fail("O_EXCL이 성공함 — lock이 이미 있어야 하는데?")
-            except FileExistsError:
-                pass  # 예상대로 실패
-            finally:
-                if fd is not None:
-                    os.close(fd)
+            fd = os.open(lockfile, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            pytest.fail("O_EXCL이 성공함 — lock이 이미 있어야 하는데?")
+        except FileExistsError:
+            pass  # 예상대로 실패
         finally:
-            listener.EXECUTOR_LOCK_FILE = original_lock
+            if fd is not None:
+                os.close(fd)

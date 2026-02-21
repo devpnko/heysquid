@@ -60,22 +60,24 @@ log "CWD=$(pwd)"
 # 프로세스 중복 실행 방지 (3중 안전장치)
 # ========================================
 
-# 1. executor.sh 중복 실행 방지
-#    - 실제 Claude 바이너리만 감지 (caffeinate 래퍼 제외)
-#    - stream log 활성도로 stale 판정 (30분)
+# 1. PM 프로세스 단일 인스턴스 보장
+#    - caffeinate 래퍼 포함 모든 PM 프로세스 감지
+#    - 다중 인스턴스 → 전부 kill (좀비 방지)
+#    - 단일 인스턴스 → stale 체크 (30분)
 SELF_PID=$$
-HAS_CLAUDE_PM=false
 CLAUDE_PIDS=$(pgrep -f "claude.*append-system-prompt-file" 2>/dev/null || true)
-for pid in $CLAUDE_PIDS; do
-    CMD=$(ps -p "$pid" -o comm= 2>/dev/null)
-    if [ "$CMD" = "claude" ]; then
-        HAS_CLAUDE_PM=true
-        break
-    fi
-done
+PM_COUNT=$(echo "$CLAUDE_PIDS" | grep -c '[0-9]' 2>/dev/null || echo 0)
 
-if [ "$HAS_CLAUDE_PM" = true ]; then
-    # Claude PM 세션이 돌고 있으면 — stale 체크
+# 1-a. 다중 PM 세션 감지 → 전부 kill (좀비 정리)
+if [ "$PM_COUNT" -gt 1 ]; then
+    log "[ZOMBIE] 다중 PM 세션 감지 ($PM_COUNT개). 전부 kill..."
+    pkill -f "claude.*append-system-prompt-file" 2>/dev/null || true
+    sleep 2
+    rm -f "$LOCKFILE" 2>/dev/null
+    log "[ZOMBIE] 정리 완료. 새 세션 시작..."
+
+# 1-b. 단일 PM 세션 → stale 체크
+elif [ "$PM_COUNT" -eq 1 ]; then
     if [ -f "$STREAM_LOG" ]; then
         LOG_AGE=$(( $(date +%s) - $(stat -f %m "$STREAM_LOG" 2>/dev/null || echo 0) ))
         if [ "$LOG_AGE" -gt 1800 ]; then

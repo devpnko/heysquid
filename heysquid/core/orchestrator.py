@@ -77,6 +77,12 @@ from ._job_flow import (                              # noqa: F401
     _format_file_size,
 )
 
+# core.broadcaster
+from .broadcaster import (                            # noqa: F401
+    reply_broadcast,
+    report_broadcast,
+)
+
 # paths (for backwards compat — callers that did `from telegram_bot import MESSAGES_FILE`)
 from .paths import (                                  # noqa: F401
     MESSAGES_FILE,
@@ -96,49 +102,20 @@ from .paths import (                                  # noqa: F401
 
 def reply_telegram(chat_id, message_id, text):
     """
-    자연스러운 대화 응답 (가벼운 대화용)
+    자연스러운 대화 응답 — 전체 채널 브로드캐스트.
 
-    - processed 먼저 마킹 (중복 응답 방지)
-    - send_message_sync()로 전송
-    - 실패 시 processed 롤백
-    - working lock/memory 없음 (가벼운 대화에는 불필요)
+    broadcaster.reply_broadcast()에 위임.
+    함수명은 하위 호환을 위해 유지.
 
     Args:
-        chat_id: 텔레그램 채팅 ID
+        chat_id: 채팅 ID
         message_id: 응답 대상 메시지 ID (int 또는 list)
         text: 응답 텍스트
     Returns:
         bool: 전송 성공 여부
     """
-    from ..channels.telegram import send_message_sync
-
-    ids = message_id if isinstance(message_id, list) else [message_id]
-    ids_set = set(ids)
-
-    # 1. 먼저 processed 마킹 (중복 방지) — flock 사용
-    def _mark_processed(data):
-        for msg in data.get("messages", []):
-            if msg["message_id"] in ids_set:
-                msg["processed"] = True
-        return data
-    load_and_modify(_mark_processed)
-
-    # 2. 전송
-    success = send_message_sync(chat_id, text, _save=False)
-
-    if success:
-        # 3. 봇 응답 기록 (save_bot_response 내부에서 flock 사용)
-        save_bot_response(chat_id, text, ids)
-    else:
-        # 4. 전송 실패 → processed 롤백 — flock 사용
-        def _rollback_processed(data):
-            for msg in data.get("messages", []):
-                if msg["message_id"] in ids_set:
-                    msg["processed"] = False
-            return data
-        load_and_modify(_rollback_processed)
-
-    return success
+    from .broadcaster import reply_broadcast
+    return reply_broadcast(chat_id, message_id, text)
 
 
 def get_24h_context(messages, current_message_id):
@@ -151,6 +128,10 @@ def get_24h_context(messages, current_message_id):
     for msg in messages:
         if msg.get("type") == "user" and msg["message_id"] == current_message_id:
             break
+
+        # 릴레이/브로드캐스트 메시지는 컨텍스트에서 제외 (중복 방지)
+        if msg.get("channel") == "broadcast":
+            continue
 
         msg_time = datetime.strptime(msg["timestamp"], "%Y-%m-%d %H:%M:%S")
         if msg_time < cutoff_time:
@@ -311,6 +292,17 @@ def check_telegram():
         })
 
     if pending:
+        # 반환하는 메시지를 즉시 "seen" 마킹 — 중복 처리 구조적 방지
+        # PM AI가 어떤 함수를 쓰든, seen=True인 메시지는 poll_new_messages()에서 스킵됨
+        seen_ids = {task['message_id'] for task in pending}
+        def _mark_seen(data):
+            for msg in data.get("messages", []):
+                if msg["message_id"] in seen_ids:
+                    msg["seen"] = True
+                    msg["seen_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            return data
+        load_and_modify(_mark_seen)
+
         _dashboard_log('pm', f'Message received ({len(pending)} pending)')
 
     return pending
@@ -431,9 +423,72 @@ def poll_new_messages():
     data = load_telegram_messages()
     unprocessed = [
         msg for msg in data.get("messages", [])
-        if msg.get("type") == "user" and not msg.get("processed", False)
+        if msg.get("type") == "user"
+        and not msg.get("processed", False)
+        and not msg.get("seen", False)  # seen 메시지 스킵 (중복 방지)
     ]
     return unprocessed
+
+
+def check_due_posts():
+    """스레드 예약 게시 스케줄 확인.
+
+    threads_schedule.json에서 scheduled_time이 지났고
+    status가 "scheduled"인 게시물을 반환한다.
+
+    Returns:
+        list[dict]: 게시해야 할 포스트 목록 (빈 리스트면 없음)
+    """
+    import json
+
+    schedule_path = os.path.join(DATA_DIR, "threads_schedule.json")
+    if not os.path.exists(schedule_path):
+        return []
+
+    try:
+        with open(schedule_path) as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return []
+
+    now = datetime.now()
+    due = []
+
+    for post in data.get("scheduled_posts", []):
+        if post.get("status") != "scheduled":
+            continue
+        try:
+            scheduled = datetime.strptime(post["scheduled_time"], "%Y-%m-%d %H:%M")
+        except (KeyError, ValueError):
+            continue
+        if scheduled <= now:
+            due.append(post)
+
+    return due
+
+
+def mark_post_done(post_id):
+    """스레드 예약 게시물 상태를 'posted'로 변경."""
+    import json
+
+    schedule_path = os.path.join(DATA_DIR, "threads_schedule.json")
+    try:
+        with open(schedule_path) as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return False
+
+    for post in data.get("scheduled_posts", []):
+        if post.get("id") == post_id:
+            post["status"] = "posted"
+            break
+    else:
+        return False
+
+    with open(schedule_path, "w") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+    return True
 
 
 # 테스트 코드

@@ -100,7 +100,7 @@ def reserve_memory_telegram(instruction, chat_id, timestamp, message_id):
 
 
 def report_telegram(instruction, result_text, chat_id, timestamp, message_id, files=None):
-    """작업 결과를 텔레그램으로 전송하고 메모리에 저장"""
+    """작업 결과를 전체 채널에 브로드캐스트하고 메모리에 저장"""
     if isinstance(message_id, list):
         message_ids = message_id
         main_message_id = message_ids[0]
@@ -110,29 +110,11 @@ def report_telegram(instruction, result_text, chat_id, timestamp, message_id, fi
         main_message_id = message_id
         timestamps = [timestamp]
 
-    message = result_text
+    # 전체 채널 브로드캐스트 (broadcaster에 위임)
+    from .broadcaster import report_broadcast
+    success = report_broadcast(instruction, result_text, chat_id, timestamp, message_id, files)
 
-    if files:
-        file_names = [os.path.basename(f) for f in files]
-        message += f"\n\n📎 {', '.join(file_names)}"
-
-    if len(message_ids) > 1:
-        message += f"\n\n_{len(message_ids)}개 메시지 합산 처리_"
-
-    print(f"\n[SEND] 텔레그램으로 결과 전송 중... (chat_id: {chat_id})")
-    _dashboard_log('pm', 'Mission complete — sending report')
-    success = send_files_sync(chat_id, message, files or [])
-
-    if success:
-        print("[OK] 결과 전송 완료!")
-        save_bot_response(
-            chat_id=chat_id,
-            text=message,
-            reply_to_message_ids=message_ids,
-            files=[os.path.basename(f) for f in (files or [])]
-        )
-    else:
-        print("[ERROR] 결과 전송 실패!")
+    if not success:
         result_text = f"[전송 실패] {result_text}"
         files = []
 

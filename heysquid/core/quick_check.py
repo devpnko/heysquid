@@ -35,6 +35,7 @@ def get_first_unprocessed_chat_id():
         for msg in data.get("messages", []):
             if (msg.get("type") == "user"
                     and not msg.get("processed", False)
+                    and not msg.get("seen", False)
                     and msg.get("retry_count", 0) < RETRY_MAX):
                 return msg.get("chat_id")
     except Exception:
@@ -64,6 +65,10 @@ def _main():
         actionable = []
         for msg in data.get("messages", []):
             if msg.get("type") != "user" or msg.get("processed", False):
+                continue
+
+            # PM이 이미 읽은 메시지 (seen=True) → 스킵
+            if msg.get("seen", False):
                 continue
 
             # 24시간 초과 미처리 → 강제 완료 처리
