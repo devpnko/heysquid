@@ -15,12 +15,57 @@ from ..core.config import DATA_DIR_STR as DATA_DIR, get_template_path
 from ..core.agents import VALID_AGENTS, AGENTS, AGENT_NAMES
 
 STATUS_FILE = os.path.join(DATA_DIR, 'agent_status.json')
+CONFIG_FILE = os.path.join(DATA_DIR, 'dashboard_config.json')
 SQUAD_HISTORY_FILE = os.path.join(DATA_DIR, 'squad_history.json')
 # User's data/ copy takes priority; fall back to bundled template
 _user_html = os.path.join(DATA_DIR, 'dashboard.html')
 GAMEBOARD_HTML = _user_html if os.path.exists(_user_html) else get_template_path('dashboard.html')
 
 VALID_STATUSES = ['idle', 'working', 'complete', 'error']
+
+
+def _load_dashboard_config():
+    """dashboard_config.json 로드. 없으면 빈 dict."""
+    try:
+        with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def _build_registry(config=None):
+    """AGENTS에서 _registry 생성 + config 오버라이드 머지."""
+    if config is None:
+        config = _load_dashboard_config()
+    registry = {
+        name: {
+            "emoji": info["emoji"], "animal": info["animal"],
+            "color": info["color"], "color_hex": info["color_hex"],
+            "label": info["label"], "css_class": info["css_class"],
+        }
+        for name, info in AGENTS.items()
+    }
+    agent_overrides = config.get('agents', {})
+    for name, overrides in agent_overrides.items():
+        if name in registry:
+            if 'label' in overrides:
+                registry[name]['label'] = overrides['label']
+            if 'color_hex' in overrides:
+                registry[name]['color_hex'] = overrides['color_hex']
+    return registry
+
+
+def _build_config_section(config=None):
+    """agent_status.json에 포함할 _config 섹션 생성."""
+    if config is None:
+        config = _load_dashboard_config()
+    return {
+        'title': config.get('title', 'heysquid HQ'),
+        'subtitle': config.get('subtitle', 'DEEP SEA AGENT COMMAND CENTER'),
+        'pm_label': config.get('pm_label', 'PM — heysquid'),
+        'theme': config.get('theme', 'deep-blue'),
+        'display': config.get('display', {}),
+    }
 
 
 def _load_status():
@@ -35,22 +80,16 @@ def _load_status():
 def _save_status(data):
     """Save status JSON with updated timestamp"""
     data['last_updated'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    # Ensure _registry is always present for dashboard HTML
-    if '_registry' not in data:
-        data['_registry'] = {
-            name: {
-                "emoji": info["emoji"], "animal": info["animal"],
-                "color": info["color"], "color_hex": info["color_hex"],
-                "label": info["label"], "css_class": info["css_class"],
-            }
-            for name, info in AGENTS.items()
-        }
+    config = _load_dashboard_config()
+    data['_registry'] = _build_registry(config)
+    data['_config'] = _build_config_section(config)
     with open(STATUS_FILE, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
 def _default_status():
     """Default idle state for all agents (dynamically built from registry)"""
+    config = _load_dashboard_config()
     status = {
         "last_updated": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         "current_task": "",
@@ -66,15 +105,8 @@ def _default_status():
         else:
             agent_data["assignment"] = None
         status[name] = agent_data
-    # _registry: dashboard HTML이 읽어서 동적 렌더링에 사용
-    status["_registry"] = {
-        name: {
-            "emoji": info["emoji"], "animal": info["animal"],
-            "color": info["color"], "color_hex": info["color_hex"],
-            "label": info["label"], "css_class": info["css_class"],
-        }
-        for name, info in AGENTS.items()
-    }
+    status["_registry"] = _build_registry(config)
+    status["_config"] = _build_config_section(config)
     return status
 
 
@@ -127,7 +159,15 @@ def set_current_task(task_name: str):
 
 
 def add_mission_log(agent: str, message: str):
-    """Add an entry to the mission log (max 50 entries)."""
+    """Add an entry to the mission log (max 50 entries).
+    Filters out Bash command spam (python3 -c, wc -l, etc.)."""
+    import re
+    if re.search(r'python3\s+-[cu]', message):
+        return
+    if message.startswith('💻 python3'):
+        return
+    if re.search(r'💻\s*(wc|cat|head|tail|ls)\s', message):
+        return
     data = _load_status()
     entry = {
         "time": datetime.now().strftime('%H:%M:%S'),
@@ -343,6 +383,12 @@ def update_workspace(name, status=None, description=None):
         ws['status'] = status
     if description is not None:
         ws['description'] = description
+    else:
+        # config 오버라이드 확인
+        config = _load_dashboard_config()
+        ws_override = config.get('workspaces', {}).get(name, {})
+        if 'description' in ws_override and not ws.get('description'):
+            ws['description'] = ws_override['description']
     ws['last_active'] = datetime.now().strftime('%Y-%m-%d')
     _save_status(data)
 

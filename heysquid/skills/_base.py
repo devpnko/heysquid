@@ -12,9 +12,11 @@ logger = logging.getLogger(__name__)
 @dataclass
 class SkillContext:
     """스킬 실행 컨텍스트"""
-    triggered_by: str = "scheduler"  # "scheduler" | "manual" | "pm"
+    triggered_by: str = "scheduler"  # "scheduler" | "manual" | "pm" | "webhook"
     chat_id: int = 0
     args: str = ""
+    payload: dict = field(default_factory=dict)   # webhook/API에서 받은 데이터
+    callback_url: str = ""                        # 완료 후 콜백 URL (n8n 등)
 
 
 def _load_skills_config() -> dict:
@@ -101,8 +103,23 @@ def run_skill(name: str, ctx: SkillContext | None = None) -> dict:
     try:
         result = execute_fn(**(ctx.__dict__ if ctx else {}))
         update_skill_status(name, 'idle', last_result='success')
-        return {"ok": True, "result": result}
+        response = {"ok": True, "result": result}
     except Exception as e:
         update_skill_status(name, 'error', last_result='error',
                             last_error=str(e)[:200])
-        return {"ok": False, "error": str(e)}
+        response = {"ok": False, "error": str(e)}
+
+    # 콜백 URL이 있으면 결과 전송 (n8n 등)
+    if ctx and ctx.callback_url:
+        _send_callback(ctx.callback_url, name, response)
+
+    return response
+
+
+def _send_callback(url: str, skill_name: str, result: dict):
+    """완료 콜백 전송 (best-effort, 실패해도 무시)."""
+    try:
+        import requests
+        requests.post(url, json={"skill": skill_name, **result}, timeout=10)
+    except Exception as e:
+        logger.warning(f"Callback 실패 ({url}): {e}")

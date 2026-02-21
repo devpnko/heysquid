@@ -24,9 +24,11 @@ COMMAND_REGISTRY = {
     "squid":    {"desc": "Squid 토론 시작"},
     "kraken":   {"desc": "Kraken 토론 시작"},
     "endsquad": {"desc": "토론 종료"},
+    "dashboard": {"desc": "대시보드 열기"},
 }
 
 EXECUTOR_SCRIPT = os.path.join(ROOT, "scripts", "executor.sh")
+DASHBOARD_HTML = os.path.join(ROOT, "data", "dashboard.html")
 INTERRUPTED_FILE = os.path.join(ROOT, "data", "interrupted.json")
 WORKING_LOCK_FILE = os.path.join(ROOT, "data", "working.json")
 
@@ -425,6 +427,12 @@ def _run_skill_command(args_str: str) -> str:
         return f"스킬 '{name}' 실패: {result['error']}"
 
 
+def _open_dashboard() -> str:
+    """macOS 기본 브라우저로 대시보드 열기 (localhost 서버)"""
+    subprocess.Popen(["open", "http://localhost:8420/dashboard.html"])
+    return "대시보드 열림"
+
+
 def dispatch_command(raw: str, stream_buffer: deque) -> str | None:
     """통합 커맨드 디스패치. '/cmd args' → handler 호출. 커맨드 아니면 None."""
     cmd = raw.strip()
@@ -454,6 +462,9 @@ def dispatch_command(raw: str, stream_buffer: deque) -> str | None:
 
     if name == "kraken":
         return _start_kraken_squad(args, stream_buffer)
+
+    if name == "dashboard":
+        return _open_dashboard()
 
     if name == "endsquad":
         from heysquid.dashboard import clear_squad

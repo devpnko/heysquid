@@ -3,7 +3,7 @@
 from textual.widgets import Input
 from textual.message import Message
 
-COMMANDS = ["stop", "resume", "doctor", "skill", "squid", "kraken", "endsquad"]
+COMMANDS = ["stop", "resume", "doctor", "skill", "squid", "kraken", "endsquad", "dashboard"]
 
 
 class CommandInput(Input):
