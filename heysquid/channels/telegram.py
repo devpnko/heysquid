@@ -230,9 +230,30 @@ def send_message_sync(chat_id, text, parse_mode="Markdown", _save=True):
     return result
 
 
-def send_files_sync(chat_id, text, file_paths):
-    """동기 방식 파일 전송"""
-    return run_async_safe(send_files(chat_id, text, file_paths))
+def send_files_sync(chat_id, text, file_paths, _save=True):
+    """동기 방식 파일 전송 — messages.json에도 저장"""
+    result = run_async_safe(send_files(chat_id, text, file_paths))
+
+    if result and _save:
+        try:
+            import time
+            from ._msg_store import save_bot_response
+            msg_id = f"bot_file_{int(time.time() * 1000)}"
+            files_meta = [
+                {"type": "photo", "name": os.path.basename(p), "path": p}
+                for p in (file_paths or [])
+            ]
+            save_bot_response(chat_id, text, [msg_id], files=files_meta, channel="telegram")
+        except Exception as e:
+            print(f"[WARN] 파일 응답 저장 실패: {e}")
+    if result:
+        try:
+            from .._working_lock import update_working_activity
+            update_working_activity()
+        except Exception:
+            pass
+
+    return result
 
 
 async def send_message_with_stop_button(chat_id, text, parse_mode="Markdown"):

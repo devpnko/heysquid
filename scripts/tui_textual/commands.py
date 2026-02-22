@@ -2,6 +2,7 @@
 
 import json
 import os
+import shlex
 import subprocess
 import time
 from collections import deque
@@ -41,6 +42,81 @@ except ImportError:
     pass
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 
+IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.heic', '.tiff', '.svg'}
+
+
+def _make_file_entry(path: str) -> dict:
+    """이미지 파일 메타 dict 생성."""
+    return {
+        "type": "photo",
+        "path": os.path.abspath(path),
+        "name": os.path.basename(path),
+        "size": os.path.getsize(path),
+    }
+
+
+def _is_image_file(path: str) -> bool:
+    """이미지 확장자 + 파일 존재 확인."""
+    _, ext = os.path.splitext(path)
+    return ext.lower() in IMAGE_EXTENSIONS and os.path.isfile(path)
+
+
+def extract_image_paths(text: str) -> tuple[str, list[dict]]:
+    """텍스트에서 이미지 파일 경로 추출. (정리된 텍스트, files 리스트) 반환.
+
+    3단계 전략:
+    1) shlex — 백슬래시 이스케이프, 따옴표 경로 (macOS 드래그-앤-드롭)
+    2) 공백 포함 경로 재조합 — Textual TextArea 등에서 이스케이프 없이 붙는 경우
+    3) 단순 split 폴백
+    """
+    # 1단계: shlex (이스케이프/따옴표 처리)
+    try:
+        tokens = shlex.split(text)
+    except ValueError:
+        tokens = text.split()
+
+    files = []
+    clean_parts = []
+
+    for token in tokens:
+        expanded = os.path.expanduser(token)
+        if _is_image_file(expanded):
+            files.append(_make_file_entry(expanded))
+        else:
+            clean_parts.append(token)
+
+    if files:
+        return " ".join(clean_parts), files
+
+    # 2단계: 공백 포함 경로 재조합
+    # "이거 봐줘 /path/to/스크린샷 2026-02-23 오전 12.04.09.png"
+    # → shlex가 쪼개버린 토큰들을 /로 시작하는 지점부터 .확장자까지 합쳐서 시도
+    raw_tokens = text.split()
+    used = set()
+
+    for i, token in enumerate(raw_tokens):
+        if i in used:
+            continue
+        expanded_start = os.path.expanduser(token)
+        if not (expanded_start.startswith("/") or expanded_start.startswith("~")):
+            continue
+        # 이 토큰부터 뒤로 확장하며 이미지 파일인지 시도
+        candidate = expanded_start
+        for j in range(i + 1, len(raw_tokens) + 1):
+            if _is_image_file(candidate):
+                files.append(_make_file_entry(candidate))
+                used.update(range(i, j))
+                break
+            if j < len(raw_tokens):
+                candidate = candidate + " " + raw_tokens[j]
+
+    if files:
+        clean_parts = [t for idx, t in enumerate(raw_tokens) if idx not in used]
+        return " ".join(clean_parts), files
+
+    # 이미지 없음
+    return text, []
+
 
 def _get_real_user_info(messages: list[dict]) -> dict | None:
     """기존 텔레그램 메시지에서 실제 사용자 정보 조회"""
@@ -56,7 +132,7 @@ def _get_real_user_info(messages: list[dict]) -> dict | None:
     return None
 
 
-def inject_local_message(text: str) -> int:
+def inject_local_message(text: str, files: list[dict] | None = None) -> int:
     """messages.json에 TUI 메시지 주입 (flock atomic)."""
     from heysquid.channels._msg_store import load_and_modify, load_telegram_messages
 
@@ -94,7 +170,7 @@ def inject_local_message(text: str) -> int:
             "last_name": "",
             "chat_id": user_info["chat_id"] if user_info else 0,
             "text": text,
-            "files": [],
+            "files": files or [],
             "location": None,
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "processed": False,
@@ -499,12 +575,22 @@ def send_chat_message(text: str, stream_buffer: deque) -> str:
     if result is not None:
         return result
 
-    # 일반 메시지
-    mid = inject_local_message(text)
-    mentions = parse_mentions(text)
-    log_commander_message(text, stream_buffer)
+    # 이미지 경로 감지
+    clean_text, files = extract_image_paths(text)
+    display_text = clean_text or "(이미지)"
+
+    mid = inject_local_message(display_text, files=files)
+    mentions = parse_mentions(display_text)
+    log_commander_message(display_text, stream_buffer)
 
     _clean_stale_lock_and_resume()
+
+    if files:
+        names = ", ".join(f["name"] for f in files)
+        suffix = f" (🖼️ {names})"
+        if mentions:
+            return f"✓ 전달됨 → {' '.join('@' + m for m in mentions)}{suffix}"
+        return f"✓ 전달됨{suffix}"
 
     if mentions:
         return f"✓ 전달됨 → {' '.join('@' + m for m in mentions)}"

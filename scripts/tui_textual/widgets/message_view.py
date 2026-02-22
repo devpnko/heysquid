@@ -24,7 +24,7 @@ class MessageView(VerticalScroll):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self._last_msg_count = 0
+        self._last_snapshot = (0, None)
         self._auto_scroll = True
 
     def on_scroll_y(self) -> None:
@@ -37,8 +37,8 @@ class MessageView(VerticalScroll):
 
     def update_messages(self, messages: list[dict]) -> None:
         """메시지 리스트로 뷰 업데이트"""
-        msg_count = len(messages)
-        if msg_count == self._last_msg_count:
+        snapshot = (len(messages), messages[-1] if messages else None)
+        if snapshot == self._last_snapshot:
             return
 
         # 선택 중이면 refresh 스킵 (위젯 파괴 방지)
@@ -48,7 +48,7 @@ class MessageView(VerticalScroll):
         except Exception:
             pass
 
-        self._last_msg_count = msg_count
+        self._last_snapshot = snapshot
 
         # 기존 콘텐츠 제거 후 재구성
         self.remove_children()
@@ -101,7 +101,8 @@ class MessageView(VerticalScroll):
             files = msg.get("files", [])
             for fi in files:
                 fname = fi.get("name") or fi.get("type", "file")
-                self.mount(Static(f"  📎 {fname}", classes="msg-body"))
+                icon = "🖼️" if fi.get("type") == "photo" else "📎"
+                self.mount(Static(f"  {icon} {fname}", classes="msg-body"))
 
         # 자동 스크롤
         if self._auto_scroll:
