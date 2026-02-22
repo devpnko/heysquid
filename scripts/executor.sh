@@ -40,15 +40,18 @@ cleanup() {
     local exit_code=${?:-0}
     log "[CLEANUP] executor.sh exiting (code=$exit_code)"
 
-    # PID 파일로 정확한 프로세스 kill
+    # PID 파일로 정확한 프로세스 kill (멀티 PID 지원)
     if [ -f "$PIDFILE" ]; then
-        SAVED_PID=$(cat "$PIDFILE" 2>/dev/null)
-        if [ -n "$SAVED_PID" ] && kill -0 "$SAVED_PID" 2>/dev/null; then
-            log "[CLEANUP] Killing claude PID $SAVED_PID (from pidfile)"
-            kill "$SAVED_PID" 2>/dev/null || true
-            sleep 2
+        while IFS= read -r SAVED_PID; do
+            if [ -n "$SAVED_PID" ] && kill -0 "$SAVED_PID" 2>/dev/null; then
+                log "[CLEANUP] Killing PID $SAVED_PID (from pidfile)"
+                kill "$SAVED_PID" 2>/dev/null || true
+            fi
+        done < "$PIDFILE"
+        sleep 2
+        while IFS= read -r SAVED_PID; do
             kill -0 "$SAVED_PID" 2>/dev/null && kill -9 "$SAVED_PID" 2>/dev/null || true
-        fi
+        done < "$PIDFILE"
         rm -f "$PIDFILE"
     fi
 
@@ -94,6 +97,29 @@ log "CWD=$(pwd)"
 # ========================================
 # 프로세스 중복 실행 방지 (3중 안전장치)
 # ========================================
+
+# 0. PID 파일에서 이전 세션 잔류 프로세스 정리
+#    claude CLI는 시작 후 cmdline을 "claude"로 재작성하므로
+#    pgrep 패턴 매칭이 실패함. PID 파일이 유일한 추적 수단.
+if [ -f "$PIDFILE" ]; then
+    while IFS= read -r OLD_PID; do
+        if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" 2>/dev/null; then
+            log "[GHOST] Killing stale PM process (PID=$OLD_PID from pidfile)"
+            kill "$OLD_PID" 2>/dev/null || true
+        fi
+    done < "$PIDFILE"
+    sleep 2
+    # force kill survivors
+    if [ -f "$PIDFILE" ]; then
+        while IFS= read -r OLD_PID; do
+            if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" 2>/dev/null; then
+                log "[GHOST] Force-killing (PID=$OLD_PID)"
+                kill -9 "$OLD_PID" 2>/dev/null || true
+            fi
+        done < "$PIDFILE"
+    fi
+    rm -f "$PIDFILE"
+fi
 
 # 1. PM 프로세스 단일 인스턴스 보장
 #    - caffeinate 래퍼 포함 모든 PM 프로세스 감지
@@ -235,13 +261,23 @@ caffeinate -ims "$CLAUDE_EXE" -p --dangerously-skip-permissions \
     2>> "$LOG" | tee -a "$STREAM_LOG" | python3 -u "$VIEWER" &
 PIPE_PID=$!
 
-# caffeinate의 실제 PID 기록 (패턴 매칭 fallback 불필요하게)
-sleep 1
-CLAUDE_PID=$(pgrep -f "append-system-prompt-file" 2>/dev/null | head -1 || true)
-if [ -n "$CLAUDE_PID" ]; then
-    echo "$CLAUDE_PID" > "$PIDFILE"
-    log "[INFO] Claude PID=$CLAUDE_PID saved to $PIDFILE"
+# caffeinate PID + 실제 claude PID 기록
+# claude CLI는 cmdline을 "claude"로 재작성하므로 PID 파일이 유일한 추적 수단
+sleep 2
+CAFE_PID=$(pgrep -f "caffeinate.*append-system-prompt-file" 2>/dev/null | head -1 || true)
+CLAUDE_PID=""
+if [ -n "$CAFE_PID" ]; then
+    CLAUDE_PID=$(pgrep -P "$CAFE_PID" 2>/dev/null | head -1 || true)
 fi
+# fallback: caffeinate 패턴 매칭
+if [ -z "$CLAUDE_PID" ]; then
+    CLAUDE_PID=$(pgrep -f "append-system-prompt-file" 2>/dev/null | head -1 || true)
+fi
+# 둘 다 PID 파일에 저장 (한 줄에 하나씩)
+: > "$PIDFILE"
+[ -n "$CAFE_PID" ] && echo "$CAFE_PID" >> "$PIDFILE"
+[ -n "$CLAUDE_PID" ] && echo "$CLAUDE_PID" >> "$PIDFILE"
+log "[INFO] Saved PIDs: cafe=$CAFE_PID claude=$CLAUDE_PID"
 
 # 파이프라인 완료 대기
 EC=0
