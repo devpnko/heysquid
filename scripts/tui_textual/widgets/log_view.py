@@ -77,7 +77,7 @@ class StreamLogView(VerticalScroll):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self._last_count = 0
+        self._last_snapshot = (0, None)
 
     def compose(self):
         yield Static("[bold dim]│ STREAM[/bold dim]", classes="log-title")
@@ -85,9 +85,10 @@ class StreamLogView(VerticalScroll):
 
     def update_log(self, buffer: deque) -> None:
         """stream buffer 업데이트"""
-        if len(buffer) == self._last_count:
+        snapshot = (len(buffer), buffer[-1] if buffer else None)
+        if snapshot == self._last_snapshot:
             return
-        self._last_count = len(buffer)
+        self._last_snapshot = snapshot
 
         parts = []
         for tm, emoji, agent, text in buffer:
