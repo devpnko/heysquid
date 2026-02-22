@@ -144,6 +144,7 @@ case "${1:-}" in
 
         # 잠금 파일 정리 (대기 루프 중 executor.lock이 남을 수 있음)
         rm -f "$ROOT/data/executor.lock" 2>/dev/null
+        rm -f "$ROOT/data/executor.pid" 2>/dev/null
         rm -f "$ROOT/data/working.json" 2>/dev/null
 
         echo "[OK] 데몬 + 잠금 파일 정리 완료"

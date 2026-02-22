@@ -53,22 +53,51 @@ def trigger_executor():
     """executor.sh를 백그라운드 프로세스로 실행 (stale lock 자동 정리 + 원자적 선점)
 
     공통 함수: 모든 채널 listener가 사용.
+
+    dedup 체크 순서:
+    1. executor.pid 파일의 PID가 살아있는지 (os.kill(pid, 0))
+    2. pgrep -f "append-system-prompt-file" (caffeinate 프로세스)
+    둘 다 실패해야 stale lock으로 판정.
+
+    NOTE: Claude Code는 시작 후 cmdline을 "claude"로 재작성하므로
+    pgrep만으로는 실행 중인 PM을 감지 못할 수 있음.
+    executor.pid 기반 체크가 1차 방어선.
     """
     from ..paths import EXECUTOR_LOCK_FILE
     from ..config import PROJECT_ROOT_STR as PROJECT_ROOT
 
     lockfile = EXECUTOR_LOCK_FILE
+    executor_pidfile = os.path.join(PROJECT_ROOT, "data", "executor.pid")
+
     if os.path.exists(lockfile):
+        # 1차: executor.pid로 직접 프로세스 생존 확인
+        if os.path.exists(executor_pidfile):
+            try:
+                with open(executor_pidfile) as f:
+                    pid = int(f.read().strip())
+                os.kill(pid, 0)  # signal 0 = 생존 확인만 (kill 안 함)
+                print(f"[TRIGGER] executor 이미 실행 중 (PID {pid}) — 스킵")
+                return
+            except (ProcessLookupError, ValueError, OSError):
+                pass  # PID 죽었거나 파일 손상 → 아래로
+
+        # 2차: pgrep fallback (caffeinate 프로세스 감지)
         has_claude = subprocess.run(
             ["pgrep", "-f", "append-system-prompt-file"],
             capture_output=True,
         ).returncode == 0
         if has_claude:
-            print("[TRIGGER] executor 이미 실행 중 — 스킵")
+            print("[TRIGGER] executor 이미 실행 중 (pgrep) — 스킵")
             return
+
+        # 둘 다 실패 → stale lock
         try:
             os.remove(lockfile)
             print("[TRIGGER] stale executor.lock 제거됨")
+        except OSError:
+            pass
+        try:
+            os.remove(executor_pidfile)
         except OSError:
             pass
 

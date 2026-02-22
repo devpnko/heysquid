@@ -23,6 +23,7 @@ LOG="$LOG_DIR/executor.log"
 STREAM_LOG="$LOG_DIR/executor.stream.jsonl"
 LOCKFILE="$ROOT/data/executor.lock"
 PIDFILE="$ROOT/data/claude.pid"
+EXECUTOR_PIDFILE="$ROOT/data/executor.pid"
 
 # 로그 디렉토리 생성
 mkdir -p "$LOG_DIR"
@@ -86,7 +87,7 @@ cleanup() {
     local exit_code=${?:-0}
     log "[CLEANUP] executor.sh exiting (code=$exit_code)"
     kill_all_pm
-    rm -f "$LOCKFILE" 2>/dev/null
+    rm -f "$LOCKFILE" "$EXECUTOR_PIDFILE" 2>/dev/null
     log "[CLEANUP] Done."
 }
 trap cleanup EXIT INT TERM
@@ -114,6 +115,10 @@ fi
 log "===== START ====="
 log "ROOT=$ROOT"
 log "CWD=$(pwd)"
+
+# executor.sh 자신의 PID 기록 (trigger_executor의 dedup 체크에 사용)
+echo $$ > "$EXECUTOR_PIDFILE"
+log "[INFO] executor.pid=$$"
 
 # ========================================
 # 프로세스 중복 실행 방지
