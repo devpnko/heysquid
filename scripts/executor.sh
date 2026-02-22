@@ -34,37 +34,58 @@ log() {
 }
 
 # ========================================
-# trap 핸들러 — executor가 어떻게 죽든 orphan 정리
+# PM 프로세스 kill 함수
+# ========================================
+# claude CLI는 시작 후 cmdline을 "claude"로 재작성하므로 pgrep으로 못 찾음.
+# 해결: caffeinate(시스템 바이너리, cmdline 불변) → 부모 PID = 실제 claude.
+# PID 파일 불필요, 어떤 환경에서든 동작.
+
+kill_all_pm() {
+    # 1차: caffeinate → 부모(claude) 찾아서 kill
+    local CAFE_PIDS
+    CAFE_PIDS=$(pgrep -f "caffeinate.*append-system-prompt-file" 2>/dev/null || true)
+    if [ -n "$CAFE_PIDS" ]; then
+        for CPID in $CAFE_PIDS; do
+            local PARENT
+            PARENT=$(ps -p "$CPID" -o ppid= 2>/dev/null | tr -d ' ')
+            [ -n "$PARENT" ] && kill "$PARENT" 2>/dev/null && log "[KILL] claude PID=$PARENT (parent of cafe=$CPID)"
+            kill "$CPID" 2>/dev/null && log "[KILL] caffeinate PID=$CPID"
+        done
+    fi
+    # 2차: pgrep 패턴 (append-system-prompt-file)
+    pkill -f "append-system-prompt-file" 2>/dev/null || true
+    # 3차: PID 파일 fallback
+    if [ -f "$PIDFILE" ]; then
+        while IFS= read -r OLD_PID; do
+            [ -n "$OLD_PID" ] && kill "$OLD_PID" 2>/dev/null && log "[KILL] PID=$OLD_PID (from pidfile)"
+        done < "$PIDFILE"
+        rm -f "$PIDFILE"
+    fi
+    sleep 2
+    # force kill: 같은 순서로 -9
+    CAFE_PIDS=$(pgrep -f "caffeinate.*append-system-prompt-file" 2>/dev/null || true)
+    if [ -n "$CAFE_PIDS" ]; then
+        for CPID in $CAFE_PIDS; do
+            local PARENT
+            PARENT=$(ps -p "$CPID" -o ppid= 2>/dev/null | tr -d ' ')
+            [ -n "$PARENT" ] && kill -9 "$PARENT" 2>/dev/null || true
+            kill -9 "$CPID" 2>/dev/null || true
+        done
+    fi
+    pkill -9 -f "append-system-prompt-file" 2>/dev/null || true
+}
+
+is_pm_alive() {
+    pgrep -f "caffeinate.*append-system-prompt-file" > /dev/null 2>&1
+}
+
+# ========================================
+# trap 핸들러
 # ========================================
 cleanup() {
     local exit_code=${?:-0}
     log "[CLEANUP] executor.sh exiting (code=$exit_code)"
-
-    # PID 파일로 정확한 프로세스 kill (멀티 PID 지원)
-    if [ -f "$PIDFILE" ]; then
-        while IFS= read -r SAVED_PID; do
-            if [ -n "$SAVED_PID" ] && kill -0 "$SAVED_PID" 2>/dev/null; then
-                log "[CLEANUP] Killing PID $SAVED_PID (from pidfile)"
-                kill "$SAVED_PID" 2>/dev/null || true
-            fi
-        done < "$PIDFILE"
-        sleep 2
-        while IFS= read -r SAVED_PID; do
-            kill -0 "$SAVED_PID" 2>/dev/null && kill -9 "$SAVED_PID" 2>/dev/null || true
-        done < "$PIDFILE"
-        rm -f "$PIDFILE"
-    fi
-
-    # pgrep fallback — PID 파일 누락 시
-    ORPHAN_PIDS=$(pgrep -f "append-system-prompt-file" 2>/dev/null || true)
-    if [ -n "$ORPHAN_PIDS" ]; then
-        log "[CLEANUP] Fallback kill orphans: $ORPHAN_PIDS"
-        echo "$ORPHAN_PIDS" | xargs kill 2>/dev/null || true
-        sleep 1
-        STILL=$(pgrep -f "append-system-prompt-file" 2>/dev/null || true)
-        [ -n "$STILL" ] && echo "$STILL" | xargs kill -9 2>/dev/null || true
-    fi
-
+    kill_all_pm
     rm -f "$LOCKFILE" 2>/dev/null
     log "[CLEANUP] Done."
 }
@@ -95,58 +116,17 @@ log "ROOT=$ROOT"
 log "CWD=$(pwd)"
 
 # ========================================
-# 프로세스 중복 실행 방지 (3중 안전장치)
+# 프로세스 중복 실행 방지
 # ========================================
 
-# 0. PID 파일에서 이전 세션 잔류 프로세스 정리
-#    claude CLI는 시작 후 cmdline을 "claude"로 재작성하므로
-#    pgrep 패턴 매칭이 실패함. PID 파일이 유일한 추적 수단.
-if [ -f "$PIDFILE" ]; then
-    while IFS= read -r OLD_PID; do
-        if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" 2>/dev/null; then
-            log "[GHOST] Killing stale PM process (PID=$OLD_PID from pidfile)"
-            kill "$OLD_PID" 2>/dev/null || true
-        fi
-    done < "$PIDFILE"
-    sleep 2
-    # force kill survivors
-    if [ -f "$PIDFILE" ]; then
-        while IFS= read -r OLD_PID; do
-            if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" 2>/dev/null; then
-                log "[GHOST] Force-killing (PID=$OLD_PID)"
-                kill -9 "$OLD_PID" 2>/dev/null || true
-            fi
-        done < "$PIDFILE"
-    fi
-    rm -f "$PIDFILE"
-fi
-
-# 1. PM 프로세스 단일 인스턴스 보장
-#    - caffeinate 래퍼 포함 모든 PM 프로세스 감지
-#    - 다중 인스턴스 → 전부 kill (좀비 방지)
-#    - 단일 인스턴스 → stale 체크 (30분)
-SELF_PID=$$
-CLAUDE_PIDS=$(pgrep -f "append-system-prompt-file" 2>/dev/null || true)
-PM_COUNT=$(echo "$CLAUDE_PIDS" | grep -c '[0-9]' 2>/dev/null || echo 0)
-
-# 1-a. 다중 PM 세션 감지 → 전부 kill (좀비 정리)
-if [ "$PM_COUNT" -gt 1 ]; then
-    log "[ZOMBIE] 다중 PM 세션 감지 ($PM_COUNT개). 전부 kill..."
-    pkill -f "append-system-prompt-file" 2>/dev/null || true
-    sleep 2
-    rm -f "$LOCKFILE" 2>/dev/null
-    log "[ZOMBIE] 정리 완료. 새 세션 시작..."
-
-# 1-b. 단일 PM 세션 → stale 체크
-elif [ "$PM_COUNT" -eq 1 ]; then
+if is_pm_alive; then
     if [ -f "$STREAM_LOG" ]; then
         LOG_AGE=$(( $(date +%s) - $(stat -f %m "$STREAM_LOG" 2>/dev/null || echo 0) ))
         if [ "$LOG_AGE" -gt 1800 ]; then
-            log "[STALE] Claude PM idle >30m. Force-killing..."
-            pkill -f "append-system-prompt-file" 2>/dev/null || true
-            sleep 2
+            log "[STALE] Claude PM idle >30m. Killing..."
+            kill_all_pm
             rm -f "$LOCKFILE" 2>/dev/null
-            log "[STALE] Cleared stale state. Proceeding..."
+            log "[STALE] Cleared. Proceeding..."
         else
             log "[BLOCKED] Claude PM session active."
             exit 98

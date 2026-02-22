@@ -101,24 +101,40 @@ case "${1:-}" in
         # 대시보드 서버 종료
         pkill -f "http.server 8420" 2>/dev/null || true
 
-        # executor + Claude + caffeinate 전부 종료 (대기 루프 중일 수 있음)
+        # executor + Claude + caffeinate 전부 종료
+        # claude CLI는 cmdline을 "claude"로 재작성하므로 caffeinate(불변) → 부모(claude) 추적
         pkill -f "bash.*executor.sh" 2>/dev/null || true
-        pkill -f "caffeinate.*claude" 2>/dev/null || true
-        pkill -f "claude.*append-system-prompt-file" 2>/dev/null || true
+
+        CAFE_PIDS=$(pgrep -f "caffeinate.*append-system-prompt-file" 2>/dev/null || true)
+        if [ -n "$CAFE_PIDS" ]; then
+            for CPID in $CAFE_PIDS; do
+                PARENT=$(ps -p "$CPID" -o ppid= 2>/dev/null | tr -d ' ')
+                [ -n "$PARENT" ] && kill "$PARENT" 2>/dev/null
+                kill "$CPID" 2>/dev/null
+            done
+        fi
+        pkill -f "append-system-prompt-file" 2>/dev/null || true
         pkill -f "tee.*executor.stream" 2>/dev/null || true
 
-        # 실제로 죽었는지 확인 (최대 5초 대기, 안 죽으면 SIGKILL)
-        for i in 1 2 3 4 5; do
-            if ! pgrep -f "claude.*append-system-prompt-file" > /dev/null 2>&1; then
-                break
-            fi
-            sleep 1
-        done
-        if pgrep -f "claude.*append-system-prompt-file" > /dev/null 2>&1; then
+        # PID 파일 fallback
+        if [ -f "$ROOT/data/claude.pid" ]; then
+            while IFS= read -r PID; do
+                [ -n "$PID" ] && kill "$PID" 2>/dev/null || true
+            done < "$ROOT/data/claude.pid"
+            rm -f "$ROOT/data/claude.pid"
+        fi
+
+        # 5초 대기 후 force kill
+        sleep 2
+        CAFE_PIDS=$(pgrep -f "caffeinate.*append-system-prompt-file" 2>/dev/null || true)
+        if [ -n "$CAFE_PIDS" ]; then
             echo "[WARN] Claude가 안 죽어서 강제 종료 (kill -9)..."
-            pkill -9 -f "caffeinate.*claude" 2>/dev/null || true
-            pkill -9 -f "claude.*append-system-prompt-file" 2>/dev/null || true
-            pkill -9 -f "tee.*executor.stream" 2>/dev/null || true
+            for CPID in $CAFE_PIDS; do
+                PARENT=$(ps -p "$CPID" -o ppid= 2>/dev/null | tr -d ' ')
+                [ -n "$PARENT" ] && kill -9 "$PARENT" 2>/dev/null || true
+                kill -9 "$CPID" 2>/dev/null || true
+            done
+            pkill -9 -f "append-system-prompt-file" 2>/dev/null || true
             sleep 1
         fi
 
