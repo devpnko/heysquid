@@ -88,7 +88,7 @@ def send_to_channel(channel, chat_id, text, **kwargs):
 def broadcast_all(text, exclude_channels=None):
     """모든 활성 채널에 브로드캐스트 — PM 응답의 기본 전송 방식.
 
-    messages.json 저장은 호출자(broadcaster)가 담당.
+    messages.json 저장은 호출자(hub)가 담당.
     각 sender에는 _save=False로 중복 저장 방지.
     H-1: per-channel timeout 5초 적용.
 

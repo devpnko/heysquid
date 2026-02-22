@@ -103,6 +103,54 @@ def dashboard_recall(agent_name, message='Task complete'):
             pass
 
 
+# ─── PM State Tracking ───────────────────────────────────
+
+pm_state = "idle"  # idle | thinking | chatting | working
+_thinking_timer = None
+_thinking_shown = False
+
+
+def _set_pm_state(new_state):
+    """PM 상태 전이 + 대시보드 업데이트"""
+    global pm_state, _thinking_timer, _thinking_shown
+    if _thinking_timer:
+        _thinking_timer.cancel()
+        _thinking_timer = None
+    _thinking_shown = False
+    pm_state = new_state
+    dashboard_update_pm(new_state)
+
+
+def _schedule_thinking():
+    """2초 후 thinking 표시 예약 (tool result 후 다음 응답 생성 중)"""
+    global _thinking_timer
+    if _thinking_timer:
+        _thinking_timer.cancel()
+    _thinking_timer = threading.Timer(2.0, _show_thinking)
+    _thinking_timer.daemon = True
+    _thinking_timer.start()
+
+
+def _show_thinking():
+    """2초 이상 이벤트 없으면 TUI에 thinking 표시"""
+    global _thinking_shown
+    if pm_state == "thinking":
+        _thinking_shown = True
+        print(f"\033[90m[{fmt_time()}] 🦑 💭 thinking...\033[0m")
+        dashboard_update_pm("thinking", "💭 Thinking...")
+
+
+def dashboard_update_pm(status, speech=""):
+    """PM 상태를 agent_status.json에 반영"""
+    if DASHBOARD_ENABLED:
+        try:
+            update_agent_status("pm", status, speech)
+            if speech:
+                set_pm_speech(speech)
+        except Exception:
+            pass
+
+
 # ─── Telegram Broadcaster ────────────────────────────────
 
 class TelegramBroadcaster:
@@ -218,6 +266,7 @@ def main():
                 if subtype == "init":
                     sid = d.get("session_id", "?")[:12]
                     model = d.get("model", "?")
+                    _set_pm_state("idle")
                     print(f"\033[36m[{fmt_time()}] [SESSION]\033[0m {sid}... ({model})")
                     broadcaster.send(f"🚀 *Session Start* {model}")
                     dashboard_log('system', f'🚀 Session start ({model})')
@@ -229,15 +278,19 @@ def main():
                         text = c["text"].strip()
                         if text:
                             if is_standby(text):
+                                _set_pm_state("idle")
                                 print(f"\033[90m[{fmt_time()}] 🦑 ⏳ {truncate(text, 60)}\033[0m")
                                 broadcaster.send(f"⏳ {truncate(text, 100)}")
                                 dashboard_log('pm', f'💤 {truncate(text, 40)}')
                             else:
-                                print(f"\033[33m[{fmt_time()}] 🦑\033[0m {text}")
+                                _set_pm_state("chatting")
+                                dashboard_update_pm("chatting", f"💬 {truncate(text, 30)}")
+                                print(f"\033[33m[{fmt_time()}] 🦑 💬\033[0m {text}")
                                 broadcaster.send(f"🦑 {truncate(text, 200)}")
-                                dashboard_log('pm', f'🦑 {truncate(text, 40)}')
+                                dashboard_log('pm', f'💬 {truncate(text, 40)}')
 
                     elif c["type"] == "tool_use":
+                        _set_pm_state("working")
                         name = c.get("name", "?")
                         inp = c.get("input", {})
                         tool_id = c.get("id", "")
@@ -347,6 +400,9 @@ def main():
                             broadcaster.send(f"🔧 {name} → {truncate(detail, 80)}")
 
             elif t == "user":
+                # tool result → PM is now thinking about next action
+                _set_pm_state("thinking")
+                _schedule_thinking()
                 content = d.get("message", {}).get("content", [])
                 for c in content:
                     if isinstance(c, dict) and c.get("type") == "tool_result":
@@ -391,6 +447,7 @@ def main():
                             broadcaster.send(f"→ {truncate(text, 150)}")
 
             elif t == "result":
+                _set_pm_state("idle")
                 cost = d.get("total_cost_usd", 0)
                 dur = d.get("duration_ms", 0) / 1000
                 turns = d.get("num_turns", 0)

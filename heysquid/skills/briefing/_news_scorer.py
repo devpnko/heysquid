@@ -37,6 +37,12 @@ def score_and_rank_news(all_items, top_n=5):
     max_points = max((item["points"] for item in all_items), default=1) or 1
     max_comments = max((item["comments"] for item in all_items), default=1) or 1
 
+    # RSS 소스(TC/MIT)는 points=0이므로, 비-제로 아이템의 중간값으로 보정
+    nonzero_points = [i["points"] for i in all_items if i["points"] > 0]
+    median_points = sorted(nonzero_points)[len(nonzero_points) // 2] if nonzero_points else 0
+    nonzero_comments = [i["comments"] for i in all_items if i["comments"] > 0]
+    median_comments = sorted(nonzero_comments)[len(nonzero_comments) // 2] if nonzero_comments else 0
+
     for item in all_items:
         score = 0.0
 
@@ -62,8 +68,9 @@ def score_and_rank_news(all_items, top_n=5):
                 seen_sources.add(other["source"])
         score += min(cross_count * 10, 20)
 
-        # 3. 인기도 (0~25점)
-        score += (item["points"] / max_points) * 25
+        # 3. 인기도 (0~25점) — RSS 소스(points=0)는 중간값으로 보정
+        effective_points = item["points"] if item["points"] > 0 else median_points
+        score += (effective_points / max_points) * 25
 
         # 4. AI 관련성 (0~20점)
         ai_matches = len(AI_KEYWORDS.findall(item["title"]))
@@ -72,8 +79,9 @@ def score_and_rank_news(all_items, top_n=5):
         elif ai_matches == 1:
             score += 15
 
-        # 5. 토론성 (0~10점)
-        score += (item["comments"] / max_comments) * 10
+        # 5. 토론성 (0~10점) — RSS 소스(comments=0)는 중간값으로 보정
+        effective_comments = item["comments"] if item["comments"] > 0 else median_comments
+        score += (effective_comments / max_comments) * 10
 
         item["_score"] = round(score, 2)
 
@@ -108,15 +116,21 @@ def pick_best_per_criterion(all_items):
     max_points = max((item["points"] for item in all_items), default=1) or 1
     max_comments = max((item["comments"] for item in all_items), default=1) or 1
 
+    # RSS 소스 보정용 중간값
+    nonzero_points = [i["points"] for i in all_items if i["points"] > 0]
+    _median_pts = sorted(nonzero_points)[len(nonzero_points) // 2] if nonzero_points else 0
+    nonzero_comments = [i["comments"] for i in all_items if i["comments"] > 0]
+    _median_cmt = sorted(nonzero_comments)[len(nonzero_comments) // 2] if nonzero_comments else 0
+
     criteria = {
         "최신성": lambda item: 25 - min((now_ts - item["timestamp"]) / 3600, 48) * 0.52 if item["timestamp"] > 0 else 0,
         "소스 다양성": lambda item: sum(
             1 for other in all_items
             if other["source"] != item["source"] and _title_similarity(item["title"], other["title"]) > 0.3
         ),
-        "반응/인기": lambda item: item["points"],
+        "반응/인기": lambda item: item["points"] if item["points"] > 0 else _median_pts,
         "AI 관련성": lambda item: len(AI_KEYWORDS.findall(item["title"])) * 10 + (5 if AI_KEYWORDS.search(item.get("url", "")) else 0),
-        "토론성": lambda item: item["comments"],
+        "토론성": lambda item: item["comments"] if item["comments"] > 0 else _median_cmt,
     }
 
     picks = []

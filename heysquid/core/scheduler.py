@@ -1,6 +1,8 @@
-"""heysquid.core.scheduler — schedule 트리거 스킬을 시간 기반으로 실행.
+"""heysquid.core.scheduler — 스킬 스케줄러.
 
-launchd로 1분마다 호출되어, 현재 시각(HH:MM)에 매칭되는 스킬을 실행한다.
+launchd로 1분마다 호출되어:
+1. 현재 시각(HH:MM)에 매칭되는 schedule 스킬 실행
+2. 매 호출마다 interval 스킬 실행 (예: 스레드 예약 게시)
 
 Usage:
     python -m heysquid.core.scheduler
@@ -37,18 +39,30 @@ def run_scheduled_skills():
         return
 
     for name, meta in registry.items():
-        if meta.get("trigger") != "schedule":
-            continue
-        if meta.get("schedule") != now_hm:
+        trigger = meta.get("trigger")
+
+        # 1. schedule 트리거: 정확한 HH:MM 매칭
+        if trigger == "schedule":
+            if meta.get("schedule") != now_hm:
+                continue
+            logger.info(f"Skill {name} 실행 (schedule={now_hm})")
+
+        # 2. interval 트리거: 매 호출마다 실행
+        elif trigger == "interval":
+            pass  # 항상 실행
+
+        else:
             continue
 
-        logger.info(f"Skill {name} 실행 (schedule={now_hm})")
         ctx = SkillContext(triggered_by="scheduler")
-        result = run_skill(name, ctx)
-        if result["ok"]:
-            logger.info(f"Skill {name} 완료")
-        else:
-            logger.error(f"Skill {name} 실행 실패: {result['error']}")
+        try:
+            result = run_skill(name, ctx)
+            if result["ok"]:
+                logger.info(f"Skill {name} 완료")
+            else:
+                logger.error(f"Skill {name} 실행 실패: {result['error']}")
+        except Exception as e:
+            logger.error(f"Skill {name} 예외: {e}")
 
 
 if __name__ == "__main__":

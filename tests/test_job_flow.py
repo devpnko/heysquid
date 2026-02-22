@@ -130,7 +130,7 @@ class TestReplyTelegramFlock:
 
         try:
             with patch("heysquid.channels.telegram.send_message_sync", return_value=True):
-                from heysquid.core.orchestrator import reply_telegram
+                from heysquid.core.hub import reply_telegram
                 success = reply_telegram(12345, 400, "안녕!")
 
             assert success is True
@@ -156,7 +156,7 @@ class TestReplyTelegramFlock:
 
         try:
             with patch("heysquid.channels.telegram.send_message_sync", return_value=False):
-                from heysquid.core.orchestrator import reply_telegram
+                from heysquid.core.hub import reply_telegram
                 success = reply_telegram(12345, 500, "실패할 메시지")
 
             assert success is False

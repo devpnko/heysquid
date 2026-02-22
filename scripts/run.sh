@@ -101,10 +101,26 @@ case "${1:-}" in
         # 대시보드 서버 종료
         pkill -f "http.server 8420" 2>/dev/null || true
 
-        # executor + Claude 프로세스 전부 종료 (대기 루프 중일 수 있음)
+        # executor + Claude + caffeinate 전부 종료 (대기 루프 중일 수 있음)
         pkill -f "bash.*executor.sh" 2>/dev/null || true
+        pkill -f "caffeinate.*claude" 2>/dev/null || true
         pkill -f "claude.*append-system-prompt-file" 2>/dev/null || true
         pkill -f "tee.*executor.stream" 2>/dev/null || true
+
+        # 실제로 죽었는지 확인 (최대 5초 대기, 안 죽으면 SIGKILL)
+        for i in 1 2 3 4 5; do
+            if ! pgrep -f "claude.*append-system-prompt-file" > /dev/null 2>&1; then
+                break
+            fi
+            sleep 1
+        done
+        if pgrep -f "claude.*append-system-prompt-file" > /dev/null 2>&1; then
+            echo "[WARN] Claude가 안 죽어서 강제 종료 (kill -9)..."
+            pkill -9 -f "caffeinate.*claude" 2>/dev/null || true
+            pkill -9 -f "claude.*append-system-prompt-file" 2>/dev/null || true
+            pkill -9 -f "tee.*executor.stream" 2>/dev/null || true
+            sleep 1
+        fi
 
         # H-4: Slack/Discord listener 프로세스 종료
         pkill -f "slack_listener" 2>/dev/null || true

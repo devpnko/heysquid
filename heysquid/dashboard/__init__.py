@@ -21,7 +21,7 @@ SQUAD_HISTORY_FILE = os.path.join(DATA_DIR, 'squad_history.json')
 _user_html = os.path.join(DATA_DIR, 'dashboard.html')
 GAMEBOARD_HTML = _user_html if os.path.exists(_user_html) else get_template_path('dashboard.html')
 
-VALID_STATUSES = ['idle', 'working', 'complete', 'error']
+VALID_STATUSES = ['idle', 'working', 'complete', 'error', 'chatting', 'thinking']
 
 
 def _load_dashboard_config():
@@ -147,6 +147,10 @@ def update_agent_status(agent: str, status: str, task: str = '', hp: int = None,
             data[agent]['hp'] = 100
         elif status == 'error':
             data[agent]['hp'] = 30
+        elif status == 'thinking':
+            data[agent]['hp'] = 80
+        elif status == 'chatting':
+            data[agent]['hp'] = 70
 
     _save_status(data)
 

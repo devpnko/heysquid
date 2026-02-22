@@ -34,7 +34,7 @@ heysquid/
 │   ├── agents.py            # 에이전트 레지스트리 (Single Source of Truth)
 │   ├── config.py            # 환경변수, 설정
 │   ├── paths.py             # 경로 상수
-│   ├── orchestrator.py      # 오케스트레이터
+│   ├── hub.py               # PM 허브
 │   ├── workspace.py         # 멀티 프로젝트 관리
 │   ├── cli.py               # CLI 진입점
 │   ├── quick_check.py       # 메시지 유무 빠른 확인

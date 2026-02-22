@@ -110,8 +110,8 @@ def report_telegram(instruction, result_text, chat_id, timestamp, message_id, fi
         main_message_id = message_id
         timestamps = [timestamp]
 
-    # 전체 채널 브로드캐스트 (broadcaster에 위임)
-    from .broadcaster import report_broadcast
+    # 전체 채널 브로드캐스트 (hub에 위임)
+    from .hub import report_broadcast
     success = report_broadcast(instruction, result_text, chat_id, timestamp, message_id, files)
 
     if not success:

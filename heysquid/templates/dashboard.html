@@ -602,6 +602,34 @@ body {
   border-top: 6px solid var(--pink);
 }
 
+/* PM chatting/thinking indicators */
+.pm-speech-bubble.pm-chatting {
+  border-color: var(--cyan);
+  color: var(--cyan-light);
+}
+.pm-speech-bubble.pm-chatting::after {
+  border-top-color: var(--cyan);
+}
+.pm-speech-bubble.pm-thinking {
+  border-color: var(--purple);
+  color: var(--purple-light);
+  animation: thinking-pulse 2s ease-in-out infinite;
+}
+.pm-speech-bubble.pm-thinking::after {
+  border-top-color: var(--purple);
+}
+@keyframes thinking-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+@keyframes typing-dots {
+  0% { content: '💬'; }
+  25% { content: '💬.'; }
+  50% { content: '💬..'; }
+  75% { content: '💬...'; }
+  100% { content: '💬'; }
+}
+
 /* === MOVING DIVER === */
 #moving-diver {
   position: absolute;
@@ -2387,6 +2415,7 @@ function renderSkillsPanel(skills) {
   var pmChar = document.querySelector('#pm-area .squid-pixel-lg');
   if (!pmChar) return;
   var pmWrap = pmChar.parentElement;
+  var speechEl = document.getElementById('pm-speech');
   var prevPmStatus = 'idle';
 
   // Override loadDashboardData to add PM animation + pool reaction
@@ -2396,6 +2425,11 @@ function renderSkillsPanel(skills) {
     if (!data || !data.pm) return;
     var st = data.pm.status || 'idle';
     if (st !== prevPmStatus) {
+      // Clear previous state classes
+      if (speechEl) {
+        speechEl.classList.remove('pm-chatting', 'pm-thinking');
+      }
+
       if (st === 'working') {
         pmWrap.style.animation = 'bob-work 1.5s ease-in-out infinite';
         // Pool agents react
@@ -2407,10 +2441,29 @@ function renderSkillsPanel(skills) {
             setTimeout(function() { el.style.transform = ''; }, 600);
           }
         });
+      } else if (st === 'chatting') {
+        pmWrap.style.animation = 'bob-work 1.5s ease-in-out infinite';
+        if (speechEl) {
+          speechEl.classList.add('pm-chatting');
+          speechEl.textContent = data.pm.speech || '💬 typing...';
+          speechEl.classList.add('visible');
+        }
+      } else if (st === 'thinking') {
+        pmWrap.style.animation = 'bob-work 1.5s ease-in-out infinite';
+        if (speechEl) {
+          speechEl.classList.add('pm-thinking');
+          speechEl.textContent = '💭 thinking...';
+          speechEl.classList.add('visible');
+        }
       } else {
         pmWrap.style.animation = 'bob 2.5s ease-in-out infinite';
       }
       prevPmStatus = st;
+    }
+    // Update speech text for chatting even if status hasn't changed
+    if (st === 'chatting' && speechEl && data.pm.speech) {
+      speechEl.textContent = data.pm.speech;
+      speechEl.classList.add('visible');
     }
   };
 })();

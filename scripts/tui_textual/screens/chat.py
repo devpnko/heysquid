@@ -57,11 +57,19 @@ class ChatScreen(Screen):
         yield Static("", id="autocomplete-hint")
         yield Static(self._status_bar_text(), id="chat-status-bar")
 
-    def _header_text(self) -> str:
+    def _header_text(self, pm_status: str = "idle") -> str:
         pm_color = AGENT_COLORS.get("pm", "#ff6b9d")
         live = is_executor_live()
         indicator = f"[bold green]● LIVE[/bold green]" if live else "[dim]○ IDLE[/dim]"
-        return f"[bold]🦑 SQUID[/bold]  [bold {pm_color}]\\[CHAT][/bold {pm_color}]  {indicator}"
+        # PM 상태 표시
+        pm_indicator = ""
+        if pm_status == "chatting":
+            pm_indicator = "  [bold cyan]💬 chatting[/bold cyan]"
+        elif pm_status == "thinking":
+            pm_indicator = "  [bold #cc66ff]💭 thinking[/bold #cc66ff]"
+        elif pm_status == "working":
+            pm_indicator = "  [bold #ff9f43]⚙️ working[/bold #ff9f43]"
+        return f"[bold]🦑 SQUID[/bold]  [bold {pm_color}]\\[CHAT][/bold {pm_color}]  {indicator}{pm_indicator}"
 
     def _status_bar_text(self) -> str:
         return "[dim] q:quit  Ctrl+1/2/3/4:mode  Ctrl+\u2190\u2192  Enter:send  Tab:/ @완성  drag+Ctrl+C:복사[/dim]"
@@ -101,9 +109,10 @@ class ChatScreen(Screen):
         messages = poll_chat_messages()
         status = load_agent_status()
 
-        # 헤더 업데이트
+        # 헤더 업데이트 (PM 상태 반영)
+        pm_status = status.get("pm", {}).get("status", "idle")
         header = self.query_one("#chat-header", Static)
-        header.update(self._header_text())
+        header.update(self._header_text(pm_status))
 
         # 에이전트 바 업데이트
         bar = self.query_one(AgentCompactBar)
