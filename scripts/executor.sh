@@ -22,6 +22,7 @@ LOG_DIR="$ROOT/logs"
 LOG="$LOG_DIR/executor.log"
 STREAM_LOG="$LOG_DIR/executor.stream.jsonl"
 LOCKFILE="$ROOT/data/executor.lock"
+PIDFILE="$ROOT/data/claude.pid"
 
 # 로그 디렉토리 생성
 mkdir -p "$LOG_DIR"
@@ -31,6 +32,40 @@ mkdir -p "$ROOT/data"
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOG"
 }
+
+# ========================================
+# trap 핸들러 — executor가 어떻게 죽든 orphan 정리
+# ========================================
+cleanup() {
+    local exit_code=${?:-0}
+    log "[CLEANUP] executor.sh exiting (code=$exit_code)"
+
+    # PID 파일로 정확한 프로세스 kill
+    if [ -f "$PIDFILE" ]; then
+        SAVED_PID=$(cat "$PIDFILE" 2>/dev/null)
+        if [ -n "$SAVED_PID" ] && kill -0 "$SAVED_PID" 2>/dev/null; then
+            log "[CLEANUP] Killing claude PID $SAVED_PID (from pidfile)"
+            kill "$SAVED_PID" 2>/dev/null || true
+            sleep 2
+            kill -0 "$SAVED_PID" 2>/dev/null && kill -9 "$SAVED_PID" 2>/dev/null || true
+        fi
+        rm -f "$PIDFILE"
+    fi
+
+    # pgrep fallback — PID 파일 누락 시
+    ORPHAN_PIDS=$(pgrep -f "append-system-prompt-file" 2>/dev/null || true)
+    if [ -n "$ORPHAN_PIDS" ]; then
+        log "[CLEANUP] Fallback kill orphans: $ORPHAN_PIDS"
+        echo "$ORPHAN_PIDS" | xargs kill 2>/dev/null || true
+        sleep 1
+        STILL=$(pgrep -f "append-system-prompt-file" 2>/dev/null || true)
+        [ -n "$STILL" ] && echo "$STILL" | xargs kill -9 2>/dev/null || true
+    fi
+
+    rm -f "$LOCKFILE" 2>/dev/null
+    log "[CLEANUP] Done."
+}
+trap cleanup EXIT INT TERM
 
 # ========================================
 # Claude CLI 자동 탐지
@@ -65,13 +100,13 @@ log "CWD=$(pwd)"
 #    - 다중 인스턴스 → 전부 kill (좀비 방지)
 #    - 단일 인스턴스 → stale 체크 (30분)
 SELF_PID=$$
-CLAUDE_PIDS=$(pgrep -f "claude.*append-system-prompt-file" 2>/dev/null || true)
+CLAUDE_PIDS=$(pgrep -f "append-system-prompt-file" 2>/dev/null || true)
 PM_COUNT=$(echo "$CLAUDE_PIDS" | grep -c '[0-9]' 2>/dev/null || echo 0)
 
 # 1-a. 다중 PM 세션 감지 → 전부 kill (좀비 정리)
 if [ "$PM_COUNT" -gt 1 ]; then
     log "[ZOMBIE] 다중 PM 세션 감지 ($PM_COUNT개). 전부 kill..."
-    pkill -f "claude.*append-system-prompt-file" 2>/dev/null || true
+    pkill -f "append-system-prompt-file" 2>/dev/null || true
     sleep 2
     rm -f "$LOCKFILE" 2>/dev/null
     log "[ZOMBIE] 정리 완료. 새 세션 시작..."
@@ -82,7 +117,7 @@ elif [ "$PM_COUNT" -eq 1 ]; then
         LOG_AGE=$(( $(date +%s) - $(stat -f %m "$STREAM_LOG" 2>/dev/null || echo 0) ))
         if [ "$LOG_AGE" -gt 1800 ]; then
             log "[STALE] Claude PM idle >30m. Force-killing..."
-            pkill -f "claude.*append-system-prompt-file" 2>/dev/null || true
+            pkill -f "append-system-prompt-file" 2>/dev/null || true
             sleep 2
             rm -f "$LOCKFILE" 2>/dev/null
             log "[STALE] Cleared stale state. Proceeding..."
@@ -175,28 +210,45 @@ PROMPT="CLAUDE.md의 지침에 따라 PM으로서 행동할 것.
 # 작업 디렉토리를 프로젝트 루트로 설정
 cd "$ROOT"
 
-# stream log 초기화 (실행마다 새로 시작)
-> "$STREAM_LOG"
+# stream log 조건부 초기화 (30분+ stale일 때만 리셋, 아니면 유지)
+if [ -f "$STREAM_LOG" ]; then
+    LOG_AGE=$(( $(date +%s) - $(stat -f%m "$STREAM_LOG" 2>/dev/null || echo 0) ))
+    if [ "$LOG_AGE" -gt 1800 ]; then
+        > "$STREAM_LOG"
+        log "[INFO] Stream log reset (stale ${LOG_AGE}s)"
+    fi
+else
+    > "$STREAM_LOG"
+fi
 
 VIEWER="$ROOT/scripts/stream_viewer.py"
 
 # 항상 새 세션 시작 (세션 재개 안 함 — 메모리 시스템으로 맥락 복구)
 log "[INFO] Starting new session (permanent memory + session memory)..."
-EC=0
+
+# PID 추적을 위해 caffeinate를 백그라운드로 실행 + wait
 caffeinate -ims "$CLAUDE_EXE" -p --dangerously-skip-permissions \
     --model opus \
     --output-format stream-json --verbose \
     --append-system-prompt-file "$SPF" \
     "$PROMPT" \
-    2>> "$LOG" | tee "$STREAM_LOG" | python3 -u "$VIEWER" || EC=$?
+    2>> "$LOG" | tee -a "$STREAM_LOG" | python3 -u "$VIEWER" &
+PIPE_PID=$!
+
+# caffeinate의 실제 PID 기록 (패턴 매칭 fallback 불필요하게)
+sleep 1
+CLAUDE_PID=$(pgrep -f "append-system-prompt-file" 2>/dev/null | head -1 || true)
+if [ -n "$CLAUDE_PID" ]; then
+    echo "$CLAUDE_PID" > "$PIDFILE"
+    log "[INFO] Claude PID=$CLAUDE_PID saved to $PIDFILE"
+fi
+
+# 파이프라인 완료 대기
+EC=0
+wait $PIPE_PID || EC=$?
 
 log "EXITCODE=$EC"
 log ""
 
-# Lock 파일 삭제
-if [ -f "$LOCKFILE" ]; then
-    rm -f "$LOCKFILE" 2>/dev/null
-    log "Lock file deleted: $LOCKFILE"
-fi
-
+# cleanup은 trap EXIT에서 자동 실행됨
 exit $EC

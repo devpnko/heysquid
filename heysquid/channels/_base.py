@@ -60,7 +60,7 @@ def trigger_executor():
     lockfile = EXECUTOR_LOCK_FILE
     if os.path.exists(lockfile):
         has_claude = subprocess.run(
-            ["pgrep", "-f", "claude.*append-system-prompt-file"],
+            ["pgrep", "-f", "append-system-prompt-file"],
             capture_output=True,
         ).returncode == 0
         if has_claude:
