@@ -262,22 +262,24 @@ caffeinate -ims "$CLAUDE_EXE" -p --dangerously-skip-permissions \
 PIPE_PID=$!
 
 # caffeinate PID + 실제 claude PID 기록
+# 프로세스 구조: claude(parent) → caffeinate(child)
 # claude CLI는 cmdline을 "claude"로 재작성하므로 PID 파일이 유일한 추적 수단
 sleep 2
 CAFE_PID=$(pgrep -f "caffeinate.*append-system-prompt-file" 2>/dev/null | head -1 || true)
 CLAUDE_PID=""
 if [ -n "$CAFE_PID" ]; then
-    CLAUDE_PID=$(pgrep -P "$CAFE_PID" 2>/dev/null | head -1 || true)
+    # claude는 caffeinate의 부모 (PPID)
+    CLAUDE_PID=$(ps -p "$CAFE_PID" -o ppid= 2>/dev/null | tr -d ' ')
 fi
-# fallback: caffeinate 패턴 매칭
+# fallback: caffeinate 자체라도 저장
 if [ -z "$CLAUDE_PID" ]; then
     CLAUDE_PID=$(pgrep -f "append-system-prompt-file" 2>/dev/null | head -1 || true)
 fi
-# 둘 다 PID 파일에 저장 (한 줄에 하나씩)
+# 둘 다 PID 파일에 저장 (한 줄에 하나씩, 중복 제거)
 : > "$PIDFILE"
-[ -n "$CAFE_PID" ] && echo "$CAFE_PID" >> "$PIDFILE"
 [ -n "$CLAUDE_PID" ] && echo "$CLAUDE_PID" >> "$PIDFILE"
-log "[INFO] Saved PIDs: cafe=$CAFE_PID claude=$CLAUDE_PID"
+[ -n "$CAFE_PID" ] && [ "$CAFE_PID" != "$CLAUDE_PID" ] && echo "$CAFE_PID" >> "$PIDFILE"
+log "[INFO] Saved PIDs: claude=$CLAUDE_PID cafe=$CAFE_PID"
 
 # 파이프라인 완료 대기
 EC=0
