@@ -108,7 +108,7 @@
   ],
   "T5_regression": [
     {
-      "check": "/Users/hyuk in .py",
+      "check": "hardcoded home path in .py",
       "status": "PASS",
       "hits": 0
     },
