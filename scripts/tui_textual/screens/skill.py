@@ -66,26 +66,34 @@ class SkillScreen(Screen):
         return f"[bold]\U0001f991 SQUID[/bold]  [bold {pm_color}]\\[SKILL][/bold {pm_color}]  {indicator}"
 
     def refresh_data(self, flash: str = "") -> None:
-        """폴링 데이터로 화면 갱신"""
+        """폴링 데이터로 화면 갱신 — 각 섹션 독립적으로 보호"""
         status = load_agent_status()
 
-        # 헤더
-        header = self.query_one("#skill-header", Static)
-        header.update(self._header_text())
+        try:
+            header = self.query_one("#skill-header", Static)
+            header.update(self._header_text())
+        except Exception:
+            pass
 
-        # 에이전트 바
-        bar = self.query_one(AgentCompactBar)
-        bar.update_status(status)
+        try:
+            bar = self.query_one(AgentCompactBar)
+            bar.update_status(status)
+        except Exception:
+            pass
 
-        # 스킬 테이블
-        skills = status.get("skills", {})
-        content = self.query_one("#skill-content", Static)
-        content.update(self._render_skills(skills))
+        try:
+            skills = status.get("skills", {})
+            content = self.query_one("#skill-content", Static)
+            content.update(self._render_skills(skills))
+        except Exception:
+            pass
 
-        # 상태바
         if flash:
-            status_bar = self.query_one("#skill-status-bar", Static)
-            status_bar.update(f"[dim] {flash}[/dim]")
+            try:
+                status_bar = self.query_one("#skill-status-bar", Static)
+                status_bar.update(f"[dim] {flash}[/dim]")
+            except Exception:
+                pass
 
     def _render_skills(self, skills: dict) -> str:
         """스킬 데이터를 Rich 텍스트로 렌더링"""

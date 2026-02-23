@@ -59,22 +59,33 @@ class LogScreen(Screen):
         return f"[bold]🦑 SQUID[/bold]  [bold {pm_color}]\\[LOG][/bold {pm_color}]  {indicator}"
 
     def refresh_data(self, stream_buffer: deque, flash: str = "") -> None:
-        """폴링 데이터로 화면 갱신"""
-        status = load_agent_status()
+        """폴링 데이터로 화면 갱신 — 각 섹션 독립적으로 보호"""
+        # Stream Log 최우선 (가장 중요한 실시간 데이터)
+        try:
+            stream = self.query_one(StreamLogView)
+            stream.update_log(stream_buffer)
+        except Exception:
+            pass
+
+        # Mission Log (agent_status 의존)
+        try:
+            status = load_agent_status()
+            mission = self.query_one(MissionLogView)
+            mission.update_log(status.get("mission_log", []))
+        except Exception:
+            pass
 
         # 헤더
-        header = self.query_one("#log-header", Static)
-        header.update(self._header_text())
-
-        # Mission Log
-        mission = self.query_one(MissionLogView)
-        mission.update_log(status.get("mission_log", []))
-
-        # Stream Log
-        stream = self.query_one(StreamLogView)
-        stream.update_log(stream_buffer)
+        try:
+            header = self.query_one("#log-header", Static)
+            header.update(self._header_text())
+        except Exception:
+            pass
 
         # 상태바
         if flash:
-            status_bar = self.query_one("#log-status-bar", Static)
-            status_bar.update(f"[dim] {flash}[/dim]")
+            try:
+                status_bar = self.query_one("#log-status-bar", Static)
+                status_bar.update(f"[dim] {flash}[/dim]")
+            except Exception:
+                pass

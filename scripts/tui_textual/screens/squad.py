@@ -73,53 +73,67 @@ class SquadScreen(Screen):
         return f"[bold]🦑 SQUID[/bold]  [bold {pm_color}]\\[SQUAD][/bold {pm_color}]  {indicator}"
 
     def refresh_data(self, flash: str = "") -> None:
-        """폴링 데이터로 화면 갱신"""
+        """폴링 데이터로 화면 갱신 — 각 섹션 독립적으로 보호"""
         status = load_agent_status()
         history = load_squad_history()
 
         # 헤더
-        header = self.query_one("#squad-header", Static)
-        header.update(self._header_text())
+        try:
+            header = self.query_one("#squad-header", Static)
+            header.update(self._header_text())
+        except Exception:
+            pass
 
-        # 서브헤더: 토론 모드/주제
+        # 서브헤더 + 에이전트 패널
         squad = status.get("squad_log")
-        subheader = self.query_one("#squad-subheader", Static)
-        if squad:
-            mode_str = squad.get("mode", "squid")
-            topic = squad.get("topic", "")
-            if mode_str == "kraken":
-                subheader.update(f"[bold {AGENT_COLORS['pm']}]── 🦑 Kraken Mode ──[/bold {AGENT_COLORS['pm']}]  [dim]{topic}[/dim]")
+        try:
+            subheader = self.query_one("#squad-subheader", Static)
+            if squad:
+                mode_str = squad.get("mode", "squid")
+                topic = squad.get("topic", "")
+                if mode_str == "kraken":
+                    subheader.update(f"[bold {AGENT_COLORS['pm']}]── 🦑 Kraken Mode ──[/bold {AGENT_COLORS['pm']}]  [dim]{topic}[/dim]")
+                else:
+                    subheader.update(f"[bold {AGENT_COLORS['pm']}]── 🦑 Squid Mode ──[/bold {AGENT_COLORS['pm']}]  [dim]{topic}[/dim]")
             else:
-                subheader.update(f"[bold {AGENT_COLORS['pm']}]── 🦑 Squid Mode ──[/bold {AGENT_COLORS['pm']}]  [dim]{topic}[/dim]")
-        else:
-            subheader.update("")
+                subheader.update("")
+        except Exception:
+            pass
 
-        # 에이전트 패널
-        panel = self.query_one(AgentPanel)
-        panel.update_status(status)
+        try:
+            panel = self.query_one(AgentPanel)
+            panel.update_status(status)
+        except Exception:
+            pass
 
-        # 히스토리 목록
-        hist_list = self.query_one(SquadHistoryList)
-        hist_list.update_history(history, squad)
+        # 히스토리 + 토론 뷰
+        try:
+            hist_list = self.query_one(SquadHistoryList)
+            hist_list.update_history(history, squad)
+        except Exception:
+            pass
 
-        # 토론 뷰: 선택된 항목 또는 활성 토론
-        entry_view = self.query_one(SquadEntryView)
-        if self._selected_history_id is not None:
-            # 히스토리에서 선택된 토론 표시
-            selected = None
-            for item in history:
-                if item.get("id") == self._selected_history_id:
-                    selected = item
-                    break
-            entry_view.update_squad(selected)
-        else:
-            # 활성 토론 표시
-            entry_view.update_squad(squad)
+        try:
+            entry_view = self.query_one(SquadEntryView)
+            if self._selected_history_id is not None:
+                selected = None
+                for item in history:
+                    if item.get("id") == self._selected_history_id:
+                        selected = item
+                        break
+                entry_view.update_squad(selected)
+            else:
+                entry_view.update_squad(squad)
+        except Exception:
+            pass
 
         # 상태바
         if flash:
-            status_bar = self.query_one("#squad-status-bar", Static)
-            status_bar.update(f"[dim] {flash}[/dim]")
+            try:
+                status_bar = self.query_one("#squad-status-bar", Static)
+                status_bar.update(f"[dim] {flash}[/dim]")
+            except Exception:
+                pass
 
     def on_squad_history_list_discussion_selected(
         self, event: SquadHistoryList.DiscussionSelected

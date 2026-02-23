@@ -1,6 +1,10 @@
-"""데이터 폴링 — messages.json, agent_status.json, stream.jsonl 로딩"""
+"""데이터 폴링 — messages.json, agent_status.json, stream.jsonl 로딩
+
+자가 복구 원칙: 어떤 파일이 깨져도 캐시 반환 → 파일 복구 시 자동 갱신.
+"""
 
 import json
+import logging
 import os
 from collections import deque
 from datetime import datetime
@@ -8,6 +12,8 @@ from datetime import datetime
 from heysquid.core.agents import AGENTS, TOOL_EMOJI, SUBAGENT_MAP
 
 from .utils import trunc
+
+log = logging.getLogger("tui.poller")
 
 # --- 파일 경로 ---
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -24,27 +30,35 @@ STREAM_BUFFER_SIZE = 200
 _stream_active_agents: dict = {}
 
 
-_status_cache = {"mtime": 0.0, "data": {}}
+def _safe_load_json(path: str, cache: dict, key: str = "data"):
+    """JSON 파일을 안전하게 로드. 어떤 예외든 캐시 반환. mtime 변경 시에만 재로드."""
+    try:
+        mtime = os.path.getmtime(path)
+    except OSError:
+        return cache[key]
+
+    if mtime <= cache["mtime"]:
+        return cache[key]
+
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        cache["mtime"] = mtime
+        cache[key] = data
+        return data
+    except Exception as e:
+        # 어떤 예외든 (UnicodeDecodeError, JSONDecodeError, OSError, ...)
+        # 캐시 반환. mtime은 업데이트하지 않아 → 파일 복구되면 자동 재로드.
+        log.debug("Failed to load %s: %s", os.path.basename(path), e)
+        return cache[key]
+
+
+_status_cache: dict = {"mtime": 0.0, "data": {}}
 
 
 def load_agent_status() -> dict:
-    """agent_status.json 로드 (mtime 기반 캐시)"""
-    try:
-        mtime = os.path.getmtime(STATUS_FILE)
-    except OSError:
-        return _status_cache["data"]
-
-    if mtime <= _status_cache["mtime"]:
-        return _status_cache["data"]
-
-    try:
-        with open(STATUS_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        _status_cache["mtime"] = mtime
-        _status_cache["data"] = data
-        return data
-    except (FileNotFoundError, json.JSONDecodeError):
-        return _status_cache["data"]
+    """agent_status.json 로드 (mtime 기반 캐시, 자가 복구)"""
+    return _safe_load_json(STATUS_FILE, _status_cache)
 
 
 def is_executor_live() -> bool:
@@ -53,54 +67,25 @@ def is_executor_live() -> bool:
 
 
 # --- Chat 데이터 폴링 ---
-_chat_cache = {"mtime": 0.0, "messages": []}
+_chat_cache: dict = {"mtime": 0.0, "data": {"messages": []}, "messages": []}
 
 
 def poll_chat_messages() -> list[dict]:
-    """messages.json에서 채팅 메시지 폴링 (mtime 기반 캐시)"""
-    try:
-        mtime = os.path.getmtime(MESSAGES_FILE)
-    except OSError:
-        return _chat_cache["messages"]
-
-    if mtime <= _chat_cache["mtime"]:
-        return _chat_cache["messages"]
-
-    try:
-        with open(MESSAGES_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        msgs = data.get("messages", [])
+    """messages.json에서 채팅 메시지 폴링 (mtime 기반 캐시, 자가 복구)"""
+    raw = _safe_load_json(MESSAGES_FILE, _chat_cache)
+    if isinstance(raw, dict):
+        msgs = raw.get("messages", [])
         chat_msgs = [m for m in msgs if m.get("type") in ("user", "bot")]
-        chat_msgs = chat_msgs[-CHAT_MAX_MESSAGES:]
-        _chat_cache["mtime"] = mtime
-        _chat_cache["messages"] = chat_msgs
-    except (json.JSONDecodeError, OSError):
-        pass
-
+        _chat_cache["messages"] = chat_msgs[-CHAT_MAX_MESSAGES:]
     return _chat_cache["messages"]
 
 
-_squad_history_cache = {"mtime": 0.0, "data": []}
+_squad_history_cache: dict = {"mtime": 0.0, "data": []}
 
 
 def load_squad_history() -> list[dict]:
-    """squad_history.json 로드 (mtime 캐시)"""
-    try:
-        mtime = os.path.getmtime(SQUAD_HISTORY_FILE)
-    except OSError:
-        return _squad_history_cache["data"]
-
-    if mtime <= _squad_history_cache["mtime"]:
-        return _squad_history_cache["data"]
-
-    try:
-        with open(SQUAD_HISTORY_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        _squad_history_cache["mtime"] = mtime
-        _squad_history_cache["data"] = data
-        return data
-    except (FileNotFoundError, json.JSONDecodeError):
-        return _squad_history_cache["data"]
+    """squad_history.json 로드 (mtime 캐시, 자가 복구)"""
+    return _safe_load_json(SQUAD_HISTORY_FILE, _squad_history_cache)
 
 
 def invalidate_chat_cache():

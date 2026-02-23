@@ -82,11 +82,12 @@ class SquidApp(App):
         self.call_after_refresh(self._poll_data)
 
     def _poll_data(self) -> None:
-        """주기적 데이터 폴링"""
-        # Stream 로그 항상 로드 (Log 모드에서 필요)
-        self._stream_pos = load_stream_lines(self._stream_pos, self._stream_buffer)
+        """주기적 데이터 폴링 — 어떤 예외든 삼키고 다음 폴링 보장"""
+        try:
+            self._stream_pos = load_stream_lines(self._stream_pos, self._stream_buffer)
+        except Exception:
+            pass
 
-        # 활성 스크린만 갱신
         screen = self.screen
         flash = self._flash_msg
 
@@ -100,7 +101,7 @@ class SquidApp(App):
             elif isinstance(screen, SkillScreen):
                 screen.refresh_data(flash=flash)
         except Exception:
-            pass  # compose 완료 전이면 무시
+            pass  # compose 완료 전이거나 데이터 오류 — 다음 폴링에서 재시도
 
     def _switch_mode(self, new_mode: int) -> None:
         """모드 전환"""

@@ -105,27 +105,33 @@ class ChatScreen(Screen):
         return ""
 
     def refresh_data(self, flash: str = "") -> None:
-        """폴링 데이터로 화면 갱신"""
-        messages = poll_chat_messages()
-        status = load_agent_status()
+        """폴링 데이터로 화면 갱신 — 각 섹션 독립적으로 보호"""
+        # 메시지 업데이트 최우선
+        try:
+            messages = poll_chat_messages()
+            msg_view = self.query_one("#chat-messages", MessageView)
+            msg_view.update_messages(messages)
+        except Exception:
+            pass
 
-        # 헤더 업데이트 (PM 상태 반영)
-        pm_status = status.get("pm", {}).get("status", "idle")
-        header = self.query_one("#chat-header", Static)
-        header.update(self._header_text(pm_status))
-
-        # 에이전트 바 업데이트
-        bar = self.query_one(AgentCompactBar)
-        bar.update_status(status)
-
-        # 메시지 뷰 업데이트
-        msg_view = self.query_one("#chat-messages", MessageView)
-        msg_view.update_messages(messages)
+        # 에이전트 상태 (실패해도 무시)
+        try:
+            status = load_agent_status()
+            pm_status = status.get("pm", {}).get("status", "idle")
+            header = self.query_one("#chat-header", Static)
+            header.update(self._header_text(pm_status))
+            bar = self.query_one(AgentCompactBar)
+            bar.update_status(status)
+        except Exception:
+            pass
 
         # 상태바
         if flash:
-            status_bar = self.query_one("#chat-status-bar", Static)
-            status_bar.update(f"[dim] {flash}[/dim]")
+            try:
+                status_bar = self.query_one("#chat-status-bar", Static)
+                status_bar.update(f"[dim] {flash}[/dim]")
+            except Exception:
+                pass
 
     def clear_flash(self) -> None:
         """flash 메시지 클리어"""
