@@ -252,7 +252,7 @@ PIPE_PID=$!
 _run_stream_viewer() {
     sleep 1  # tee가 파일 쓰기 시작할 때까지 대기
     while kill -0 "$PIPE_PID" 2>/dev/null; do
-        tail -n 0 -F "$STREAM_LOG" 2>/dev/null | python3 -u "$VIEWER" 2>> "$LOG" || true
+        tail -n 0 -F "$STREAM_LOG" 2>/dev/null | "$VENV_PYTHON" -u "$VIEWER" 2>> "$LOG" || true
         # viewer가 죽으면 재시작 (tail도 SIGPIPE로 자연 종료)
         kill -0 "$PIPE_PID" 2>/dev/null || break
         log "[WARN] stream_viewer exited, restarting in 2s..."
