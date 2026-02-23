@@ -2,7 +2,7 @@
 
 **Your personal PM agent that never sleeps.**
 
-heysquid turns [Claude Code](https://docs.anthropic.com/en/docs/claude-code) into an always-on project manager you can text from Telegram. Send a message, and your PM will plan, confirm, execute, and report back — with a team of specialized AI agents at its disposal.
+heysquid turns [Claude Code](https://docs.anthropic.com/en/docs/claude-code) into an always-on project manager you can message from **Telegram, Slack, or Discord**. Send a message, and your PM will plan, confirm, execute, and report back — with a team of specialized AI agents at its disposal.
 
 ## Why heysquid?
 
@@ -11,18 +11,23 @@ Most AI coding tools wait for you to sit at a computer. heysquid works while you
 - **PM Protocol** — Every task follows Plan → Confirm → Execute → Report. No surprises.
 - **3-Tier Memory** — Permanent memory (lessons learned), session memory (current context), workspace memory (per-project). Your PM remembers everything.
 - **Agent Team** — 6 specialists auto-dispatched by the PM. The right model for the right job.
-- **Always-On** — Daemon-based architecture. Send a Telegram message at 3am, get a response in seconds.
+- **Multi-Channel** — Telegram, Slack, Discord. Message your PM from wherever you work.
+- **Always-On** — Daemon-based architecture. Send a message at 3am, get a response in seconds.
 - **Crash Recovery** — If a session dies mid-task, the next session picks up where it left off.
 
 ## Quick Start
 
 ```bash
-pip install heysquid
-heysquid init       # Interactive setup (Telegram token, user ID)
+pip install heysquid              # Core (Telegram)
+pip install 'heysquid[slack]'     # + Slack support
+pip install 'heysquid[discord]'   # + Discord support
+pip install 'heysquid[all]'       # Everything
+
+heysquid init       # Interactive setup wizard
 heysquid start      # Start the daemon
 ```
 
-That's it. Send a message to your Telegram bot and start working.
+That's it. Send a message to your bot and start working.
 
 ### Prerequisites
 
@@ -136,18 +141,31 @@ heysquid/
 
 ## Configuration
 
-All configuration lives in `heysquid/.env`:
+All configuration lives in `.env` (created by `heysquid init`):
 
 ```env
-# Required
+# Telegram (required — primary channel)
 TELEGRAM_BOT_TOKEN=your_bot_token_here
 TELEGRAM_ALLOWED_USERS=your_telegram_id
 
-# Optional
-TELEGRAM_POLLING_INTERVAL=10    # seconds (default: 10)
+# Slack (optional — add token to enable)
+SLACK_BOT_TOKEN=xoxb-...
+SLACK_APP_TOKEN=xapp-...
+SLACK_ALLOWED_USERS=U01ABCDEF
+SLACK_DEFAULT_CHANNEL=C01ABCDEF
+
+# Discord (optional — add token to enable)
+DISCORD_BOT_TOKEN=your_discord_bot_token
+DISCORD_ALLOWED_USERS=123456789012345678
+DISCORD_DEFAULT_CHANNEL=123456789012345678
 ```
 
-Get your Telegram user ID from [@userinfobot](https://t.me/userinfobot).
+`heysquid start` auto-detects which channels have tokens and starts only those listeners.
+
+**Setup guides:**
+- Telegram: [@BotFather](https://t.me/BotFather) · User ID from [@userinfobot](https://t.me/userinfobot)
+- Slack: [Create App](https://api.slack.com/apps) → Enable Socket Mode → Bot Token + App Token
+- Discord: [Create App](https://discord.com/developers/applications) → Bot → Enable MESSAGE CONTENT INTENT
 
 ## How It's Built
 
@@ -166,7 +184,7 @@ heysquid is a thin orchestration layer on top of Claude Code:
 - [x] 3-tier memory system
 - [x] Crash recovery
 - [x] `pip install heysquid`
-- [ ] Multi-channel (Slack, Discord adapters)
+- [x] Multi-channel (Telegram + Slack + Discord)
 - [ ] Linux support (systemd)
 - [ ] Department mode (parallel Claude Code processes)
 - [ ] Voice input (Whisper → task instruction)

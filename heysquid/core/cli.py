@@ -61,53 +61,112 @@ def cmd_init(args):
             print(f"  Exists  {os.path.basename(dest)}")
     print()
 
-    # Step 3: 텔레그램 봇 토큰
+    # Step 3: Telegram bot token
     env_file = os.path.join(data_dir, ".env")
     # dev mode: heysquid/.env 위치도 체크
     dev_env = os.path.join(str(PACKAGE_DIR), ".env")
     existing_env = dev_env if os.path.exists(dev_env) else env_file
 
-    if os.path.exists(existing_env) and _env_has_token(existing_env):
-        print("[3/5] 텔레그램 봇 토큰: 이미 설정됨")
+    if os.path.exists(existing_env) and _env_has_token(existing_env, "TELEGRAM_BOT_TOKEN"):
+        print("[3/7] Telegram bot token: already configured")
     else:
-        print("[3/5] 텔레그램 봇 토큰 설정")
-        print("  BotFather(@BotFather)에서 봇을 만들고 토큰을 받으세요.")
-        token = input("  봇 토큰 입력 (건너뛰려면 Enter): ").strip()
+        print("[3/7] Telegram bot token")
+        print("  Create a bot via @BotFather on Telegram and paste the token.")
+        token = input("  Bot token (Enter to skip): ").strip()
         if token:
             _write_env_token(env_file, "TELEGRAM_BOT_TOKEN", token)
-            print("  [OK] 토큰 저장됨")
+            print("  [OK] Saved")
         else:
-            print("  [SKIP] 나중에 .env 파일을 직접 수정하세요.")
+            print("  [SKIP] Edit .env later.")
     print()
 
-    # Step 4: 사용자 ID
-    print("[4/5] 텔레그램 사용자 ID")
-    print("  봇에게 메시지를 보낸 후, @userinfobot으로 ID를 확인하세요.")
-    user_id = input("  사용자 ID 입력 (건너뛰려면 Enter): ").strip()
+    # Step 4: Telegram user ID
+    print("[4/7] Telegram user ID")
+    print("  Send a message to @userinfobot on Telegram to get your ID.")
+    user_id = input("  User ID (Enter to skip): ").strip()
     if user_id:
         _write_env_token(env_file, "TELEGRAM_ALLOWED_USERS", user_id)
-        print("  [OK] 사용자 ID 저장됨")
+        print("  [OK] Saved")
     else:
-        print("  [SKIP] 나중에 .env 파일을 직접 수정하세요.")
+        print("  [SKIP] Edit .env later.")
     print()
 
-    # Step 5: 자동 시작
-    print("[5/5] 설정 완료!")
+    # Step 5: Slack (optional)
+    print("[5/7] Slack integration (optional)")
+    if os.path.exists(existing_env) and _env_has_token(existing_env, "SLACK_BOT_TOKEN"):
+        print("  Already configured.")
+    else:
+        print("  Connect Slack to control your PM from Slack too.")
+        print("  Requires: Slack App with Socket Mode enabled")
+        print("  Guide: https://api.slack.com/apps")
+        slack = input("  Configure Slack? [y/N]: ").strip().lower()
+        if slack in ("y", "yes"):
+            bot_token = input("  Slack Bot Token (xoxb-...): ").strip()
+            app_token = input("  Slack App Token (xapp-...): ").strip()
+            channel = input("  Default channel ID (C...): ").strip()
+            users = input("  Allowed user IDs (comma-separated, U...): ").strip()
+            if bot_token:
+                _write_env_token(env_file, "SLACK_BOT_TOKEN", bot_token)
+            if app_token:
+                _write_env_token(env_file, "SLACK_APP_TOKEN", app_token)
+            if channel:
+                _write_env_token(env_file, "SLACK_DEFAULT_CHANNEL", channel)
+            if users:
+                _write_env_token(env_file, "SLACK_ALLOWED_USERS", users)
+            print("  [OK] Slack configured")
+            print("  Tip: pip install 'heysquid[slack]' to install dependencies")
+        else:
+            print("  [SKIP] Add Slack anytime by editing .env")
     print()
-    print("다음 단계:")
-    print(f"  1. .env 파일 확인: {env_file}")
-    print("  2. 데몬 시작: heysquid start")
-    print("  3. 상태 확인: heysquid status")
+
+    # Step 6: Discord (optional)
+    print("[6/7] Discord integration (optional)")
+    if os.path.exists(existing_env) and _env_has_token(existing_env, "DISCORD_BOT_TOKEN"):
+        print("  Already configured.")
+    else:
+        print("  Connect Discord to control your PM from Discord too.")
+        print("  Requires: Discord Bot with MESSAGE CONTENT INTENT enabled")
+        print("  Guide: https://discord.com/developers/applications")
+        discord_yn = input("  Configure Discord? [y/N]: ").strip().lower()
+        if discord_yn in ("y", "yes"):
+            bot_token = input("  Discord Bot Token: ").strip()
+            channel = input("  Default channel ID: ").strip()
+            users = input("  Allowed user IDs (comma-separated): ").strip()
+            if bot_token:
+                _write_env_token(env_file, "DISCORD_BOT_TOKEN", bot_token)
+            if channel:
+                _write_env_token(env_file, "DISCORD_DEFAULT_CHANNEL", channel)
+            if users:
+                _write_env_token(env_file, "DISCORD_ALLOWED_USERS", users)
+            print("  [OK] Discord configured")
+            print("  Tip: pip install 'heysquid[discord]' to install dependencies")
+        else:
+            print("  [SKIP] Add Discord anytime by editing .env")
+    print()
+
+    # Step 7: Done
+    print("[7/7] Setup complete!")
+    print()
+    print("Next steps:")
+    print(f"  1. Review .env: {env_file}")
+    print("  2. Start daemon: heysquid start")
+    print("  3. Check status: heysquid status")
+    print()
+    print("Optional:")
+    print("  pip install 'heysquid[slack]'     # Add Slack support")
+    print("  pip install 'heysquid[discord]'   # Add Discord support")
+    print("  pip install 'heysquid[all]'       # Install everything")
 
 
-def _env_has_token(env_path: str) -> bool:
-    """Check if .env has a real bot token (not placeholder)."""
+def _env_has_token(env_path: str, key: str = "TELEGRAM_BOT_TOKEN") -> bool:
+    """Check if .env has a real value for the given key (not placeholder)."""
+    placeholders = {"your_bot_token_here", "xoxb-...", "xapp-...", ""}
     try:
         with open(env_path) as f:
             for line in f:
-                if line.startswith("TELEGRAM_BOT_TOKEN="):
+                if line.startswith(f"{key}="):
                     val = line.split("=", 1)[1].strip()
-                    return val and val != "your_bot_token_here"
+                    return val not in placeholders
     except Exception:
         pass
     return False
