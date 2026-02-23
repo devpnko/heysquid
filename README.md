@@ -113,6 +113,14 @@ open http://localhost:8420/dashboard.html
 heysquid logs -f
 ```
 
+### Real-time Dashboard
+
+<p align="center">
+  <img src="assets/dashboard.gif" alt="heysquid dashboard" width="720">
+</p>
+
+A pixel-art ocean-themed dashboard showing your agent team in action. Agents swim to their desks when dispatched, skill machines animate when running, and mission logs update in real-time.
+
 ## Memory System
 
 heysquid uses a 3-tier memory architecture:
