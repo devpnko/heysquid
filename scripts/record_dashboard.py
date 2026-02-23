@@ -53,21 +53,27 @@ def record():
 
 
 def to_gif(video_path: str):
-    """Convert video to optimized GIF using ffmpeg."""
-    # Two-pass: generate palette → apply palette
+    """Convert video to optimized GIF using ffmpeg.
+
+    Trims idle intro/outro, scales to 720px, 8fps, 96 colors for ~3-5MB output.
+    """
     palette = OUTPUT_VIDEO_DIR / "palette.png"
+
+    # Trim: skip first 2s (idle) and last 3s (idle), keep demo action
+    trim_filter = "trim=start=2:end=24,setpts=PTS-STARTPTS,"
+    scale_filter = f"{trim_filter}fps=8,scale=720:-1:flags=lanczos"
 
     # Generate palette
     subprocess.run([
         "ffmpeg", "-y", "-i", str(video_path),
-        "-vf", "fps=10,scale=880:-1:flags=lanczos,palettegen=stats_mode=diff",
+        "-vf", f"{scale_filter},palettegen=max_colors=96:stats_mode=diff",
         str(palette),
     ], capture_output=True)
 
     # Apply palette to create GIF
     subprocess.run([
         "ffmpeg", "-y", "-i", str(video_path), "-i", str(palette),
-        "-lavfi", "fps=10,scale=880:-1:flags=lanczos[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=3",
+        "-lavfi", f"{scale_filter}[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=3",
         str(OUTPUT_GIF),
     ], capture_output=True)
 

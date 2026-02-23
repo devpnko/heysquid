@@ -214,8 +214,11 @@ def recall_agent(agent: str, message: str = 'Task complete'):
 
 
 def take_dashboard_screenshot(output_path: str = None) -> str:
-    """Take a screenshot of the dashboard HTML using Playwright headless.
-    Injects current agent_status.json data via page.evaluate().
+    """Take a screenshot of the live dashboard.
+
+    Strategy:
+      1. Try HTTP (localhost:8420) — dashboard server serves live data, most accurate
+      2. Fallback to file:// with manual data injection if server not running
 
     Returns:
         File path on success, None on failure.
@@ -223,31 +226,61 @@ def take_dashboard_screenshot(output_path: str = None) -> str:
     if output_path is None:
         output_path = os.path.join(DATA_DIR, 'dashboard_screenshot.png')
 
-    # Write a temp script that reads the JSON file directly
     script_path = os.path.join(DATA_DIR, '_dashboard_shot.py')
     with open(script_path, 'w', encoding='utf-8') as f:
-        f.write(f'''import asyncio, json
+        f.write(f'''import asyncio, json, urllib.request
 from playwright.async_api import async_playwright
 
+LIVE_URL = "http://127.0.0.1:8420/dashboard.html"
+FILE_URL = "file://{GAMEBOARD_HTML}"
+STATUS_FILE = "{STATUS_FILE}"
+OUTPUT = "{output_path}"
+
+def server_is_up():
+    try:
+        urllib.request.urlopen(LIVE_URL, timeout=2)
+        return True
+    except Exception:
+        return False
+
 async def shot():
-    # Read status data
-    with open("{STATUS_FILE}", "r", encoding="utf-8") as sf:
-        data = json.load(sf)
+    use_http = server_is_up()
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         page = await browser.new_page(viewport={{"width": 1200, "height": 900}})
-        await page.goto("file://{GAMEBOARD_HTML}", wait_until="domcontentloaded")
-        await page.wait_for_timeout(1500)
 
-        # Inject agent status data
-        await page.evaluate(
-            "data => {{ if (typeof loadDashboardData === 'function') loadDashboardData(data); }}",
-            data
-        )
-        await page.wait_for_timeout(1000)
+        if use_http:
+            # Live dashboard — data loads automatically via polling
+            await page.goto(LIVE_URL, wait_until="networkidle")
+            await page.wait_for_timeout(3500)  # poll interval (3s) + render
+        else:
+            # Fallback — file:// with manual injection
+            await page.goto(FILE_URL, wait_until="domcontentloaded")
+            await page.wait_for_timeout(1500)
 
-        await page.screenshot(path="{output_path}", full_page=False)
+            with open(STATUS_FILE, "r", encoding="utf-8") as sf:
+                data = json.load(sf)
+
+            # Inject data: workspace zones FIRST, then full load for agents
+            await page.evaluate("""data => {{
+                if (typeof renderWorkspaceZones === 'function' && data.workspaces) {{
+                    renderWorkspaceZones(data.workspaces);
+                }}
+                if (typeof renderSkillsPanel === 'function' && data.skills) {{
+                    renderSkillsPanel(data.skills);
+                }}
+            }}""", data)
+            await page.wait_for_timeout(500)  # let DOM settle
+
+            # Now load full data (agents can find their desks)
+            await page.evaluate(
+                "data => {{ if (typeof loadDashboardData === 'function') loadDashboardData(data); }}",
+                data
+            )
+            await page.wait_for_timeout(3000)  # wait for walk animations
+
+        await page.screenshot(path=OUTPUT, full_page=False)
         await browser.close()
 
 asyncio.run(shot())

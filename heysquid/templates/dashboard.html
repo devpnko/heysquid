@@ -1645,7 +1645,24 @@ function recallAgent(agent) {
 function loadDashboardData(data) {
   if (!data) return;
 
-  // Clear all desk slots first
+  // Update registry FIRST (defines AGENTS list)
+  if (data._registry) {
+    REGISTRY = data._registry;
+    var newAgents = Object.keys(REGISTRY).filter(function(k) { return k !== 'pm'; });
+    if (newAgents.length > 0) AGENTS = newAgents;
+  }
+
+  // Render workspace zones BEFORE agent dispatch (creates desk DOM elements)
+  if (data.workspaces) {
+    renderWorkspaceZones(data.workspaces);
+  }
+
+  // Render skills panel
+  if (data.skills) {
+    renderSkillsPanel(data.skills);
+  }
+
+  // Clear all desk slots
   DESKS.forEach(function(desk) {
     var slotEl = document.getElementById('slot-' + desk);
     var deskEl = document.getElementById('desk-' + desk);
@@ -1834,23 +1851,6 @@ function loadDashboardData(data) {
   var lu = document.getElementById('lastUpdated');
   if (data.last_updated) lu.textContent = data.last_updated;
   else lu.textContent = getTime();
-
-  // Update registry from data
-  if (data._registry) {
-    REGISTRY = data._registry;
-    var newAgents = Object.keys(REGISTRY).filter(function(k) { return k !== 'pm'; });
-    if (newAgents.length > 0) AGENTS = newAgents;
-  }
-
-  // Workspace zones
-  if (data.workspaces) {
-    renderWorkspaceZones(data.workspaces);
-  }
-
-  // Skills panel
-  if (data.skills) {
-    renderSkillsPanel(data.skills);
-  }
 
 }
 
