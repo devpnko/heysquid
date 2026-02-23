@@ -40,5 +40,11 @@ build/
 .DS_Store
 Thumbs.db
 
+# 렌더링된 plist (로컬 전용, 템플릿은 heysquid/templates/에)
+scripts/*.plist
+
+# 테스트 스크린샷 (로컬 전용)
+tests/screenshots/
+
 # 레거시 폴더
 mybot_ver2*/
