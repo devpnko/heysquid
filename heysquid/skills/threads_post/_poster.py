@@ -120,7 +120,7 @@ async def _post_thread_playwright(text: str, account: str = "main", first_reply:
             if not posted:
                 return {"success": False, "error": "게시 버튼을 찾을 수 없음"}
 
-            await page.wait_for_timeout(5000)
+            await page.wait_for_timeout(8000)
 
             # 첫 댓글 달기 (first_reply가 있으면)
             reply_ok = True
@@ -131,7 +131,7 @@ async def _post_thread_playwright(text: str, account: str = "main", first_reply:
                     if username:
                         profile_url = f"{THREADS_URL}/@{username}"
                         await page.goto(profile_url, wait_until="domcontentloaded", timeout=30000)
-                        await page.wait_for_timeout(3000)
+                        await page.wait_for_timeout(5000)
 
                         # 최신 게시물(첫 번째) 컨테이너에서 답글 아이콘 클릭
                         containers = await page.query_selector_all('div[data-pressable-container="true"]')
@@ -148,21 +148,54 @@ async def _post_thread_playwright(text: str, account: str = "main", first_reply:
                                 await reply_input.first.click()
                                 await page.wait_for_timeout(500)
                                 await page.keyboard.type(first_reply, delay=10)
-                                await page.wait_for_timeout(500)
+                                await page.wait_for_timeout(2000)
 
-                                post_buttons = await page.get_by_role("button", name="게시", exact=True).all()
-                                for btn in post_buttons:
-                                    if await btn.is_visible():
-                                        await btn.click()
-                                        break
-                                else:
-                                    post_buttons_en = await page.get_by_role("button", name="Post", exact=True).all()
-                                    for btn in post_buttons_en:
-                                        if await btn.is_visible():
-                                            await btn.click()
+                                # 인라인 답글 전송 버튼 찾기 (원형 SVG 아이콘 버튼)
+                                reply_clicked = False
+                                editor_box = await reply_input.first.bounding_box()
+                                if editor_box:
+                                    elements = await page.query_selector_all('div[role="button"], button')
+                                    send_candidates = []
+                                    for el in elements:
+                                        if not await el.is_visible():
+                                            continue
+                                        box = await el.bounding_box()
+                                        if not box:
+                                            continue
+                                        # 에디터와 비슷한 Y 범위(±60px), 에디터 오른쪽
+                                        if (abs(box['y'] - editor_box['y']) < 60
+                                                and box['x'] > editor_box['x']):
+                                            text = (await el.inner_text()).strip()
+                                            svg = await el.query_selector('svg')
+                                            if svg and text == '':
+                                                send_candidates.append((box['x'], el))
+
+                                    if send_candidates:
+                                        # 가장 오른쪽 SVG 버튼 = 전송 버튼
+                                        send_candidates.sort(key=lambda c: c[0], reverse=True)
+                                        await send_candidates[0][1].click()
+                                        reply_clicked = True
+
+                                # 폴백: "게시" / "Post" 텍스트 버튼
+                                if not reply_clicked:
+                                    for name in ("게시", "Post"):
+                                        btns = await page.get_by_role(
+                                            "button", name=name, exact=True
+                                        ).all()
+                                        for btn in btns:
+                                            if await btn.is_visible():
+                                                await btn.click()
+                                                reply_clicked = True
+                                                break
+                                        if reply_clicked:
                                             break
-                                await page.wait_for_timeout(3000)
-                                logger.info("첫 댓글 달기 완료")
+
+                                if reply_clicked:
+                                    await page.wait_for_timeout(5000)
+                                    logger.info("첫 댓글 달기 완료")
+                                else:
+                                    logger.warning("첫 댓글: 전송 버튼을 찾지 못함")
+                                    reply_ok = False
                             else:
                                 logger.warning("첫 댓글: 답글 아이콘 못 찾음")
                                 reply_ok = False
@@ -233,7 +266,8 @@ def check_and_post_due() -> list[dict]:
                 post["status"] = "posted"
                 post["posted_at"] = now.strftime("%Y-%m-%d %H:%M:%S")
                 modified = True
-                logger.info(f"게시 성공: #{post['id']}")
+                reply_status = "첫댓글 OK" if result.get("reply_ok", True) else "첫댓글 실패"
+                logger.info(f"게시 성공: #{post['id']} ({reply_status})")
             else:
                 post["status"] = "failed"
                 post["error"] = result.get("error", "")[:200]
