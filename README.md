@@ -4,6 +4,10 @@
 
 heysquid turns [Claude Code](https://docs.anthropic.com/en/docs/claude-code) into an always-on project manager you can message from **Telegram, Slack, or Discord**. Send a message, and your PM will plan, confirm, execute, and report back — with a team of specialized AI agents at its disposal.
 
+<p align="center">
+  <img src="assets/demo.gif" alt="heysquid demo" width="880">
+</p>
+
 ## Why heysquid?
 
 Most AI coding tools wait for you to sit at a computer. heysquid works while you're away:
