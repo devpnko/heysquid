@@ -93,16 +93,16 @@ class MessageView(VerticalScroll):
 
             self.mount(Static(sender, classes="msg-header"))
 
-            # 본문
+            # 본문 (markup=False: 사용자 텍스트에 [] 등이 있으면 Rich 파싱 에러)
             if text:
-                self.mount(Static(f"  {text}", classes="msg-body"))
+                self.mount(Static(f"  {text}", classes="msg-body", markup=False))
 
             # 파일 첨부
             files = msg.get("files", [])
             for fi in files:
                 fname = fi.get("name") or fi.get("type", "file")
                 icon = "🖼️" if fi.get("type") == "photo" else "📎"
-                self.mount(Static(f"  {icon} {fname}", classes="msg-body"))
+                self.mount(Static(f"  {icon} {fname}", classes="msg-body", markup=False))
 
         # 자동 스크롤
         if self._auto_scroll:
