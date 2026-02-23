@@ -1,7 +1,18 @@
 # heysquid
 
+Your personal PM agent powered by Claude Code.
+
 텔레그램 기반 개인 PM 에이전트 시스템.
 메시지를 보내면, 대화하고 → 계획 세우고 → 실행하고 → 대기한다.
+
+## Quick Start
+
+```bash
+pip install heysquid
+heysquid init       # Interactive setup wizard
+heysquid start      # Start daemon
+heysquid status     # Check status
+```
 
 ## 에이전트 팀
 
@@ -244,4 +255,4 @@ bash scripts/executor.sh
 
 ## 라이선스
 
-이 프로젝트는 개인용입니다.
+Apache License 2.0 — 자세한 내용은 [LICENSE](LICENSE) 파일 참조.

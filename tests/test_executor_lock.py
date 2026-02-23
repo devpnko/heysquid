@@ -12,7 +12,7 @@ import pytest
 class TestExecutorShStaleTimeout:
     """executor.sh의 stale 타임아웃이 1800초(30분)인지 검증"""
 
-    EXECUTOR_SH = "/Users/hyuk/heysquid/scripts/executor.sh"
+    EXECUTOR_SH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts", "executor.sh")
 
     def test_stale_timeout_is_1800(self):
         """executor.sh의 stale 판정 기준이 1800 (30분)인지"""

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.heysquid.scheduler</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>{{PYTHON}}</string>
+        <string>-m</string>
+        <string>heysquid.core.scheduler</string>
+    </array>
+
+    <!-- 1분마다 실행 -->
+    <key>StartInterval</key>
+    <integer>60</integer>
+
+    <key>WorkingDirectory</key>
+    <string>{{PROJECT_ROOT}}</string>
+
+    <key>StandardOutPath</key>
+    <string>{{PROJECT_ROOT}}/logs/scheduler.stdout.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>{{PROJECT_ROOT}}/logs/scheduler.stderr.log</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin:{{HOME}}/.local/bin</string>
+        <key>HOME</key>
+        <string>{{HOME}}</string>
+        <key>LANG</key>
+        <string>ko_KR.UTF-8</string>
+    </dict>
+</dict>
+</plist>

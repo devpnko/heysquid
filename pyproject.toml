@@ -16,15 +16,22 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+slack = ["slack-bolt>=1.18.0", "slack-sdk>=3.21.0"]
+discord = ["discord.py>=2.3.0"]
 dashboard = ["playwright>=1.40.0"]
 trading = ["ccxt>=4.0.0", "pandas>=2.0.0", "ta>=0.10.0"]
+tui = ["textual>=0.40.0"]
+all = ["heysquid[slack,discord,dashboard,tui]"]
 
 [project.scripts]
-heysquid = "heysquid.cli:main"
+heysquid = "heysquid.core.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["heysquid*"]
 exclude = ["private*", "tests*"]
 
 [tool.setuptools.package-data]
-heysquid = ["templates/**/*"]
+heysquid = [
+    "templates/**/*",
+    ".env.example",
+]

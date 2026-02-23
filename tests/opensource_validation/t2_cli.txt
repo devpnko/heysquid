@@ -1,0 +1,7 @@
+tail: echo: No such file or directory
+tail:   PASS: No such file or directory
+tail: echo: No such file or directory
+tail: : No such file or directory
+tail: echo: No such file or directory
+tail: Result: 4/4 PASSED: No such file or directory
+tail: }: No such file or directory

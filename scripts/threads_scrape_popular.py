@@ -6,13 +6,16 @@ Threads 홈피드 + 레퍼런스 계정 인기글 수집 스크립트
 """
 
 import json
+import os
 import re
 import time
 import sys
 
 from playwright.sync_api import sync_playwright
 
-STORAGE_PATH = "/Users/hyuk/heysquid/data/threads_storage.json"
+from heysquid.core.config import DATA_DIR_STR
+
+STORAGE_PATH = os.path.join(DATA_DIR_STR, "threads_storage.json")
 OUTPUT_PATH = "/tmp/threads_popular_posts.json"
 
 REFERENCE_ACCOUNTS = [

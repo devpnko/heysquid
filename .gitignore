@@ -33,6 +33,9 @@ build/
 *.swo
 *~
 
+# Claude Code 로컬 설정 (토큰 포함 가능)
+.claude/settings.local.json
+
 # OS 파일
 .DS_Store
 Thumbs.db

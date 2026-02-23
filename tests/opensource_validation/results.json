@@ -1,0 +1,175 @@
+{
+  "T1_imports": [
+    {
+      "module": "heysquid.core.config",
+      "status": "PASS",
+      "detail": "8 exports"
+    },
+    {
+      "module": "heysquid.core.daemon",
+      "status": "PASS",
+      "detail": "6 exports"
+    },
+    {
+      "module": "heysquid.core.cli",
+      "status": "PASS",
+      "detail": "8 exports"
+    },
+    {
+      "module": "heysquid.skills._base",
+      "status": "PASS",
+      "detail": "2 exports"
+    },
+    {
+      "module": "heysquid.skills.threads_post._poster",
+      "status": "PASS",
+      "detail": "3 exports"
+    },
+    {
+      "module": "heysquid.skills.marketing._content_generator",
+      "status": "PASS",
+      "detail": "1 exports"
+    },
+    {
+      "module": "heysquid.core.agents",
+      "status": "PASS",
+      "detail": "2 exports"
+    },
+    {
+      "module": "heysquid",
+      "status": "PASS",
+      "detail": "1 exports"
+    }
+  ],
+  "T2_cli": [
+    {
+      "test": "version",
+      "status": "PASS",
+      "output": "heysquid 0.1.0\n"
+    },
+    {
+      "test": "help",
+      "status": "PASS",
+      "output": "usage: heysquid [-h] [--version] {init,start,stop,restart,status,logs,tui} ...\n\nYour personal PM agent\n\npositional arguments:\n  {init,start,stop,restart,status,logs,tui}\n    init                Initialize heysquid environment\n    start               Start daemon\n    stop                Stop daemon\n "
+    },
+    {
+      "test": "status",
+      "status": "PASS",
+      "output": "=== heysquid 데몬 상태 ===\n\n--- Listeners ---\n  [TG] Telegram: 실행 중\n  [SL] Slack: 중지됨\n  [DC] Discord: 중지됨\n\n--- Scheduler ---\n  상태: 실행 중\n\n--- 프로세스 ---\n  executor.sh: 실행 중\n  Claude Code: 실행 중\n\n--- 대시보드 서버 ---\n  상태: 실행 중 (http://localhost:8420/dashboard.html)\n\n--- 잠금 파일 ---\n  executor.lock: 존재 (2026-02-23 "
+    }
+  ],
+  "T3_config": [
+    {
+      "check": "PROJECT_ROOT exists",
+      "status": "PASS"
+    },
+    {
+      "check": "DATA_DIR exists",
+      "status": "PASS"
+    },
+    {
+      "check": "PACKAGE_DIR exists",
+      "status": "PASS"
+    },
+    {
+      "check": "get_env_path() file exists",
+      "status": "PASS"
+    },
+    {
+      "check": "CLAUDE.md in PROJECT_ROOT",
+      "status": "PASS"
+    },
+    {
+      "check": "Dev mode detected correctly",
+      "status": "PASS"
+    }
+  ],
+  "T4_templates": [
+    {
+      "template": "com.heysquid.watcher.plist.template",
+      "status": "PASS",
+      "detail": "OK"
+    },
+    {
+      "template": "com.heysquid.scheduler.plist.template",
+      "status": "PASS",
+      "detail": "OK"
+    },
+    {
+      "template": "com.heysquid.slack.plist.template",
+      "status": "PASS",
+      "detail": "OK"
+    },
+    {
+      "template": "com.heysquid.discord.plist.template",
+      "status": "PASS",
+      "detail": "OK"
+    }
+  ],
+  "T5_regression": [
+    {
+      "check": "/Users/hyuk in .py",
+      "status": "PASS",
+      "hits": 0
+    },
+    {
+      "check": "sys.path.insert in .py",
+      "status": "PASS",
+      "hits": 0
+    },
+    {
+      "check": "parent.parent.parent",
+      "status": "PASS",
+      "hits": 0
+    }
+  ],
+  "T6_daemon": [
+    {
+      "check": "template_dir exists",
+      "status": "PASS"
+    },
+    {
+      "check": "python_path exists",
+      "status": "PASS"
+    },
+    {
+      "check": "LAUNCH_AGENTS path correct",
+      "status": "PASS"
+    },
+    {
+      "check": "4 plist names defined",
+      "status": "PASS"
+    },
+    {
+      "check": "render_plist replaces placeholders",
+      "status": "PASS"
+    }
+  ],
+  "T7_pyproject": [
+    {
+      "check": "entry point correct",
+      "status": "PASS"
+    },
+    {
+      "check": "python >=3.10",
+      "status": "PASS"
+    },
+    {
+      "check": "optional-deps: slack",
+      "status": "PASS"
+    },
+    {
+      "check": "package-data: templates",
+      "status": "PASS"
+    },
+    {
+      "check": "license: Apache-2.0",
+      "status": "PASS"
+    }
+  ],
+  "_meta": {
+    "timestamp": "2026-02-23T02:06:23.948263",
+    "total_pass": 34,
+    "total_fail": 0
+  }
+}

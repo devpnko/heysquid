@@ -1,11 +1,5 @@
 """에이전트 색상 매핑 — agents.py에서 hex 색상 직접 사용"""
 
-import os
-import sys
-
-ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, ROOT)
-
 from heysquid.core.agents import AGENTS, KRAKEN_CREW
 
 # 에이전트 이름 → hex 색상

@@ -1,15 +1,13 @@
 """SquidApp — Textual TUI 메인 앱"""
 
 import os
-import sys
 from collections import deque
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 
-# 프로젝트 루트
-ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, ROOT)
+# 프로젝트 루트 (config 기반)
+from heysquid.core.config import PROJECT_ROOT_STR as ROOT
 
 from scripts.tui_textual.screens.chat import ChatScreen
 from scripts.tui_textual.screens.squad import SquadScreen

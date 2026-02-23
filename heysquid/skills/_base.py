@@ -6,6 +6,8 @@ import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ..core.config import DATA_DIR
+
 logger = logging.getLogger(__name__)
 
 
@@ -21,7 +23,7 @@ class SkillContext:
 
 def _load_skills_config() -> dict:
     """data/skills_config.json 로드 (없으면 빈 dict)"""
-    config_path = Path(__file__).parent.parent.parent / "data" / "skills_config.json"
+    config_path = DATA_DIR / "skills_config.json"
     if not config_path.exists():
         return {}
     try:

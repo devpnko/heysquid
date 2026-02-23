@@ -8,7 +8,8 @@ drafts 파일로 저장하는 역할.
 import os
 import random
 from datetime import datetime
-from pathlib import Path
+
+from ...core.config import DATA_DIR
 
 from ._patterns import HASHTAG_SETS, HASHTAG_RULES, POSTING_RULES
 from ._templates import CONTENTS, HYPERS_CONTEXT, get_contents_by_category
@@ -171,8 +172,7 @@ def save_drafts(drafts: list[dict], output_dir: str | None = None) -> str:
         return ""
 
     if output_dir is None:
-        base = Path(__file__).parent.parent.parent.parent / "data"
-        output_dir = str(base / "marketing_drafts")
+        output_dir = str(DATA_DIR / "marketing_drafts")
 
     os.makedirs(output_dir, exist_ok=True)
 

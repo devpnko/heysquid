@@ -22,12 +22,7 @@ from datetime import datetime
 
 from dotenv import load_dotenv
 
-# 프로젝트 루트에서 .env 로드
-_this_dir = os.path.dirname(os.path.abspath(__file__))
-_project_root = os.path.dirname(os.path.dirname(_this_dir))
-sys.path.insert(0, _project_root)
-
-from heysquid.config import get_env_path
+from heysquid.core.config import get_env_path, DATA_DIR_STR
 load_dotenv(get_env_path())
 
 BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN")
@@ -38,7 +33,7 @@ ALLOWED_USERS = [u.strip() for u in os.getenv("SLACK_ALLOWED_USERS", "").split("
 STOP_KEYWORDS = {"멈춰", "스탑", "중단", "/stop", "잠깐만", "그만", "취소", "stop"}
 
 # 파일 다운로드 경로
-DATA_DIR = os.path.join(_project_root, "data")
+DATA_DIR = DATA_DIR_STR
 DOWNLOAD_DIR = os.path.join(DATA_DIR, "downloads")
 
 
