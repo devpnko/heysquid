@@ -86,6 +86,8 @@ is_pm_alive() {
 cleanup() {
     local exit_code=${?:-0}
     log "[CLEANUP] executor.sh exiting (code=$exit_code)"
+    # stream_viewer 정리 (독립 프로세스)
+    [ -n "${VIEWER_PID:-}" ] && kill "$VIEWER_PID" 2>/dev/null || true
     kill_all_pm
     rm -f "$LOCKFILE" "$EXECUTOR_PIDFILE" 2>/dev/null
     log "[CLEANUP] Done."
@@ -237,14 +239,28 @@ VIEWER="$ROOT/scripts/stream_viewer.py"
 # 항상 새 세션 시작 (세션 재개 안 함 — 메모리 시스템으로 맥락 복구)
 log "[INFO] Starting new session (permanent memory + session memory)..."
 
-# PID 추적을 위해 caffeinate를 백그라운드로 실행 + wait
+# Claude → tee → 로그 파일 (stream_viewer는 분리 — 죽어도 claude에 영향 없음)
 caffeinate -ims "$CLAUDE_EXE" -p --dangerously-skip-permissions \
     --model opus \
     --output-format stream-json --verbose \
     --append-system-prompt-file "$SPF" \
     "$PROMPT" \
-    2>> "$LOG" | tee -a "$STREAM_LOG" | python3 -u "$VIEWER" &
+    2>> "$LOG" | tee -a "$STREAM_LOG" > /dev/null &
 PIPE_PID=$!
+
+# stream_viewer: 독립 프로세스 (크래시 시 자동 재시작, claude 파이프와 무관)
+_run_stream_viewer() {
+    sleep 1  # tee가 파일 쓰기 시작할 때까지 대기
+    while kill -0 "$PIPE_PID" 2>/dev/null; do
+        tail -n 0 -F "$STREAM_LOG" 2>/dev/null | python3 -u "$VIEWER" 2>> "$LOG" || true
+        # viewer가 죽으면 재시작 (tail도 SIGPIPE로 자연 종료)
+        kill -0 "$PIPE_PID" 2>/dev/null || break
+        log "[WARN] stream_viewer exited, restarting in 2s..."
+        sleep 2
+    done
+}
+_run_stream_viewer &
+VIEWER_PID=$!
 
 # caffeinate PID + 실제 claude PID 기록
 # 프로세스 구조: claude(parent) → caffeinate(child)

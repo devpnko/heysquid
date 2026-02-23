@@ -24,7 +24,7 @@ class MissionLogView(VerticalScroll):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self._last_count = 0
+        self._last_snapshot = (0, None)
 
     def compose(self):
         yield Static("[bold]▸ MISSION[/bold]", classes="log-title")
@@ -32,9 +32,10 @@ class MissionLogView(VerticalScroll):
 
     def update_log(self, entries: list[dict]) -> None:
         """mission_log 엔트리 업데이트"""
-        if len(entries) == self._last_count:
+        snapshot = (len(entries), entries[-1] if entries else None)
+        if snapshot == self._last_snapshot:
             return
-        self._last_count = len(entries)
+        self._last_snapshot = snapshot
 
         parts = []
         for entry in entries:

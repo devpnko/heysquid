@@ -20,13 +20,14 @@ import threading
 import queue
 from datetime import datetime
 
-# heysquid 패키지 import를 위한 경로 설정
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+# heysquid 패키지 import (pip install -e 또는 venv에서 실행)
+# sys.path.insert 불필요 — 패키지 설치 상태에서 import
 
-# .env 로드 (heysquid/.env)
-ENV_PATH = os.path.join(os.path.dirname(__file__), "..", "heysquid", ".env")
-if os.path.exists(ENV_PATH):
-    with open(ENV_PATH) as f:
+# .env 로드 (config 기반)
+from heysquid.core.config import get_env_path as _get_env_path
+_env_path = _get_env_path()
+if os.path.exists(_env_path):
+    with open(_env_path) as f:
         for line in f:
             line = line.strip()
             if line and not line.startswith("#") and "=" in line:
@@ -259,222 +260,236 @@ def main():
             except json.JSONDecodeError:
                 continue
 
-            t = d.get("type", "")
-
-            if t == "system":
-                subtype = d.get("subtype", "")
-                if subtype == "init":
-                    sid = d.get("session_id", "?")[:12]
-                    model = d.get("model", "?")
-                    _set_pm_state("idle")
-                    print(f"\033[36m[{fmt_time()}] [SESSION]\033[0m {sid}... ({model})")
-                    broadcaster.send(f"🚀 *Session Start* {model}")
-                    dashboard_log('system', f'🚀 Session start ({model})')
-
-            elif t == "assistant":
-                content = d.get("message", {}).get("content", [])
-                for c in content:
-                    if c["type"] == "text":
-                        text = c["text"].strip()
-                        if text:
-                            if is_standby(text):
-                                _set_pm_state("idle")
-                                print(f"\033[90m[{fmt_time()}] 🦑 ⏳ {truncate(text, 60)}\033[0m")
-                                broadcaster.send(f"⏳ {truncate(text, 100)}")
-                                dashboard_log('pm', f'💤 {truncate(text, 40)}')
-                            else:
-                                _set_pm_state("chatting")
-                                dashboard_update_pm("chatting", f"💬 {truncate(text, 30)}")
-                                print(f"\033[33m[{fmt_time()}] 🦑 💬\033[0m {text}")
-                                broadcaster.send(f"🦑 {truncate(text, 200)}")
-                                dashboard_log('pm', f'💬 {truncate(text, 40)}')
-
-                    elif c["type"] == "tool_use":
-                        _set_pm_state("working")
-                        name = c.get("name", "?")
-                        inp = c.get("input", {})
-                        tool_id = c.get("id", "")
-
-                        if name == "Task":
-                            desc = inp.get("description", "")
-                            agent_type = inp.get("subagent_type", "")
-                            model = inp.get("model", "")
-                            prompt = inp.get("prompt", "")
-
-                            model_label = MODEL_NAMES.get(model, model) if model else ""
-
-                            # agents.py 기반 이모지 매핑
-                            dashboard_agent = SUBAGENT_MAP.get(agent_type)
-                            if dashboard_agent:
-                                emoji = get_emoji(dashboard_agent)
-                                role_emoji = get_role_emoji(dashboard_agent)
-                            else:
-                                emoji = TOOL_EMOJI.get(agent_type, "🤖")
-                                role_emoji = ""
-                            role_label = agent_type if agent_type else "agent"
-
-                            # 에이전트 추적
-                            active_agents[tool_id] = {
-                                "type": role_label,
-                                "dashboard_agent": dashboard_agent,
-                                "model": model_label,
-                                "desc": desc,
-                                "start": datetime.now(),
-                                "prompt": prompt,
-                            }
-
-                            print()
-                            print(f"\033[34m[{fmt_time()}] ┌─ {emoji} [{role_label}]", end="")
-                            if model_label:
-                                print(f" ({model_label})", end="")
-                            print(f"\033[0m")
-                            print(f"\033[34m│\033[0m  임무: {desc}")
-                            if prompt:
-                                lines = prompt.strip().split("\n")
-                                preview = lines[:3]
-                                for pl in preview:
-                                    print(f"\033[34m│\033[0m  \033[90m> {truncate(pl, 80)}\033[0m")
-                                if len(lines) > 3:
-                                    print(f"\033[34m│\033[0m  \033[90m  ... (+{len(lines)-3}줄)\033[0m")
-                            print(f"\033[34m│\033[0m")
-
-                            # broadcast: 에이전트 위임
-                            model_str = f" ({model_label})" if model_label else ""
-                            broadcaster.send(f"{emoji} *{role_label}*{model_str} {desc}")
-
-                            # dashboard: 에이전트 배치
-                            if dashboard_agent:
-                                desk = infer_desk(prompt or desc)
-                                log_msg = f"{emoji}{role_emoji} {truncate(desc, 35)}"
-                                dashboard_dispatch(dashboard_agent, desk, desc)
-                                dashboard_log(dashboard_agent, log_msg)
-
-                        elif name == "Read":
-                            detail = inp.get("file_path", "")
-                            print(f"\033[35m[{fmt_time()}] [TOOL]\033[0m 📖 Read → {detail}")
-                            broadcaster.send(f"📖 Read → {truncate(detail, 80)}")
-                            dashboard_log('pm', f'📖 Reading {os.path.basename(detail)}')
-                        elif name == "Bash":
-                            cmd = inp.get("command", "")
-                            if cmd.strip().startswith("sleep"):
-                                print(f"\033[90m[{fmt_time()}] [TOOL] 💤 {cmd.strip()}\033[0m")
-                                broadcaster.send(f"💤 {cmd.strip()}")
-                            else:
-                                print(f"\033[35m[{fmt_time()}] [TOOL]\033[0m 💻 Bash → {truncate(cmd, 80)}")
-                                broadcaster.send(f"💻 Bash → {truncate(cmd, 80)}")
-                                dashboard_log('pm', f'💻 {truncate(cmd, 35)}')
-                        elif name == "Edit":
-                            fp = inp.get("file_path", "")
-                            print(f"\033[35m[{fmt_time()}] [TOOL]\033[0m ✏️  Edit → {fp}")
-                            broadcaster.send(f"✏️ Edit → {truncate(fp, 80)}")
-                            dashboard_log('pm', f'✏️ Editing {os.path.basename(fp)}')
-                        elif name == "Write":
-                            fp = inp.get("file_path", "")
-                            print(f"\033[35m[{fmt_time()}] [TOOL]\033[0m 📝 Write → {fp}")
-                            broadcaster.send(f"📝 Write → {truncate(fp, 80)}")
-                            dashboard_log('pm', f'📝 Writing {os.path.basename(fp)}')
-                        elif name == "Grep":
-                            pat = inp.get("pattern", "")
-                            path = inp.get("path", "")
-                            print(f"\033[35m[{fmt_time()}] [TOOL]\033[0m 🔍 Grep → \"{pat}\" in {path}")
-                            broadcaster.send(f"🔍 Grep → \"{pat}\" in {path}")
-                            dashboard_log('pm', f'🔍 Searching "{truncate(pat, 20)}"')
-                        elif name == "Glob":
-                            pat = inp.get("pattern", "")
-                            print(f"\033[35m[{fmt_time()}] [TOOL]\033[0m 📂 Glob → {pat}")
-                            broadcaster.send(f"📂 Glob → {pat}")
-                            dashboard_log('pm', f'📂 Scanning {truncate(pat, 25)}')
-                        elif name == "WebSearch":
-                            q = inp.get("query", "")
-                            print(f"\033[35m[{fmt_time()}] [TOOL]\033[0m 🌐 WebSearch → \"{q}\"")
-                            broadcaster.send(f"🌐 WebSearch → \"{q}\"")
-                            dashboard_log('pm', f'🌐 Searching "{truncate(q, 25)}"')
-                        elif name == "WebFetch":
-                            url = inp.get("url", "")
-                            print(f"\033[35m[{fmt_time()}] [TOOL]\033[0m 🌐 WebFetch → {url}")
-                            broadcaster.send(f"🌐 WebFetch → {url}")
-                            dashboard_log('pm', f'🌐 Fetching web content')
-                        else:
-                            detail = str(inp)
-                            print(f"\033[35m[{fmt_time()}] [TOOL]\033[0m {name} → {truncate(detail, 80)}")
-                            broadcaster.send(f"🔧 {name} → {truncate(detail, 80)}")
-
-            elif t == "user":
-                # tool result → PM is now thinking about next action
-                _set_pm_state("thinking")
-                _schedule_thinking()
-                content = d.get("message", {}).get("content", [])
-                for c in content:
-                    if isinstance(c, dict) and c.get("type") == "tool_result":
-                        tool_id = c.get("tool_use_id", "")
-                        text = c.get("content", "")
-
-                        # 에이전트 완료 매칭
-                        if tool_id in active_agents:
-                            agent = active_agents.pop(tool_id)
-                            elapsed = (datetime.now() - agent["start"]).total_seconds()
-                            da = agent.get("dashboard_agent")
-                            emoji = get_emoji(da) if da else "🤖"
-
-                            result_preview = ""
-                            if isinstance(text, str) and text:
-                                result_preview = truncate(text, 150)
-
-                            print(f"\033[34m│\033[0m")
-                            print(f"\033[34m└─ {emoji} [{agent['type']}] ✅ 완료\033[0m ({elapsed:.1f}초)", end="")
-                            if agent.get("model"):
-                                print(f" [{agent['model']}]", end="")
-                            print()
-                            if result_preview:
-                                lines = result_preview.split(". ")
-                                for rl in lines[:2]:
-                                    if rl.strip():
-                                        print(f"   \033[90m→ {rl.strip()}\033[0m")
-                            print()
-
-                            # broadcast: 에이전트 완료
-                            model_str = f" [{agent['model']}]" if agent.get("model") else ""
-                            broadcaster.send(f"✅ *{agent['type']}* 완료 {elapsed:.1f}s{model_str}")
-
-                            # dashboard: 에이전트 복귀
-                            if da:
-                                dashboard_recall(da, f'✅ Complete ({elapsed:.1f}s)')
-
-                        elif isinstance(text, str) and len(text) > 0:
-                            summary = truncate(text, 100)
-                            if len(text) > 200:
-                                print(f"\033[90m[{fmt_time()}] [결과] {summary}\033[0m")
-                            broadcaster.send(f"→ {truncate(text, 150)}")
-
-            elif t == "result":
-                _set_pm_state("idle")
-                cost = d.get("total_cost_usd", 0)
-                dur = d.get("duration_ms", 0) / 1000
-                turns = d.get("num_turns", 0)
-                result_text = d.get("result", "")
-                if len(result_text) > 100:
-                    result_text = result_text[:100] + "..."
-
-                print()
-                print("\033[32m" + "━" * 55 + "\033[0m")
-                print(f"\033[32m[{fmt_time()}] [SESSION END]\033[0m 💰 ${cost:.4f} | ⏱ {dur:.1f}초 | 🔄 {turns}턴")
-                if result_text:
-                    print(f"\033[32m[결과]\033[0m {result_text}")
-                print("\033[32m" + "━" * 55 + "\033[0m")
-                print()
-
-                broadcaster.send(f"✨ *Session Complete* ${cost:.4f} {dur:.0f}s {turns}턴")
-                dashboard_log('system', f'✨ Session complete (${cost:.4f})')
-
-                # 모든 에이전트 복귀
-                for agent_name in active_agents.values():
-                    da = agent_name.get("dashboard_agent")
-                    if da:
-                        dashboard_recall(da, '✨ Session ended')
-                active_agents.clear()
+            try:
+                _process_event(d)
+            except Exception as e:
+                print(f"\033[31m[{fmt_time()}] [ERROR] {e}\033[0m", file=sys.stderr)
+                continue
 
     except KeyboardInterrupt:
         print("\n\n종료.")
+    except BrokenPipeError:
+        pass
+    except Exception as e:
+        print(f"\033[31m[FATAL] stream_viewer: {e}\033[0m", file=sys.stderr)
+
+
+def _process_event(d):
+    """단일 stream-json 이벤트 처리 (예외 시 caller가 catch)"""
+    t = d.get("type", "")
+
+    if t == "system":
+        subtype = d.get("subtype", "")
+        if subtype == "init":
+            sid = d.get("session_id", "?")[:12]
+            model = d.get("model", "?")
+            _set_pm_state("idle")
+            print(f"\033[36m[{fmt_time()}] [SESSION]\033[0m {sid}... ({model})")
+            broadcaster.send(f"🚀 *Session Start* {model}")
+            dashboard_log('system', f'🚀 Session start ({model})')
+
+    elif t == "assistant":
+        content = d.get("message", {}).get("content", [])
+        for c in content:
+            if c["type"] == "text":
+                text = c["text"].strip()
+                if text:
+                    if is_standby(text):
+                        _set_pm_state("idle")
+                        print(f"\033[90m[{fmt_time()}] 🦑 ⏳ {truncate(text, 60)}\033[0m")
+                        broadcaster.send(f"⏳ {truncate(text, 100)}")
+                        dashboard_log('pm', f'💤 {truncate(text, 40)}')
+                    else:
+                        _set_pm_state("chatting")
+                        dashboard_update_pm("chatting", f"💬 {truncate(text, 30)}")
+                        print(f"\033[33m[{fmt_time()}] 🦑 💬\033[0m {text}")
+                        broadcaster.send(f"🦑 {truncate(text, 200)}")
+                        dashboard_log('pm', f'💬 {truncate(text, 40)}')
+
+            elif c["type"] == "tool_use":
+                _set_pm_state("working")
+                name = c.get("name", "?")
+                inp = c.get("input", {})
+                tool_id = c.get("id", "")
+
+                if name == "Task":
+                    desc = inp.get("description", "")
+                    agent_type = inp.get("subagent_type", "")
+                    model = inp.get("model", "")
+                    prompt = inp.get("prompt", "")
+
+                    model_label = MODEL_NAMES.get(model, model) if model else ""
+
+                    # agents.py 기반 이모지 매핑
+                    dashboard_agent = SUBAGENT_MAP.get(agent_type)
+                    if dashboard_agent:
+                        emoji = get_emoji(dashboard_agent)
+                        role_emoji = get_role_emoji(dashboard_agent)
+                    else:
+                        emoji = TOOL_EMOJI.get(agent_type, "🤖")
+                        role_emoji = ""
+                    role_label = agent_type if agent_type else "agent"
+
+                    # 에이전트 추적
+                    active_agents[tool_id] = {
+                        "type": role_label,
+                        "dashboard_agent": dashboard_agent,
+                        "model": model_label,
+                        "desc": desc,
+                        "start": datetime.now(),
+                        "prompt": prompt,
+                    }
+
+                    print()
+                    print(f"\033[34m[{fmt_time()}] ┌─ {emoji} [{role_label}]", end="")
+                    if model_label:
+                        print(f" ({model_label})", end="")
+                    print(f"\033[0m")
+                    print(f"\033[34m│\033[0m  임무: {desc}")
+                    if prompt:
+                        lines = prompt.strip().split("\n")
+                        preview = lines[:3]
+                        for pl in preview:
+                            print(f"\033[34m│\033[0m  \033[90m> {truncate(pl, 80)}\033[0m")
+                        if len(lines) > 3:
+                            print(f"\033[34m│\033[0m  \033[90m  ... (+{len(lines)-3}줄)\033[0m")
+                    print(f"\033[34m│\033[0m")
+
+                    # broadcast: 에이전트 위임
+                    model_str = f" ({model_label})" if model_label else ""
+                    broadcaster.send(f"{emoji} *{role_label}*{model_str} {desc}")
+
+                    # dashboard: 에이전트 배치
+                    if dashboard_agent:
+                        desk = infer_desk(prompt or desc)
+                        log_msg = f"{emoji}{role_emoji} {truncate(desc, 35)}"
+                        dashboard_dispatch(dashboard_agent, desk, desc)
+                        dashboard_log(dashboard_agent, log_msg)
+
+                elif name == "Read":
+                    detail = inp.get("file_path", "")
+                    print(f"\033[35m[{fmt_time()}] [TOOL]\033[0m 📖 Read → {detail}")
+                    broadcaster.send(f"📖 Read → {truncate(detail, 80)}")
+                    dashboard_log('pm', f'📖 Reading {os.path.basename(detail)}')
+                elif name == "Bash":
+                    cmd = inp.get("command", "")
+                    if cmd.strip().startswith("sleep"):
+                        print(f"\033[90m[{fmt_time()}] [TOOL] 💤 {cmd.strip()}\033[0m")
+                        broadcaster.send(f"💤 {cmd.strip()}")
+                    else:
+                        print(f"\033[35m[{fmt_time()}] [TOOL]\033[0m 💻 Bash → {truncate(cmd, 80)}")
+                        broadcaster.send(f"💻 Bash → {truncate(cmd, 80)}")
+                        dashboard_log('pm', f'💻 {truncate(cmd, 35)}')
+                elif name == "Edit":
+                    fp = inp.get("file_path", "")
+                    print(f"\033[35m[{fmt_time()}] [TOOL]\033[0m ✏️  Edit → {fp}")
+                    broadcaster.send(f"✏️ Edit → {truncate(fp, 80)}")
+                    dashboard_log('pm', f'✏️ Editing {os.path.basename(fp)}')
+                elif name == "Write":
+                    fp = inp.get("file_path", "")
+                    print(f"\033[35m[{fmt_time()}] [TOOL]\033[0m 📝 Write → {fp}")
+                    broadcaster.send(f"📝 Write → {truncate(fp, 80)}")
+                    dashboard_log('pm', f'📝 Writing {os.path.basename(fp)}')
+                elif name == "Grep":
+                    pat = inp.get("pattern", "")
+                    path = inp.get("path", "")
+                    print(f"\033[35m[{fmt_time()}] [TOOL]\033[0m 🔍 Grep → \"{pat}\" in {path}")
+                    broadcaster.send(f"🔍 Grep → \"{pat}\" in {path}")
+                    dashboard_log('pm', f'🔍 Searching "{truncate(pat, 20)}"')
+                elif name == "Glob":
+                    pat = inp.get("pattern", "")
+                    print(f"\033[35m[{fmt_time()}] [TOOL]\033[0m 📂 Glob → {pat}")
+                    broadcaster.send(f"📂 Glob → {pat}")
+                    dashboard_log('pm', f'📂 Scanning {truncate(pat, 25)}')
+                elif name == "WebSearch":
+                    q = inp.get("query", "")
+                    print(f"\033[35m[{fmt_time()}] [TOOL]\033[0m 🌐 WebSearch → \"{q}\"")
+                    broadcaster.send(f"🌐 WebSearch → \"{q}\"")
+                    dashboard_log('pm', f'🌐 Searching "{truncate(q, 25)}"')
+                elif name == "WebFetch":
+                    url = inp.get("url", "")
+                    print(f"\033[35m[{fmt_time()}] [TOOL]\033[0m 🌐 WebFetch → {url}")
+                    broadcaster.send(f"🌐 WebFetch → {url}")
+                    dashboard_log('pm', f'🌐 Fetching web content')
+                else:
+                    detail = str(inp)
+                    print(f"\033[35m[{fmt_time()}] [TOOL]\033[0m {name} → {truncate(detail, 80)}")
+                    broadcaster.send(f"🔧 {name} → {truncate(detail, 80)}")
+
+    elif t == "user":
+        # tool result → PM is now thinking about next action
+        _set_pm_state("thinking")
+        _schedule_thinking()
+        content = d.get("message", {}).get("content", [])
+        for c in content:
+            if isinstance(c, dict) and c.get("type") == "tool_result":
+                tool_id = c.get("tool_use_id", "")
+                text = c.get("content", "")
+
+                # 에이전트 완료 매칭
+                if tool_id in active_agents:
+                    agent = active_agents.pop(tool_id)
+                    elapsed = (datetime.now() - agent["start"]).total_seconds()
+                    da = agent.get("dashboard_agent")
+                    emoji = get_emoji(da) if da else "🤖"
+
+                    result_preview = ""
+                    if isinstance(text, str) and text:
+                        result_preview = truncate(text, 150)
+
+                    print(f"\033[34m│\033[0m")
+                    print(f"\033[34m└─ {emoji} [{agent['type']}] ✅ 완료\033[0m ({elapsed:.1f}초)", end="")
+                    if agent.get("model"):
+                        print(f" [{agent['model']}]", end="")
+                    print()
+                    if result_preview:
+                        lines = result_preview.split(". ")
+                        for rl in lines[:2]:
+                            if rl.strip():
+                                print(f"   \033[90m→ {rl.strip()}\033[0m")
+                    print()
+
+                    # broadcast: 에이전트 완료
+                    model_str = f" [{agent['model']}]" if agent.get("model") else ""
+                    broadcaster.send(f"✅ *{agent['type']}* 완료 {elapsed:.1f}s{model_str}")
+
+                    # dashboard: 에이전트 복귀
+                    if da:
+                        dashboard_recall(da, f'✅ Complete ({elapsed:.1f}s)')
+
+                elif isinstance(text, str) and len(text) > 0:
+                    summary = truncate(text, 100)
+                    if len(text) > 200:
+                        print(f"\033[90m[{fmt_time()}] [결과] {summary}\033[0m")
+                    broadcaster.send(f"→ {truncate(text, 150)}")
+
+    elif t == "result":
+        _set_pm_state("idle")
+        cost = d.get("total_cost_usd", 0)
+        dur = d.get("duration_ms", 0) / 1000
+        turns = d.get("num_turns", 0)
+        result_text = d.get("result", "")
+        if len(result_text) > 100:
+            result_text = result_text[:100] + "..."
+
+        print()
+        print("\033[32m" + "━" * 55 + "\033[0m")
+        print(f"\033[32m[{fmt_time()}] [SESSION END]\033[0m 💰 ${cost:.4f} | ⏱ {dur:.1f}초 | 🔄 {turns}턴")
+        if result_text:
+            print(f"\033[32m[결과]\033[0m {result_text}")
+        print("\033[32m" + "━" * 55 + "\033[0m")
+        print()
+
+        broadcaster.send(f"✨ *Session Complete* ${cost:.4f} {dur:.0f}s {turns}턴")
+        dashboard_log('system', f'✨ Session complete (${cost:.4f})')
+
+        # 모든 에이전트 복귀
+        for agent_name in active_agents.values():
+            da = agent_name.get("dashboard_agent")
+            if da:
+                dashboard_recall(da, '✨ Session ended')
+        active_agents.clear()
+
 
 if __name__ == "__main__":
     main()
