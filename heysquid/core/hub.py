@@ -235,7 +235,8 @@ def get_24h_context(messages, current_message_id):
             text = msg.get("text", "")
             text_preview = text[:150] + "..." if len(text) > 150 else text
             files = msg.get("files", [])
-            file_info = f" [전송: {', '.join(files)}]" if files else ""
+            file_names = [f.get("name", str(f)) if isinstance(f, dict) else str(f) for f in files]
+            file_info = f" [전송: {', '.join(file_names)}]" if files else ""
             context_lines.append(f"[{msg['timestamp']}] heysquid: {text_preview}{file_info}")
 
     if len(context_lines) == 1:
@@ -387,6 +388,21 @@ def check_telegram():
         load_and_modify(_mark_seen)
 
         _dashboard_log('pm', f'Message received ({len(pending)} pending)')
+
+        # Kanban: create Todo cards for new tasks
+        try:
+            from ..dashboard.kanban import add_kanban_task, COL_TODO
+            for task in pending:
+                title = (task.get("text") or "New task")[:80]
+                add_kanban_task(
+                    title=title,
+                    column=COL_TODO,
+                    source_message_ids=[task["message_id"]],
+                    chat_id=task.get("chat_id"),
+                    tags=[f"workspace:{task['workspace']}"] if task.get("workspace") else [],
+                )
+        except Exception:
+            pass
 
     return pending
 

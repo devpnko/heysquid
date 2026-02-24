@@ -1,32 +1,48 @@
-# 스킬 작성 가이드
+# 스킬 & Automation 작성 가이드
+
+## Automation vs Skill
+
+| | Automation | Skill |
+|--|-----------|-------|
+| **위치** | `heysquid/automations/` | `heysquid/skills/` |
+| **성격** | 자동 반복 (schedule/interval) | 수동 호출 역량 |
+| **트리거** | `schedule`, `interval` | `manual`, `webhook` |
+| **예시** | briefing, threads_post | deep_work, marketing, saju_fortune |
+| **대시보드** | Kanban Automation 컬럼 | - |
 
 ## 구조
 
 ```
-heysquid/skills/
-├── _base.py          # 프레임워크 (discover, run_skill)
-├── _http.py          # HTTP 유틸리티 (get_secret, http_get, http_post_json, ...)
-├── __init__.py       # exports
-├── GUIDE.md          # 이 파일
-├── briefing/         # 스킬 예시 (스케줄)
-│   └── __init__.py
-└── 새_스킬/          # ← 폴더 만들면 자동 감지
-    └── __init__.py
+heysquid/
+├── core/
+│   ├── plugin_loader.py  # 공유 discovery + runner 엔진
+│   └── http_utils.py     # HTTP 유틸리티 (get_secret, http_get, ...)
+├── automations/           # 자동 반복 (schedule/interval)
+│   ├── __init__.py
+│   ├── briefing/
+│   └── threads_post/
+├── skills/                # 수동 호출 역량
+│   ├── __init__.py
+│   ├── _base.py           # core/plugin_loader 위임
+│   ├── _http.py           # core/http_utils 위임 (backward compat)
+│   ├── GUIDE.md           # 이 파일
+│   ├── deep_work/
+│   ├── marketing/
+│   └── saju_fortune/
 ```
 
-## 새 스킬 만들기 (3단계)
-
-### 1. 폴더 + `__init__.py` 생성
+## 새 Automation 만들기
 
 ```python
-# heysquid/skills/my_skill/__init__.py
+# heysquid/automations/my_automation/__init__.py
 
 SKILL_META = {
-    "name": "my_skill",
-    "description": "이 스킬이 뭘 하는지",
-    "trigger": "manual",       # "manual" | "schedule"
+    "name": "my_automation",
+    "description": "매일 9시에 실행되는 자동 작업",
+    "trigger": "schedule",      # "schedule" | "interval"
+    "schedule": "09:00",        # trigger=schedule일 때 HH:MM
     "enabled": True,
-    "icon": "🔧",              # 대시보드 아이콘 (선택)
+    "icon": "⏰",
 }
 
 def execute(**kwargs):
@@ -34,26 +50,31 @@ def execute(**kwargs):
     return {"done": True}
 ```
 
-### 2. (외부 API면) `.env`에 키 추가
+## 새 Skill 만들기
 
+```python
+# heysquid/skills/my_skill/__init__.py
+
+SKILL_META = {
+    "name": "my_skill",
+    "description": "이 스킬이 뭘 하는지",
+    "trigger": "manual",       # "manual" | "webhook"
+    "enabled": True,
+    "icon": "🔧",
+}
+
+def execute(**kwargs):
+    # 여기에 로직
+    return {"done": True}
 ```
-# heysquid/.env
-MY_API_TOKEN=xxxxx
-```
-
-### 3. 끝
-
-스케줄러가 `discover_skills()`로 자동 감지합니다.
-
----
 
 ## SKILL_META 필드
 
 | 필드 | 필수 | 설명 |
 |------|------|------|
-| `name` | O | 스킬 식별자 (폴더명과 동일) |
+| `name` | O | 식별자 (폴더명과 동일) |
 | `description` | O | 설명 |
-| `trigger` | O | `"manual"` 또는 `"schedule"` |
+| `trigger` | O | `"manual"`, `"schedule"`, `"interval"`, `"webhook"` |
 | `schedule` | trigger=schedule일 때 | `"HH:MM"` 형식 (예: `"09:00"`) |
 | `enabled` | - | 기본 `True`. `False`면 비활성화 |
 | `icon` | - | 대시보드 Machine Room 아이콘 |
@@ -76,21 +97,21 @@ def execute(triggered_by="scheduler", chat_id=0, args="",
         **kwargs: 미래 확장용 — 반드시 받아야 함
 
     Returns:
-        dict 또는 아무 값. run_skill()이 {"ok": True, "result": 반환값}으로 감싸줌.
+        dict 또는 아무 값. run_skill()/run_automation()이 {"ok": True, "result": 반환값}으로 감싸줌.
         예외 발생 시 {"ok": False, "error": 메시지}로 자동 처리.
     """
 ```
 
-`**kwargs`를 반드시 넣어야 SkillContext에 필드가 추가돼도 기존 스킬이 안 깨집니다.
+`**kwargs`를 반드시 넣어야 PluginContext에 필드가 추가돼도 기존 플러그인이 안 깨집니다.
 
 ---
 
-## HTTP 유틸리티 (`_http.py`)
+## HTTP 유틸리티
 
 외부 API 호출 시 직접 `requests` 쓰지 말고 이걸 사용:
 
 ```python
-from heysquid.skills._http import get_secret, http_get, http_post_json, http_post_form
+from heysquid.core.http_utils import get_secret, http_get, http_post_json, http_post_form
 
 # 환경변수에서 시크릿 로드
 token = get_secret("MY_API_TOKEN")
@@ -107,13 +128,13 @@ result = http_post_form("https://api.example.com/submit",
                         data={"field": "value"}, token=token)
 ```
 
-공통으로 타임아웃(30초), 인증 헤더, 에러 핸들링이 적용됩니다.
+기존 `from heysquid.skills._http import ...` 도 여전히 동작합니다 (backward compat).
 
 ---
 
-## 실행 방법 4가지
+## 실행 방법
 
-### 1. 스케줄러 (자동)
+### 1. 스케줄러 (Automation 자동)
 `trigger: "schedule"`, `schedule: "09:00"` → 매일 9시 자동 실행
 
 ### 2. TUI 수동
@@ -124,6 +145,13 @@ result = http_post_form("https://api.example.com/submit",
 
 ### 3. PM이 직접
 ```python
+# Automation
+from heysquid.automations import run_automation
+from heysquid.core.plugin_loader import PluginContext
+ctx = PluginContext(triggered_by="pm", chat_id=12345)
+result = run_automation("briefing", ctx)
+
+# Skill
 from heysquid.skills import run_skill, SkillContext
 ctx = SkillContext(triggered_by="pm", chat_id=12345, args="인자")
 result = run_skill("my_skill", ctx)
@@ -131,11 +159,13 @@ result = run_skill("my_skill", ctx)
 
 ### 4. Webhook (외부 트리거)
 ```bash
-curl -X POST http://localhost:8585/webhook/my_skill \
+curl -X POST http://localhost:8585/webhook/briefing \
   -H "X-Webhook-Secret: 시크릿" \
   -H "Content-Type: application/json" \
   -d '{"args": "인자", "chat_id": 12345}'
 ```
+
+Webhook은 automations 먼저 찾고, 없으면 skills에서 찾습니다.
 
 ---
 
@@ -152,60 +182,4 @@ curl -X POST http://localhost:8585/webhook/my_skill \
 }
 ```
 
----
-
-## 예시: 외부 API 스킬
-
-```python
-# heysquid/skills/buffer_post/__init__.py
-
-from heysquid.skills._http import get_secret, http_post_form
-
-SKILL_META = {
-    "name": "buffer_post",
-    "description": "Buffer에 소셜 미디어 포스트 예약",
-    "trigger": "manual",
-    "enabled": True,
-    "icon": "📱",
-}
-
-def execute(args="", payload=None, **kwargs):
-    token = get_secret("BUFFER_ACCESS_TOKEN")
-    profile_id = get_secret("BUFFER_PROFILE_ID")
-    text = args or (payload or {}).get("text", "")
-    if not text:
-        return {"error": "텍스트 없음"}
-
-    result = http_post_form(
-        "https://api.bufferapp.com/1/updates/create.json",
-        data={"profile_ids[]": profile_id, "text": text},
-        token=token,
-    )
-    return {"posted": True}
-```
-
-## 예시: n8n 워크플로우 트리거
-
-```python
-# heysquid/skills/n8n_trigger/__init__.py
-
-from heysquid.skills._http import get_secret, http_post_json
-
-SKILL_META = {
-    "name": "n8n_trigger",
-    "description": "n8n 워크플로우 웹훅 트리거",
-    "trigger": "manual",
-    "enabled": True,
-    "icon": "🔗",
-}
-
-def execute(args="", payload=None, **kwargs):
-    base_url = get_secret("N8N_BASE_URL")
-    workflow = args.split()[0] if args else (payload or {}).get("workflow", "")
-    if not workflow:
-        return {"error": "워크플로우 이름 없음"}
-
-    data = (payload or {}).copy()
-    result = http_post_json(f"{base_url}/webhook/{workflow}", payload=data)
-    return result
-```
+automations와 skills 모두 동일한 config 파일 사용.

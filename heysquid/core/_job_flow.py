@@ -180,6 +180,13 @@ def report_telegram(instruction, result_text, chat_id, timestamp, message_id, fi
 
     print(f"[MEM] 메모리 저장 완료: {task_dir}/task_info.txt")
 
+    # Kanban: move to Done
+    try:
+        from ..dashboard.kanban import update_kanban_by_message_ids, COL_DONE
+        update_kanban_by_message_ids(message_ids, COL_DONE, result=result_text[:200])
+    except Exception:
+        pass
+
 
 def _set_done_reactions(message_ids):
     """Set ✅ reaction on processed messages (best-effort)."""

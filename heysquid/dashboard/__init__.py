@@ -17,9 +17,7 @@ from ..core.agents import VALID_AGENTS, AGENTS, AGENT_NAMES
 STATUS_FILE = os.path.join(DATA_DIR, 'agent_status.json')
 CONFIG_FILE = os.path.join(DATA_DIR, 'dashboard_config.json')
 SQUAD_HISTORY_FILE = os.path.join(DATA_DIR, 'squad_history.json')
-# User's data/ copy takes priority; fall back to bundled template
-_user_html = os.path.join(DATA_DIR, 'dashboard.html')
-GAMEBOARD_HTML = _user_html if os.path.exists(_user_html) else get_template_path('dashboard.html')
+GAMEBOARD_HTML = get_template_path('dashboard.html')
 
 VALID_STATUSES = ['idle', 'working', 'complete', 'error', 'chatting', 'thinking']
 
@@ -72,13 +70,38 @@ def _load_status():
     """Load current status JSON"""
     try:
         with open(STATUS_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
+            data = json.load(f)
+        # 자동 마이그레이션: "skills" → "automations" (파일까지 즉시 반영)
+        migrated = False
+        if 'skills' in data and 'automations' not in data:
+            data['automations'] = data.pop('skills')
+            migrated = True
+        elif 'skills' in data and 'automations' in data:
+            data.pop('skills', None)
+            migrated = True
+        # 필수 키 보장
+        if 'automations' not in data:
+            data['automations'] = {}
+            migrated = True
+        if 'kanban' not in data or data['kanban'] is None:
+            data['kanban'] = {"tasks": []}
+            migrated = True
+        if migrated:
+            with open(STATUS_FILE, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+        return data
     except (FileNotFoundError, json.JSONDecodeError):
         return _default_status()
 
 
 def _save_status(data):
     """Save status JSON with updated timestamp"""
+    # 저장 직전 마이그레이션 보호: "skills" 키가 남아있으면 제거
+    if 'skills' in data:
+        if 'automations' not in data:
+            data['automations'] = data.pop('skills')
+        else:
+            data.pop('skills', None)
     data['last_updated'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     config = _load_dashboard_config()
     data['_registry'] = _build_registry(config)
@@ -93,7 +116,8 @@ def _default_status():
     status = {
         "last_updated": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         "current_task": "",
-        "skills": {},
+        "automations": {},
+        "kanban": {"tasks": []},
         "mission_log": [
             {"time": datetime.now().strftime('%H:%M:%S'), "agent": "system", "message": "시스템 대기중..."}
         ],
@@ -267,8 +291,8 @@ async def shot():
                 if (typeof renderWorkspaceZones === 'function' && data.workspaces) {{
                     renderWorkspaceZones(data.workspaces);
                 }}
-                if (typeof renderSkillsPanel === 'function' && data.skills) {{
-                    renderSkillsPanel(data.skills);
+                if (typeof renderSkillsPanel === 'function' && data.automations) {{
+                    renderSkillsPanel(data.automations);
                 }}
             }}""", data)
             await page.wait_for_timeout(500)  # let DOM settle
@@ -466,23 +490,27 @@ def _compute_next_run(meta):
         return None
 
 
-def sync_skills():
-    """discover_skills() → agent_status.json skills 섹션 동기화.
+def sync_automations():
+    """discover_automations() → agent_status.json automations 섹션 동기화.
 
-    - 새 스킬: 메타 + 초기 런타임 상태로 추가
-    - 기존 스킬: 메타 업데이트 + 런타임 상태(status, last_run 등) 보존
-    - 삭제된 스킬: skills 섹션에서 제거
+    - 새 automation: 메타 + 초기 런타임 상태로 추가
+    - 기존 automation: 메타 업데이트 + 런타임 상태(status, last_run 등) 보존
+    - 삭제된 automation: automations 섹션에서 제거
     """
-    from ..skills._base import discover_skills
+    from ..automations import discover_automations
 
-    registry = discover_skills()
+    registry = discover_automations()
     data = _load_status()
-    if 'skills' not in data:
-        data['skills'] = {}
 
-    existing = data['skills']
+    # 기존 "skills" 키 → "automations" 마이그레이션
+    if 'skills' in data and 'automations' not in data:
+        data['automations'] = data.pop('skills')
+    if 'automations' not in data:
+        data['automations'] = {}
 
-    # 삭제된 스킬 제거
+    existing = data['automations']
+
+    # 삭제된 automation 제거
     removed = [k for k in existing if k not in registry]
     for k in removed:
         del existing[k]
@@ -509,29 +537,50 @@ def sync_skills():
     _save_status(data)
 
 
-def update_skill_status(skill_name, status, last_result=None, last_error=None):
-    """스킬 런타임 상태 업데이트 (running/idle/error)."""
-    data = _load_status()
-    if 'skills' not in data:
-        data['skills'] = {}
+# backward compat alias
+sync_skills = sync_automations
 
-    skill = data['skills'].get(skill_name)
-    if not skill:
+
+def update_skill_status(skill_name, status, last_result=None, last_error=None):
+    """automation/skill 런타임 상태 업데이트 (running/idle/error)."""
+    data = _load_status()
+
+    # automations 키에서 먼저 찾고, 없으면 skills (backward compat)
+    entry = None
+    for key in ('automations', 'skills'):
+        section = data.get(key, {})
+        if skill_name in section:
+            entry = section[skill_name]
+            break
+
+    if not entry:
         return
 
-    skill['status'] = status
+    entry['status'] = status
     if status in ('idle', 'error'):
-        skill['last_run'] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-        skill['run_count'] = skill.get('run_count', 0) + 1
+        entry['last_run'] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+        entry['run_count'] = entry.get('run_count', 0) + 1
     if last_result is not None:
-        skill['last_result'] = last_result
+        entry['last_result'] = last_result
     if last_error is not None:
-        skill['last_error'] = last_error
+        entry['last_error'] = last_error
     # 다음 실행 시각 갱신
-    if skill.get('trigger') == 'schedule':
-        skill['next_run'] = _compute_next_run(skill)
+    if entry.get('trigger') == 'schedule':
+        entry['next_run'] = _compute_next_run(entry)
 
     _save_status(data)
+
+
+from .kanban import (                                    # noqa: F401
+    add_kanban_task,
+    update_kanban_by_message_ids,
+    add_kanban_activity,
+    delete_kanban_task,
+    move_kanban_task,
+    archive_done_tasks,
+    get_archive,
+    COL_AUTOMATION, COL_TODO, COL_IN_PROGRESS, COL_WAITING, COL_DONE,
+)
 
 
 def send_dashboard_photo(chat_id):

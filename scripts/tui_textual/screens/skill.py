@@ -1,4 +1,4 @@
-"""SkillScreen — Skill 플러그인 상태 뷰"""
+"""SkillScreen — Automation 상태 뷰"""
 
 from textual.screen import Screen
 from textual.app import ComposeResult
@@ -53,7 +53,7 @@ class SkillScreen(Screen):
         yield VerticalScroll(Static("", id="skill-content"), id="skill-table")
         yield CommandInput(id="skill-cmd")
         yield Static(
-            "[dim] q:quit  Ctrl+1/2/3/4:mode  Ctrl+\u2190\u2192  /cmd  drag+Ctrl+C:복사[/dim]",
+            "[dim] q:quit  Ctrl+1~5:mode  Ctrl+\u2190\u2192  /cmd  drag+Ctrl+C:복사[/dim]",
             id="skill-status-bar",
         )
 
@@ -63,7 +63,7 @@ class SkillScreen(Screen):
         indicator = (
             "[bold green]\u25cf LIVE[/bold green]" if live else "[dim]\u25cb IDLE[/dim]"
         )
-        return f"[bold]\U0001f991 SQUID[/bold]  [bold {pm_color}]\\[SKILL][/bold {pm_color}]  {indicator}"
+        return f"[bold]\U0001f991 SQUID[/bold]  [bold {pm_color}]\\[AUTOMATION][/bold {pm_color}]  {indicator}"
 
     def refresh_data(self, flash: str = "") -> None:
         """폴링 데이터로 화면 갱신 — 각 섹션 독립적으로 보호"""
@@ -82,7 +82,7 @@ class SkillScreen(Screen):
             pass
 
         try:
-            skills = status.get("skills", {})
+            skills = status.get("automations", {})
             content = self.query_one("#skill-content", Static)
             content.update(self._render_skills(skills))
         except Exception:

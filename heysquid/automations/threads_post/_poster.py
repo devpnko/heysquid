@@ -162,8 +162,11 @@ async def _post_thread_playwright(text: str, account: str = "main", first_reply:
                                         box = await el.bounding_box()
                                         if not box:
                                             continue
-                                        # 에디터와 비슷한 Y 범위(±60px), 에디터 오른쪽
-                                        if (abs(box['y'] - editor_box['y']) < 60
+                                        # 28x28 미만은 "..." 같은 작은 아이콘 — 스킵
+                                        if box['width'] < 28 or box['height'] < 28:
+                                            continue
+                                        # 에디터와 비슷한 Y 범위(±80px), 에디터 오른쪽
+                                        if (abs(box['y'] - editor_box['y']) < 80
                                                 and box['x'] > editor_box['x']):
                                             text = (await el.inner_text()).strip()
                                             svg = await el.query_selector('svg')
@@ -171,7 +174,7 @@ async def _post_thread_playwright(text: str, account: str = "main", first_reply:
                                                 send_candidates.append((box['x'], el))
 
                                     if send_candidates:
-                                        # 가장 오른쪽 SVG 버튼 = 전송 버튼
+                                        # 가장 오른쪽 32x32급 SVG 버튼 = 전송 버튼
                                         send_candidates.sort(key=lambda c: c[0], reverse=True)
                                         await send_candidates[0][1].click()
                                         reply_clicked = True

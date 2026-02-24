@@ -9,6 +9,13 @@ import threading
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data')
 WS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'workspaces')
+TEMPLATE_HTML = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), '..', 'heysquid', 'templates', 'dashboard.html'
+)
+
+# Cache for automations data — survives file corruption from concurrent writes
+_automations_cache = {}
+_workspaces_cache = {}
 
 
 class DashboardHandler(SimpleHTTPRequestHandler):
@@ -20,6 +27,35 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             content = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
             self._update_agent_status('workspaces', content)
             self._respond(200, {'ok': True})
+
+        elif self.path == '/api/kanban/feedback':
+            content = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+            task_id = content.get('task_id', '')
+            message = content.get('message', '')
+            if not task_id or not message:
+                self._respond(400, {'error': 'task_id and message required'})
+                return
+            self._kanban_add_activity(task_id, 'pm', message)
+            self._respond(200, {'ok': True})
+
+        elif self.path == '/api/kanban/delete':
+            content = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+            task_id = content.get('task_id', '')
+            if not task_id:
+                self._respond(400, {'error': 'task_id required'})
+                return
+            deleted = self._kanban_delete(task_id)
+            self._respond(200, {'ok': True, 'deleted': deleted})
+
+        elif self.path == '/api/kanban/move':
+            content = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+            task_id = content.get('task_id', '')
+            column = content.get('column', '')
+            if not task_id or not column:
+                self._respond(400, {'error': 'task_id and column required'})
+                return
+            moved = self._kanban_move(task_id, column)
+            self._respond(200, {'ok': True, 'moved': moved})
 
         elif self.path == '/api/save-deco-layout':
             content = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
@@ -73,7 +109,122 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 self._respond(200, {'content': ''})
             return
 
+        # Serve agent_status.json with live migration (skills → automations)
+        if self.path.startswith('/agent_status.json'):
+            global _automations_cache, _workspaces_cache
+            status_path = os.path.join(DATA_DIR, 'agent_status.json')
+            try:
+                with open(status_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                # Live migration: "skills" → "automations"
+                if 'skills' in data and 'automations' not in data:
+                    data['automations'] = data.pop('skills')
+                elif 'skills' in data:
+                    data.pop('skills', None)
+                if 'automations' not in data:
+                    data['automations'] = {}
+                if 'kanban' not in data or data['kanban'] is None:
+                    data['kanban'] = {"tasks": []}
+                # Cache non-empty automations data (survives file corruption)
+                if data['automations']:
+                    _automations_cache = data['automations']
+                elif _automations_cache:
+                    data['automations'] = _automations_cache
+                # Auto-populate workspaces from directory if missing
+                if 'workspaces' not in data:
+                    data['workspaces'] = {}
+                    if os.path.isdir(WS_DIR):
+                        for name in os.listdir(WS_DIR):
+                            if os.path.isdir(os.path.join(WS_DIR, name)):
+                                data['workspaces'][name] = {
+                                    'status': 'standby',
+                                    'last_active': '', 'description': name,
+                                }
+                # Cache non-empty workspaces data
+                if data.get('workspaces'):
+                    _workspaces_cache = data['workspaces']
+                elif _workspaces_cache:
+                    data['workspaces'] = _workspaces_cache
+                content = json.dumps(data, ensure_ascii=False).encode('utf-8')
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json; charset=utf-8')
+                self.send_header('Content-Length', str(len(content)))
+                self.send_header('Cache-Control', 'no-cache')
+                self.end_headers()
+                self.wfile.write(content)
+            except (FileNotFoundError, json.JSONDecodeError):
+                resp = {"automations": _automations_cache or {}, "kanban": {"tasks": []}}
+                if _workspaces_cache:
+                    resp["workspaces"] = _workspaces_cache
+                self._respond(200, resp)
+            return
+
+        # Serve dashboard.html from templates/ (single source of truth)
+        if self.path == '/dashboard.html' or self.path == '/':
+            try:
+                with open(TEMPLATE_HTML, 'rb') as f:
+                    content = f.read()
+                self.send_response(200)
+                self.send_header('Content-Type', 'text/html; charset=utf-8')
+                self.send_header('Content-Length', str(len(content)))
+                self.end_headers()
+                self.wfile.write(content)
+            except FileNotFoundError:
+                self.send_error(404, 'dashboard.html not found in templates/')
+            return
+
         super().do_GET()
+
+    def _kanban_add_activity(self, task_id, agent, message):
+        from datetime import datetime
+        path = os.path.join(DATA_DIR, 'agent_status.json')
+        with open(path) as f:
+            data = json.load(f)
+        for task in data.get('kanban', {}).get('tasks', []):
+            if task['id'] == task_id:
+                task.setdefault('activity_log', []).append({
+                    'time': datetime.now().strftime('%H:%M:%S'),
+                    'agent': agent,
+                    'message': message,
+                })
+                task['updated_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                break
+        with open(path, 'w') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
+    def _kanban_delete(self, task_id):
+        path = os.path.join(DATA_DIR, 'agent_status.json')
+        with open(path) as f:
+            data = json.load(f)
+        tasks = data.get('kanban', {}).get('tasks', [])
+        original = len(tasks)
+        data['kanban']['tasks'] = [t for t in tasks if t['id'] != task_id]
+        with open(path, 'w') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        return len(data['kanban']['tasks']) < original
+
+    def _kanban_move(self, task_id, new_column):
+        from datetime import datetime
+        valid = {'automation', 'todo', 'in_progress', 'waiting', 'done'}
+        if new_column not in valid:
+            return False
+        path = os.path.join(DATA_DIR, 'agent_status.json')
+        with open(path) as f:
+            data = json.load(f)
+        for task in data.get('kanban', {}).get('tasks', []):
+            if task['id'] == task_id:
+                old = task['column']
+                task['column'] = new_column
+                task['updated_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                task.setdefault('activity_log', []).append({
+                    'time': datetime.now().strftime('%H:%M:%S'),
+                    'agent': 'pm',
+                    'message': f'Moved from {old} to {new_column}',
+                })
+                with open(path, 'w') as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+                return True
+        return False
 
     def _update_agent_status(self, key, value):
         path = os.path.join(DATA_DIR, 'agent_status.json')

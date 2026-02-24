@@ -293,8 +293,26 @@ def status() -> None:
     else:
         print("  working.json: 없음")
 
-    # 등록된 스킬
-    print("\n--- 등록된 스킬 ---")
+    # 등록된 automations + skills
+    print("\n--- 등록된 Automations ---")
+    try:
+        from heysquid.automations import discover_automations
+        autos = discover_automations()
+        if not autos:
+            print("  (등록된 automation 없음)")
+        else:
+            for name, meta in autos.items():
+                trigger = meta.get("trigger", "?")
+                schedule = meta.get("schedule", "")
+                desc = meta.get("description", "")
+                info = f"{trigger}"
+                if schedule:
+                    info += f" @ {schedule}"
+                print(f"  {name}: {desc} [{info}]")
+    except Exception:
+        print("  (automation 목록 조회 실패)")
+
+    print("\n--- 등록된 Skills ---")
     try:
         from heysquid.skills._base import discover_skills
         skills = discover_skills()
@@ -303,12 +321,8 @@ def status() -> None:
         else:
             for name, meta in skills.items():
                 trigger = meta.get("trigger", "?")
-                schedule = meta.get("schedule", "")
                 desc = meta.get("description", "")
-                info = f"{trigger}"
-                if schedule:
-                    info += f" @ {schedule}"
-                print(f"  {name}: {desc} [{info}]")
+                print(f"  {name}: {desc} [{trigger}]")
     except Exception:
         print("  (스킬 목록 조회 실패)")
 

@@ -1,8 +1,8 @@
-"""heysquid.core.scheduler — 스킬 스케줄러.
+"""heysquid.core.scheduler — automation 스케줄러.
 
 launchd로 1분마다 호출되어:
-1. 현재 시각(HH:MM)에 매칭되는 schedule 스킬 실행
-2. 매 호출마다 interval 스킬 실행 (예: 스레드 예약 게시)
+1. 현재 시각(HH:MM)에 매칭되는 schedule automation 실행
+2. 매 호출마다 interval automation 실행 (예: 스레드 예약 게시)
 
 Usage:
     python -m heysquid.core.scheduler
@@ -11,7 +11,8 @@ Usage:
 import logging
 from datetime import datetime
 
-from heysquid.skills._base import get_skill_registry, run_skill, SkillContext
+from heysquid.automations import get_automation_registry, run_automation
+from heysquid.core.plugin_loader import PluginContext
 
 logging.basicConfig(
     level=logging.INFO,
@@ -21,19 +22,25 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def run_scheduled_skills():
-    """현재 시각에 매칭되는 schedule 스킬 실행"""
-    from heysquid.dashboard import sync_skills
+def run_scheduled_automations():
+    """현재 시각에 매칭되는 schedule automation 실행"""
+    from heysquid.dashboard import sync_automations
 
     now_hm = datetime.now().strftime("%H:%M")
 
     # 메타 동기화 (1분마다 호출되므로 항상 최신 유지)
     try:
-        sync_skills()
+        sync_automations()
     except Exception as e:
-        logger.warning(f"sync_skills 실패: {e}")
+        logger.warning(f"sync_automations 실패: {e}")
 
-    registry = get_skill_registry()
+    try:
+        from heysquid.dashboard import sync_workspaces
+        sync_workspaces()
+    except Exception as e:
+        logger.warning(f"sync_workspaces 실패: {e}")
+
+    registry = get_automation_registry()
 
     if not registry:
         return
@@ -45,7 +52,7 @@ def run_scheduled_skills():
         if trigger == "schedule":
             if meta.get("schedule") != now_hm:
                 continue
-            logger.info(f"Skill {name} 실행 (schedule={now_hm})")
+            logger.info(f"Automation {name} 실행 (schedule={now_hm})")
 
         # 2. interval 트리거: 매 호출마다 실행
         elif trigger == "interval":
@@ -54,16 +61,16 @@ def run_scheduled_skills():
         else:
             continue
 
-        ctx = SkillContext(triggered_by="scheduler")
+        ctx = PluginContext(triggered_by="scheduler")
         try:
-            result = run_skill(name, ctx)
+            result = run_automation(name, ctx)
             if result["ok"]:
-                logger.info(f"Skill {name} 완료")
+                logger.info(f"Automation {name} 완료")
             else:
-                logger.error(f"Skill {name} 실행 실패: {result['error']}")
+                logger.error(f"Automation {name} 실행 실패: {result['error']}")
         except Exception as e:
-            logger.error(f"Skill {name} 예외: {e}")
+            logger.error(f"Automation {name} 예외: {e}")
 
 
 if __name__ == "__main__":
-    run_scheduled_skills()
+    run_scheduled_automations()

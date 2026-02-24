@@ -50,7 +50,7 @@ class LogScreen(Screen):
         yield MissionLogView(id="log-mission")
         yield StreamLogView(id="log-stream")
         yield CommandInput(id="log-cmd")
-        yield Static("[dim] q:quit  Ctrl+1/2/3/4:mode  Ctrl+\u2190\u2192  /cmd  drag+Ctrl+C:복사[/dim]", id="log-status-bar")
+        yield Static("[dim] q:quit  Ctrl+1~5:mode  Ctrl+\u2190\u2192  /cmd  drag+Ctrl+C:복사[/dim]", id="log-status-bar")
 
     def _header_text(self) -> str:
         pm_color = AGENT_COLORS.get("pm", "#ff6b9d")

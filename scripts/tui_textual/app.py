@@ -10,6 +10,7 @@ from textual.binding import Binding
 from heysquid.core.config import PROJECT_ROOT_STR as ROOT
 
 from scripts.tui_textual.screens.chat import ChatScreen
+from scripts.tui_textual.screens.kanban import KanbanScreen
 from scripts.tui_textual.screens.squad import SquadScreen
 from scripts.tui_textual.screens.log import LogScreen
 from scripts.tui_textual.screens.skill import SkillScreen
@@ -19,11 +20,12 @@ from scripts.tui_textual.commands import send_chat_message, execute_command
 from scripts.tui_textual.data_poller import load_stream_lines, STREAM_BUFFER_SIZE
 
 MODE_CHAT = 0
-MODE_SQUAD = 1
-MODE_LOG = 2
-MODE_SKILL = 3
-MODE_NAMES = {MODE_CHAT: "CHAT", MODE_SQUAD: "SQUAD", MODE_LOG: "LOG", MODE_SKILL: "SKILL"}
-MODE_COUNT = 4
+MODE_KANBAN = 1
+MODE_SQUAD = 2
+MODE_LOG = 3
+MODE_SKILL = 4
+MODE_NAMES = {MODE_CHAT: "CHAT", MODE_KANBAN: "KANBAN", MODE_SQUAD: "SQUAD", MODE_LOG: "LOG", MODE_SKILL: "AUTO"}
+MODE_COUNT = 5
 
 CSS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "squid.tcss")
 
@@ -37,9 +39,10 @@ class SquidApp(App):
     BINDINGS = [
         Binding("ctrl+c", "copy_selection", "Copy", priority=True),
         Binding("ctrl+1", "mode_chat", "Chat", priority=True),
-        Binding("ctrl+2", "mode_squad", "Squad", priority=True),
-        Binding("ctrl+3", "mode_log", "Log", priority=True),
-        Binding("ctrl+4", "mode_skill", "Skill", priority=True),
+        Binding("ctrl+2", "mode_kanban", "Kanban", priority=True),
+        Binding("ctrl+3", "mode_squad", "Squad", priority=True),
+        Binding("ctrl+4", "mode_log", "Log", priority=True),
+        Binding("ctrl+5", "mode_skill", "Skill", priority=True),
         Binding("ctrl+left", "mode_prev", "Prev", priority=True),
         Binding("ctrl+right", "mode_next", "Next", priority=True),
         Binding("ctrl+q", "quit_app", "Quit", priority=True),
@@ -62,16 +65,18 @@ class SquidApp(App):
     def on_mount(self) -> None:
         """앱 시작 시 Chat 스크린 설치 + 폴링 타이머"""
         chat = ChatScreen()
+        kanban = KanbanScreen()
         squad = SquadScreen()
         log = LogScreen()
         skill = SkillScreen()
 
         self.install_screen(chat, name="chat")
+        self.install_screen(kanban, name="kanban")
         self.install_screen(squad, name="squad")
         self.install_screen(log, name="log")
         self.install_screen(skill, name="skill")
 
-        self._screens = {"chat": chat, "squad": squad, "log": log, "skill": skill}
+        self._screens = {"chat": chat, "kanban": kanban, "squad": squad, "log": log, "skill": skill}
 
         self.push_screen("chat")
         self._mode = MODE_CHAT
@@ -94,6 +99,8 @@ class SquidApp(App):
         try:
             if isinstance(screen, ChatScreen):
                 screen.refresh_data(flash=flash)
+            elif isinstance(screen, KanbanScreen):
+                screen.refresh_data(flash=flash)
             elif isinstance(screen, SquadScreen):
                 screen.refresh_data(flash=flash)
             elif isinstance(screen, LogScreen):
@@ -105,7 +112,7 @@ class SquidApp(App):
 
     def _switch_mode(self, new_mode: int) -> None:
         """모드 전환"""
-        mode_map = {MODE_CHAT: "chat", MODE_SQUAD: "squad", MODE_LOG: "log", MODE_SKILL: "skill"}
+        mode_map = {MODE_CHAT: "chat", MODE_KANBAN: "kanban", MODE_SQUAD: "squad", MODE_LOG: "log", MODE_SKILL: "skill"}
         self._mode = new_mode
         self.switch_screen(mode_map[new_mode])
         # Chat 모드로 돌아오면 Input에 포커스
@@ -121,16 +128,20 @@ class SquidApp(App):
         """Ctrl+1 → Chat 모드"""
         self._switch_mode(MODE_CHAT)
 
+    def action_mode_kanban(self) -> None:
+        """Ctrl+2 → Kanban 모드"""
+        self._switch_mode(MODE_KANBAN)
+
     def action_mode_squad(self) -> None:
-        """Ctrl+2 → Squad 모드"""
+        """Ctrl+3 → Squad 모드"""
         self._switch_mode(MODE_SQUAD)
 
     def action_mode_log(self) -> None:
-        """Ctrl+3 → Log 모드"""
+        """Ctrl+4 → Log 모드"""
         self._switch_mode(MODE_LOG)
 
     def action_mode_skill(self) -> None:
-        """Ctrl+4 → Skill 모드"""
+        """Ctrl+5 → Skill 모드"""
         self._switch_mode(MODE_SKILL)
 
     def action_mode_prev(self) -> None:
@@ -166,8 +177,8 @@ class SquidApp(App):
         self.exit()
 
     def action_command_mode(self) -> None:
-        """Squad/Log 모드에서 / 커맨드 모드"""
-        if isinstance(self.screen, (SquadScreen, LogScreen, SkillScreen)):
+        """Squad/Log/Skill/Kanban 모드에서 / 커맨드 모드"""
+        if isinstance(self.screen, (KanbanScreen, SquadScreen, LogScreen, SkillScreen)):
             try:
                 cmd_input = self.screen.query_one(CommandInput)
                 cmd_input.show()

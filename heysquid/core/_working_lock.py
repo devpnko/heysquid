@@ -107,6 +107,13 @@ def create_working_lock(message_id, instruction, chat_id=None):
         print(f"[LOCK] 작업 잠금 생성: message_id={msg_id_str}")
         _dashboard_log('pm', f'Starting: {summary}')
 
+        # Kanban: move to In Progress
+        try:
+            from ..dashboard.kanban import update_kanban_by_message_ids, COL_IN_PROGRESS
+            update_kanban_by_message_ids(message_ids, COL_IN_PROGRESS)
+        except Exception:
+            pass
+
         # Start typing indicator
         try:
             from ..channels._typing import start as _typing_start

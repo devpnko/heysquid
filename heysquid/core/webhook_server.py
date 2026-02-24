@@ -1,4 +1,4 @@
-"""경량 webhook 수신 서버 — 외부 시스템이 스킬을 트리거.
+"""경량 webhook 수신 서버 — 외부 시스템이 automation/skill을 트리거.
 
 Usage:
     python -m heysquid.core.webhook_server          # 기본 포트 8585
@@ -16,7 +16,8 @@ import logging
 import sys
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
-from heysquid.skills import run_skill, SkillContext
+from heysquid.automations import run_automation, get_automation_registry
+from heysquid.skills import run_skill, get_skill_registry, SkillContext
 
 logger = logging.getLogger(__name__)
 
@@ -35,14 +36,14 @@ class WebhookHandler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", 0))
         body = json.loads(self.rfile.read(length)) if length > 0 else {}
 
-        # URL에서 스킬 이름 추출: /webhook/skill-name
+        # URL에서 이름 추출: /webhook/<name>
         path = self.path.strip("/")
         parts = path.split("/")
         if len(parts) < 2 or parts[0] != "webhook":
-            self._respond(404, {"ok": False, "error": "Use /webhook/<skill-name>"})
+            self._respond(404, {"ok": False, "error": "Use /webhook/<name>"})
             return
 
-        skill_name = parts[1]
+        plugin_name = parts[1]
         ctx = SkillContext(
             triggered_by="webhook",
             chat_id=body.get("chat_id", 0),
@@ -51,7 +52,12 @@ class WebhookHandler(BaseHTTPRequestHandler):
             callback_url=body.get("callback_url", ""),
         )
 
-        result = run_skill(skill_name, ctx)
+        # automations 먼저 찾고, 없으면 skills에서 찾기
+        if plugin_name in get_automation_registry():
+            result = run_automation(plugin_name, ctx)
+        else:
+            result = run_skill(plugin_name, ctx)
+
         self._respond(200 if result["ok"] else 500, result)
 
     def _respond(self, code: int, data: dict):
@@ -67,7 +73,7 @@ class WebhookHandler(BaseHTTPRequestHandler):
 def start_webhook_server(port: int = 8585):
     """webhook 서버 시작 (블로킹)."""
     global WEBHOOK_SECRET
-    from heysquid.skills._http import get_secret
+    from heysquid.core.http_utils import get_secret
 
     WEBHOOK_SECRET = get_secret("WEBHOOK_SECRET")
 
