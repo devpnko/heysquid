@@ -2383,6 +2383,34 @@ body.deco-mode .ws-resize-handle { display: block; }
 }
 .kanban-modal-close:hover { color: #fff; border-color: #5a6070; background: #2a3048; }
 
+/* Automation edit form */
+.km-edit-row { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
+.km-edit-row label:first-child { width: 90px; color: #9ca3af; font-size: 13px; flex-shrink: 0; }
+.km-edit-row input[type="time"],
+.km-edit-row input[type="text"] {
+  flex: 1; background: #1a2332; border: 1px solid #374151;
+  color: #e5e7eb; padding: 6px 10px; border-radius: 6px; font-family: inherit; font-size: 13px;
+}
+.km-edit-row input[type="time"]:focus,
+.km-edit-row input[type="text"]:focus { border-color: #ff6b9d; outline: none; }
+.km-toggle { position: relative; display: inline-block; width: 44px; height: 24px; cursor: pointer; }
+.km-toggle input { opacity: 0; width: 0; height: 0; }
+.km-toggle-slider {
+  position: absolute; inset: 0; background: #374151; border-radius: 12px; transition: .3s;
+}
+.km-toggle-slider:before {
+  content: ''; position: absolute; height: 18px; width: 18px; left: 3px; bottom: 3px;
+  background: white; border-radius: 50%; transition: .3s;
+}
+.km-toggle input:checked + .km-toggle-slider { background: #26de81; }
+.km-toggle input:checked + .km-toggle-slider:before { transform: translateX(20px); }
+.km-save-btn {
+  width: 100%; margin-top: 12px; padding: 8px; background: #ff6b9d;
+  color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold;
+  font-family: inherit; font-size: 13px; transition: background 0.15s;
+}
+.km-save-btn:hover { background: #ff4785; }
+
 .machine-picker {
   position: absolute;
   z-index: 300;
@@ -2740,6 +2768,29 @@ body.deco-mode .skill-machine:hover::after { opacity: 1; }
       <div class="kanban-modal-title" id="kanbanModalTitle"></div>
       <!-- Info -->
       <div class="kanban-modal-info" id="kanbanModalInfo"></div>
+      <!-- Automation Edit Form -->
+      <div id="kanbanModalEditWrap" style="display:none">
+        <div class="km-edit-row" id="kmEditScheduleRow">
+          <label>Schedule</label>
+          <input type="time" id="kmEditSchedule" value="09:00">
+        </div>
+        <div class="km-edit-row">
+          <label>Enabled</label>
+          <label class="km-toggle">
+            <input type="checkbox" id="kmEditEnabled" checked>
+            <span class="km-toggle-slider"></span>
+          </label>
+        </div>
+        <div class="km-edit-row">
+          <label>Description</label>
+          <input type="text" id="kmEditDescription" value="">
+        </div>
+        <div class="km-edit-row">
+          <label>Workspace</label>
+          <input type="text" id="kmEditWorkspace" value="" placeholder="(none)">
+        </div>
+        <button class="km-save-btn" onclick="saveAutomationConfig()">💾 Save Changes</button>
+      </div>
       <!-- Comment (result) -->
       <div id="kanbanModalCommentWrap" style="display:none">
         <div class="kanban-modal-section-title">Comment</div>
@@ -5633,6 +5684,7 @@ function renderKanbanBoard(kanbanData, automationsData) {
             result: skillData.last_result || (skillData.last_error ? 'Error: ' + skillData.last_error : null),
             activity_log: _buildAutomationLog(skillData),
             _isSkill: true,
+            _skillName: skillName,
           });
         };
       })(name, sk);
@@ -5800,18 +5852,84 @@ function openKanbanModal(task) {
   // Activity Log
   _renderModalLog(task.activity_log || []);
 
-  // Skill cards: disable move dropdown + hide delete
+  // Skill cards: disable move dropdown + hide delete + show edit form
   var isSkill = !!task._isSkill;
   var sel = document.getElementById('kanbanModalStatus');
   sel.disabled = isSkill;
   sel.style.opacity = isSkill ? '0.7' : '1';
   document.querySelector('.kanban-modal-btn-delete').style.display = isSkill ? 'none' : '';
 
+  // Automation edit form
+  var editWrap = document.getElementById('kanbanModalEditWrap');
+  if (isSkill && task._skillName && window._lastAutomationsRaw) {
+    var sk = window._lastAutomationsRaw[task._skillName];
+    if (sk) {
+      editWrap.style.display = 'block';
+      document.getElementById('kmEditSchedule').value = sk.schedule || '';
+      document.getElementById('kmEditEnabled').checked = sk.enabled !== false;
+      document.getElementById('kmEditDescription').value = sk.description || '';
+      document.getElementById('kmEditWorkspace').value = sk.workspace || '';
+      document.getElementById('kmEditScheduleRow').style.display =
+        sk.trigger === 'schedule' ? '' : 'none';
+      // Reset save button
+      var btn = document.querySelector('.km-save-btn');
+      if (btn) btn.textContent = '\uD83D\uDCBE Save Changes';
+    } else {
+      editWrap.style.display = 'none';
+    }
+  } else {
+    editWrap.style.display = 'none';
+  }
+
   // Clear feedback input
   document.getElementById('kanbanFeedbackInput').value = '';
 
   backdrop.classList.add('visible');
   document.getElementById('kanbanFeedbackInput').focus();
+}
+
+function saveAutomationConfig() {
+  if (!_currentModalTask || !_currentModalTask._isSkill) return;
+  var name = _currentModalTask._skillName;
+  if (!name) return;
+  var sk = window._lastAutomationsRaw && window._lastAutomationsRaw[name];
+  if (!sk) return;
+  var payload = { name: name };
+  if (sk.trigger === 'schedule') {
+    payload.schedule = document.getElementById('kmEditSchedule').value;
+  }
+  payload.enabled = document.getElementById('kmEditEnabled').checked;
+  payload.description = document.getElementById('kmEditDescription').value;
+  payload.workspace = document.getElementById('kmEditWorkspace').value;
+  var btn = document.querySelector('.km-save-btn');
+  btn.textContent = 'Saving...';
+  fetch('/api/automation/config', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload)
+  }).then(function(r) { return r.json(); }).then(function(resp) {
+    if (resp.ok) {
+      // Update local cache
+      Object.assign(window._lastAutomationsRaw[name], payload);
+      delete window._lastAutomationsRaw[name].name;
+      // Update tags
+      var tags = [sk.trigger || 'manual', payload.enabled ? (sk.status || 'idle') : 'disabled'];
+      var tagsEl = document.getElementById('kanbanModalTags');
+      tagsEl.innerHTML = tags.map(function(t) {
+        var cls = 'kanban-tag ' + _tagColorClass(t);
+        return '<span class="' + cls.trim() + '" style="font-size:11px">' + escHtml(t) + '</span>';
+      }).join(' ');
+      // Success feedback
+      btn.textContent = '\u2705 Saved!';
+      setTimeout(function() { btn.textContent = '\uD83D\uDCBE Save Changes'; }, 2000);
+    } else {
+      btn.textContent = '\u274C Error';
+      setTimeout(function() { btn.textContent = '\uD83D\uDCBE Save Changes'; }, 2000);
+    }
+  }).catch(function() {
+    btn.textContent = '\u274C Error';
+    setTimeout(function() { btn.textContent = '\uD83D\uDCBE Save Changes'; }, 2000);
+  });
 }
 
 function _buildAutomationLog(sk) {

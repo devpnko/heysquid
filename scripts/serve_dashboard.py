@@ -57,6 +57,15 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             moved = self._kanban_move(task_id, column)
             self._respond(200, {'ok': True, 'moved': moved})
 
+        elif self.path == '/api/automation/config':
+            content = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+            name = content.get('name', '')
+            if not name:
+                self._respond(400, {'error': 'name required'})
+                return
+            self._save_automation_config(name, content)
+            self._respond(200, {'ok': True})
+
         elif self.path == '/api/save-deco-layout':
             content = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
             self._save_json('dashboard_layout.json', content)
@@ -225,6 +234,53 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     json.dump(data, f, ensure_ascii=False, indent=2)
                 return True
         return False
+
+    def _save_automation_config(self, name, content):
+        from datetime import datetime, timedelta
+        global _automations_cache
+
+        # 1. Update skills_config.json
+        config_path = os.path.join(DATA_DIR, 'skills_config.json')
+        try:
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            config = {}
+        fields = {k: v for k, v in content.items() if k != 'name'}
+        config.setdefault(name, {}).update(fields)
+        with open(config_path, 'w') as f:
+            json.dump(config, f, ensure_ascii=False, indent=2)
+
+        # 2. Update agent_status.json automations
+        status_path = os.path.join(DATA_DIR, 'agent_status.json')
+        try:
+            with open(status_path, 'r') as f:
+                data = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            data = {}
+        automations = data.get('automations', data.get('skills', {}))
+        if name in automations:
+            for key in ('schedule', 'enabled', 'description', 'workspace'):
+                if key in content:
+                    automations[name][key] = content[key]
+            # Recompute next_run on schedule change
+            if 'schedule' in content and automations[name].get('trigger') == 'schedule':
+                try:
+                    now = datetime.now()
+                    h, m = content['schedule'].split(':')
+                    next_dt = now.replace(hour=int(h), minute=int(m), second=0, microsecond=0)
+                    if next_dt <= now:
+                        next_dt += timedelta(days=1)
+                    automations[name]['next_run'] = next_dt.strftime('%Y-%m-%dT%H:%M')
+                except (ValueError, IndexError):
+                    pass
+            data['automations'] = automations
+            with open(status_path, 'w') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+
+        # 3. Update server cache
+        if automations:
+            _automations_cache = automations
 
     def _update_agent_status(self, key, value):
         path = os.path.join(DATA_DIR, 'agent_status.json')
