@@ -139,6 +139,13 @@ def reply_broadcast(chat_id, message_id, text):
 
         save_bot_response(chat_id, text, ids, channel="broadcast")
 
+        # Kanban: move TODO cards to DONE (conversation complete)
+        try:
+            from ..dashboard.kanban import update_kanban_by_message_ids, COL_DONE, COL_TODO
+            update_kanban_by_message_ids(ids, COL_DONE, from_column=COL_TODO)
+        except Exception:
+            pass
+
     return success
 
 
@@ -389,18 +396,23 @@ def check_telegram():
 
         _dashboard_log('pm', f'Message received ({len(pending)} pending)')
 
-        # Kanban: create Todo cards for new tasks
+        # Kanban: merge into active card or create new Todo card
         try:
-            from ..dashboard.kanban import add_kanban_task, COL_TODO
+            from ..dashboard.kanban import add_kanban_task, append_message_to_active_card, COL_TODO
             for task in pending:
-                title = (task.get("text") or "New task")[:80]
-                add_kanban_task(
-                    title=title,
-                    column=COL_TODO,
-                    source_message_ids=[task["message_id"]],
-                    chat_id=task.get("chat_id"),
-                    tags=[f"workspace:{task['workspace']}"] if task.get("workspace") else [],
-                )
+                title = (task.get("instruction") or "New task")[:80]
+                chat_id = task.get("chat_id")
+                msg_id = task["message_id"]
+
+                merged = append_message_to_active_card(chat_id, msg_id, title)
+                if not merged:
+                    add_kanban_task(
+                        title=title,
+                        column=COL_TODO,
+                        source_message_ids=[msg_id],
+                        chat_id=chat_id,
+                        tags=[f"workspace:{task['workspace']}"] if task.get("workspace") else [],
+                    )
         except Exception:
             pass
 
@@ -512,6 +524,120 @@ def combine_tasks(pending_tasks):
         "stale_resume": is_stale_resume,
         "workspace": detected_workspace
     }
+
+
+def pick_next_task(pending_tasks):
+    """1개 작업 선택. WAITING 카드에 대한 답장 우선, 그 다음 oldest TODO.
+
+    Returns:
+        dict: {task, waiting_card, remaining} or None
+    """
+    if not pending_tasks:
+        return None
+
+    # Phase 1: WAITING 카드 reply 매칭
+    try:
+        from ..dashboard._store import store as _dashboard_store
+
+        kanban_data = _dashboard_store.load("kanban")
+        waiting_cards = [t for t in kanban_data.get("tasks", []) if t["column"] == "waiting"]
+
+        if waiting_cards:
+            all_msgs = load_telegram_messages().get("messages", [])
+            # sent_message_id → WAITING card mapping
+            waiting_map = {}
+            for card in waiting_cards:
+                for sid in (card.get("waiting_sent_ids") or []):
+                    waiting_map[sid] = card
+
+            for i, task in enumerate(pending_tasks):
+                msg = next((m for m in all_msgs if m["message_id"] == task["message_id"]), None)
+                if not msg:
+                    continue
+                reply_to = msg.get("reply_to_message_id")
+                if reply_to and reply_to in waiting_map:
+                    remaining = pending_tasks[:i] + pending_tasks[i+1:]
+                    return {"task": task, "waiting_card": waiting_map[reply_to], "remaining": remaining}
+
+            # Fallback: 1개 WAITING + 1개 pending → auto-match (하나뿐이면 자명)
+            if len(waiting_cards) == 1 and len(pending_tasks) == 1:
+                return {"task": pending_tasks[0], "waiting_card": waiting_cards[0], "remaining": []}
+    except Exception as e:
+        print(f"[WARN] WAITING 매칭 실패: {e}")
+
+    # Phase 2: oldest TODO
+    sorted_tasks = sorted(pending_tasks, key=lambda x: x['timestamp'])
+    return {"task": sorted_tasks[0], "waiting_card": None, "remaining": sorted_tasks[1:]}
+
+
+def suggest_card_merge(chat_id):
+    """같은 chat_id의 활성 카드가 여러 개면 병합 제안 텍스트 반환.
+
+    Returns:
+        dict or None: {
+            "text": 사용자에게 보낼 제안 메시지,
+            "cards": 카드 리스트,
+            "target_id": 가장 오래된 카드 ID,
+            "source_ids": 나머지 카드 ID 리스트,
+        }
+    """
+    from ..dashboard.kanban import get_mergeable_cards
+    cards = get_mergeable_cards(chat_id)
+    if len(cards) < 2:
+        return None
+
+    target = cards[0]  # oldest
+    sources = cards[1:]
+
+    lines = [f"칸반에 활성 카드가 {len(cards)}개 있어. 하나로 합칠까?"]
+    for i, c in enumerate(cards):
+        col = c["column"][:4].upper()
+        title = c.get("title", "")[:40]
+        marker = " ← 여기에 합침" if i == 0 else ""
+        lines.append(f"  {i+1}. [{col}] {title}{marker}")
+    lines.append("")
+    lines.append('"응" → 전부 합침 / "아니" → 그냥 진행')
+
+    return {
+        "text": "\n".join(lines),
+        "cards": cards,
+        "target_id": target["id"],
+        "source_ids": [c["id"] for c in sources],
+    }
+
+
+def ask_and_wait(chat_id, message_id, text):
+    """PM이 질문 전송 + 칸반 IN_PROGRESS→WAITING + working lock 해제.
+
+    reply_broadcast와 달리 processed=True 안 함 (아직 작업 미완료).
+    """
+    ids = message_id if isinstance(message_id, list) else [message_id]
+
+    # 1. 전송 (sent_message_id 캡처)
+    from ..channels.telegram import send_message_sync
+    result = send_message_sync(chat_id, text, _save=False)
+    sent_message_id = result if isinstance(result, int) else None
+
+    if not result:
+        return False
+
+    # 2. 봇 응답 저장
+    save_bot_response(chat_id, text, ids, channel="broadcast",
+                      sent_message_id=sent_message_id)
+
+    # 3. 칸반: WAITING 전환
+    try:
+        from ..dashboard.kanban import set_task_waiting, get_active_kanban_task_id
+        task_id = get_active_kanban_task_id()
+        if task_id:
+            sent_ids = [sent_message_id] if sent_message_id else []
+            set_task_waiting(task_id, sent_ids, reason=f"Waiting: {text[:50]}")
+    except Exception:
+        pass
+
+    # 4. working lock 해제 (다른 TODO 처리 가능하게)
+    remove_working_lock(transition_to_waiting=True)
+    return True
 
 
 def poll_new_messages():

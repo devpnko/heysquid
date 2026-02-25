@@ -64,6 +64,51 @@ mark_done_telegram(message_ids)
 remove_working_lock()
 ```
 
+## 작업 큐 모드 (Task Queue)
+
+check_telegram()이 여러 메시지를 반환하면, combine_tasks() 대신 pick_next_task()로 **1개씩** 처리한다.
+
+### 흐름
+
+1. `pending = check_telegram()` — 미처리 메시지 전부 반환 (TODO 카드 자동 생성)
+2. `picked = pick_next_task(pending)` — 1개 선택 (WAITING 답장 우선)
+3. picked["waiting_card"]가 있으면 → WAITING 카드 컨텍스트 복원 후 재개
+4. 없으면 → 새 작업 처리 (create_working_lock → 실행 → report_telegram)
+5. 완료 후 picked["remaining"]이 있으면 → 2번으로 (다음 작업)
+6. 없으면 → 대기 루프
+
+### 카드 병합 제안
+
+check_telegram() 후 pending이 있으면, 작업 시작 전에 병합 기회를 확인:
+
+```python
+from telegram_bot import suggest_card_merge
+suggestion = suggest_card_merge(chat_id)
+if suggestion and len(suggestion["cards"]) >= 3:
+    # 카드 3개 이상이면 제안 (2개는 자동 병합이 처리하므로 제안 불필요)
+    ask_and_wait(chat_id, message_ids, suggestion["text"])
+    # 사용자 답장 시 merge 실행 또는 스킵
+```
+
+**제안 기준**: 활성 카드 3개 이상일 때만.
+2개는 `append_message_to_active_card()`가 자동 처리하므로 별도 제안 불필요.
+
+### WAITING 전환
+
+PM이 사용자에게 확인/피드백이 필요할 때:
+
+```python
+ask_and_wait(chat_id, message_ids, "이렇게 진행할까요?")
+# → 칸반: IN_PROGRESS → WAITING (sent_message_id 저장)
+# → working lock 해제 (다른 TODO 처리 가능)
+```
+
+### WAITING 재개
+
+사용자가 답장하면 pick_next_task()가 자동 매칭:
+- reply_to_message_id → WAITING 카드의 waiting_sent_ids 비교
+- 매칭 성공 → picked["waiting_card"]에 원래 컨텍스트(activity_log, instruction 등)
+
 ## 판단 기준
 
 | 메시지 유형 | 모드 | 예시 |
