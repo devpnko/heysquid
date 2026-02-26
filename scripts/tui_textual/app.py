@@ -16,6 +16,7 @@ from scripts.tui_textual.screens.log import LogScreen
 from scripts.tui_textual.screens.skill import SkillScreen
 from scripts.tui_textual.widgets.chat_input import ChatInput
 from scripts.tui_textual.widgets.command_input import CommandInput
+from scripts.tui_textual.widgets.kanban_input import KanbanInput
 from scripts.tui_textual.commands import send_chat_message, execute_command
 from scripts.tui_textual.data_poller import load_stream_lines, STREAM_BUFFER_SIZE
 
@@ -115,10 +116,15 @@ class SquidApp(App):
         mode_map = {MODE_CHAT: "chat", MODE_KANBAN: "kanban", MODE_SQUAD: "squad", MODE_LOG: "log", MODE_SKILL: "skill"}
         self._mode = new_mode
         self.switch_screen(mode_map[new_mode])
-        # Chat 모드로 돌아오면 Input에 포커스
+        # Chat/Kanban 모드로 전환 시 입력창에 포커스
         if new_mode == MODE_CHAT:
             try:
                 self.screen.query_one(ChatInput).focus()
+            except Exception:
+                pass
+        elif new_mode == MODE_KANBAN:
+            try:
+                self.screen.query_one(KanbanInput).focus()
             except Exception:
                 pass
         # 전환 후 즉시 데이터 로드
@@ -166,19 +172,26 @@ class SquidApp(App):
                     return
 
     def action_quit_app(self) -> None:
-        """q → 종료 (Chat 모드에서 입력 중이면 무시)"""
+        """q → 종료 (Chat/Kanban 입력 중이면 무시)"""
         if isinstance(self.screen, ChatScreen):
             try:
                 input_widget = self.screen.query_one(ChatInput)
                 if input_widget.text:
-                    return  # 입력 중이면 q를 문자로 처리
+                    return
+            except Exception:
+                pass
+        elif isinstance(self.screen, KanbanScreen):
+            try:
+                input_widget = self.screen.query_one(KanbanInput)
+                if input_widget.value:
+                    return
             except Exception:
                 pass
         self.exit()
 
     def action_command_mode(self) -> None:
-        """Squad/Log/Skill/Kanban 모드에서 / 커맨드 모드"""
-        if isinstance(self.screen, (KanbanScreen, SquadScreen, LogScreen, SkillScreen)):
+        """Squad/Log/Skill 모드에서 / 커맨드 모드 (칸반은 전용 입력 사용)"""
+        if isinstance(self.screen, (SquadScreen, LogScreen, SkillScreen)):
             try:
                 cmd_input = self.screen.query_one(CommandInput)
                 cmd_input.show()
@@ -220,7 +233,14 @@ class SquidApp(App):
         self._poll_data()
 
     def on_command_input_command_submitted(self, event: CommandInput.CommandSubmitted) -> None:
-        """커맨드 입력 제출"""
+        """커맨드 입력 제출 (Squad/Log/Skill)"""
+        result = execute_command(event.value, self._stream_buffer)
+        if result:
+            self._set_flash(result)
+        self._poll_data()
+
+    def on_kanban_input_kanban_command_submitted(self, event: KanbanInput.KanbanCommandSubmitted) -> None:
+        """칸반 전용 커맨드 제출 — / 없이 바로 실행"""
         result = execute_command(event.value, self._stream_buffer)
         if result:
             self._set_flash(result)

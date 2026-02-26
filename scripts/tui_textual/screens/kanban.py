@@ -6,7 +6,7 @@ from textual.widgets import Static
 from textual.containers import Horizontal, VerticalScroll
 
 from ..widgets.agent_bar import AgentCompactBar
-from ..widgets.command_input import CommandInput
+from ..widgets.kanban_input import KanbanInput
 from ..data_poller import load_agent_status, is_executor_live
 from ..colors import AGENT_COLORS
 
@@ -71,9 +71,9 @@ class KanbanScreen(Screen):
                 with VerticalScroll(classes="kanban-col", id=f"kcol-{key}"):
                     yield Static(f"[bold {color}]{label} (0)[/bold {color}]", classes="kanban-col-header", id=f"khead-{key}")
                     yield Static("", classes="kanban-col-body", id=f"kbody-{key}")
-        yield CommandInput(id="kanban-cmd")
+        yield KanbanInput(id="kanban-cmd")
         yield Static(
-            "[dim] q:quit  Ctrl+1~5:mode  Ctrl+\u2190\u2192  /cmd  drag+Ctrl+C:복사[/dim]",
+            "[dim] q:quit  Ctrl+1~5:mode  Tab:자동완성  Ctrl+C:복사[/dim]",
             id="kanban-status-bar",
         )
 
@@ -132,12 +132,13 @@ class KanbanScreen(Screen):
             runs = sk.get("run_count", 0)
             groups["automation"].append(f"{icon} {name}{sched_s}\n  [dim]runs:{runs}[/dim]")
 
-        # Task cards
+        # Task cards — assign sequential numbers (non-done, non-automation)
+        card_num = 0
         for task in tasks:
             col = task.get("column", "todo")
             if col not in groups:
                 continue
-            title = task.get("title", "")[:30]
+            title = task.get("title", "")[:28]
             tags = task.get("tags", [])
             tag_s = " ".join(f"[dim]#{t}[/dim]" for t in tags[:2]) if tags else ""
             updated = task.get("updated_at") or ""
@@ -145,7 +146,13 @@ class KanbanScreen(Screen):
             logs_n = len(task.get("activity_log", []))
             result = task.get("result")
 
-            card = title
+            # Number non-done/non-automation cards
+            if col not in ("done", "automation"):
+                sid = task.get("short_id", f"#{card_num + 1}")
+                card_num += 1
+                card = f"[bold cyan]{sid}[/bold cyan] {title}"
+            else:
+                card = title
             if tag_s:
                 card += f"\n  {tag_s}"
             meta = []
