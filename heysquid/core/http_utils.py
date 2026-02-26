@@ -57,6 +57,27 @@ def http_post_json(
         return {"raw": r.text, "status_code": r.status_code}
 
 
+def http_put_json(
+    url: str,
+    payload: dict,
+    token: str = None,
+    headers: dict = None,
+    timeout: int = DEFAULT_TIMEOUT,
+) -> dict:
+    """PUT JSON 요청."""
+    h = {"Content-Type": "application/json"}
+    if token:
+        h["Authorization"] = f"Bearer {token}"
+    if headers:
+        h.update(headers)
+    r = requests.put(url, json=payload, headers=h, timeout=timeout)
+    r.raise_for_status()
+    try:
+        return r.json()
+    except Exception:
+        return {"raw": r.text, "status_code": r.status_code}
+
+
 def http_post_form(
     url: str,
     data: dict,
