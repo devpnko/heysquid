@@ -26,9 +26,7 @@ heysquid/
 │   ├── _base.py           # core/plugin_loader 위임
 │   ├── _http.py           # core/http_utils 위임 (backward compat)
 │   ├── GUIDE.md           # 이 파일
-│   ├── deep_work/
-│   ├── marketing/
-│   └── saju_fortune/
+│   └── hello_world/       # 예시 스킬 (새 스킬 작성 참고용)
 ```
 
 ## 새 Automation 만들기

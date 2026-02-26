@@ -14,6 +14,14 @@ venv/
 # 개인 도구 (패키지 미포함)
 private/
 
+# 개인 플러그인 (로컬 전용, 공개 레포에서 제외)
+# auto-discovery로 동작하므로 폴더만 넣으면 됨
+heysquid/skills/marketing/
+heysquid/skills/saju_fortune/
+heysquid/skills/deep_work/
+heysquid/automations/briefing/
+heysquid/automations/threads_post/
+
 # 개인 런타임 데이터
 data/
 tasks/
