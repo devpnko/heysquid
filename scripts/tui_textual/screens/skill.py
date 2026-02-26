@@ -6,6 +6,7 @@ from textual.widgets import Static
 from textual.containers import VerticalScroll
 
 from ..widgets.agent_bar import AgentCompactBar
+from ..widgets.tab_bar import TabBar
 from ..widgets.command_input import CommandInput
 from ..data_poller import load_agent_status, is_executor_live
 from ..colors import AGENT_COLORS
@@ -47,6 +48,7 @@ class SkillScreen(Screen):
     """
 
     def compose(self) -> ComposeResult:
+        yield TabBar(active=4, id="skill-tab-bar")
         yield Static(self._header_text(), id="skill-header")
         yield AgentCompactBar()
         yield Static("\u2500" * 120, id="skill-sep-top")

@@ -8,6 +8,7 @@ from textual.containers import Horizontal, Vertical
 from heysquid.core.agents import AGENTS, KRAKEN_CREW
 
 from ..widgets.agent_panel import AgentPanel
+from ..widgets.tab_bar import TabBar
 from ..widgets.squad_view import SquadHistoryList, SquadEntryView
 from ..widgets.command_input import CommandInput
 from ..data_poller import load_agent_status, load_squad_history, is_executor_live
@@ -55,6 +56,7 @@ class SquadScreen(Screen):
         self._selected_history_id: str | None = None  # None = active 토론
 
     def compose(self) -> ComposeResult:
+        yield TabBar(active=2, id="squad-tab-bar")
         yield Static(self._header_text(), id="squad-header")
         yield Static("", id="squad-subheader")
         yield Static("─" * 120, id="squad-sep")

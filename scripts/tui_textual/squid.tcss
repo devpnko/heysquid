@@ -1,18 +1,27 @@
 /* SQUID TUI — Textual CSS */
 
 Screen {
-    background: $background;
+    background: #0a0a1a;
+}
+
+/* === Tab Bar === */
+
+TabBar {
+    height: 1;
+    background: #12122a;
+    border-bottom: solid #2a2a50;
 }
 
 /* === Chat Mode === */
 
 #chat-header {
-    background: $surface;
+    background: #0a0a1a;
     color: $text;
+    padding: 0 1;
 }
 
 #chat-sep-top, #chat-sep-bottom {
-    color: $text-muted;
+    color: #2a2a50;
     height: 1;
 }
 
@@ -22,7 +31,7 @@ Screen {
 
 .date-sep {
     text-align: center;
-    color: $text-muted;
+    color: #555570;
     margin: 1 0;
 }
 
@@ -37,13 +46,37 @@ Screen {
 ChatInput {
     height: 5;
     margin: 0 1;
-    border: round $accent;
-    background: $boost;
+    border: round #00d4ff;
+    background: #1a1a35;
     padding: 0 1;
 }
 
 ChatInput:focus {
-    border: round $accent-lighten-2;
+    border: round #00d4ff;
+}
+
+/* === Kanban Mode === */
+
+.kanban-col {
+    background: #0a0a1a;
+}
+
+.kanban-col-header {
+    background: #12122a;
+}
+
+.kanban-col-body {
+    padding: 1 1;
+}
+
+KanbanInput {
+    border: solid #2a2a50;
+    background: #12122a;
+    color: #00d4ff;
+}
+
+KanbanInput:focus {
+    border: solid #00d4ff;
 }
 
 /* === Squad Mode === */
@@ -51,11 +84,12 @@ ChatInput:focus {
 #squad-agent-panel {
     scrollbar-size: 1 1;
     padding: 0 1;
+    background: #12122a;
 }
 
 #squad-history-list {
     height: 8;
-    border-bottom: solid $surface;
+    border-bottom: solid #2a2a50;
     scrollbar-size: 1 1;
 }
 
@@ -79,7 +113,7 @@ ChatInput:focus {
 
 CommandInput {
     border: none;
-    background: $boost;
+    background: #12122a;
     color: #00d4ff;
 }
 
@@ -89,6 +123,13 @@ CommandInput:focus {
 
 /* === Status Bars === */
 
-#chat-status-bar, #squad-status-bar, #log-status-bar {
-    background: $surface;
+#chat-status-bar, #squad-status-bar, #log-status-bar, #skill-status-bar, #kanban-status-bar {
+    background: #12122a;
+    border-top: solid #2a2a50;
+}
+
+/* === Agent Bar === */
+
+AgentCompactBar {
+    background: #0a0a1a;
 }

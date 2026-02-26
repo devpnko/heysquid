@@ -17,6 +17,7 @@ from scripts.tui_textual.screens.skill import SkillScreen
 from scripts.tui_textual.widgets.chat_input import ChatInput
 from scripts.tui_textual.widgets.command_input import CommandInput
 from scripts.tui_textual.widgets.kanban_input import KanbanInput
+from scripts.tui_textual.widgets.tab_bar import TabBar
 from scripts.tui_textual.commands import send_chat_message, execute_command
 from scripts.tui_textual.data_poller import load_stream_lines, STREAM_BUFFER_SIZE
 
@@ -116,6 +117,12 @@ class SquidApp(App):
         mode_map = {MODE_CHAT: "chat", MODE_KANBAN: "kanban", MODE_SQUAD: "squad", MODE_LOG: "log", MODE_SKILL: "skill"}
         self._mode = new_mode
         self.switch_screen(mode_map[new_mode])
+        # TabBar 활성 탭 업데이트
+        try:
+            tab_bar = self.screen.query_one(TabBar)
+            tab_bar.set_active(new_mode)
+        except Exception:
+            pass
         # Chat/Kanban 모드로 전환 시 입력창에 포커스
         if new_mode == MODE_CHAT:
             try:

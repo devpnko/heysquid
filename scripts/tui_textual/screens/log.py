@@ -10,6 +10,7 @@ from textual.containers import Vertical, VerticalScroll
 from heysquid.core.agents import AGENTS
 
 from ..widgets.log_view import MissionLogView, StreamLogView
+from ..widgets.tab_bar import TabBar
 from ..widgets.command_input import CommandInput
 from ..data_poller import load_agent_status, is_executor_live
 from ..colors import AGENT_COLORS
@@ -45,6 +46,7 @@ class LogScreen(Screen):
     """
 
     def compose(self) -> ComposeResult:
+        yield TabBar(active=3, id="log-tab-bar")
         yield Static(self._header_text(), id="log-header")
         yield Static("─" * 120, id="log-sep-top")
         yield MissionLogView(id="log-mission")

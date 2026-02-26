@@ -5,6 +5,7 @@ from textual.app import ComposeResult
 from textual.widgets import Static, Header
 
 from ..widgets.agent_bar import AgentCompactBar
+from ..widgets.tab_bar import TabBar
 from ..widgets.message_view import MessageView
 from ..widgets.chat_input import ChatInput
 from ..widgets.command_input import COMMANDS
@@ -48,6 +49,7 @@ class ChatScreen(Screen):
     """
 
     def compose(self) -> ComposeResult:
+        yield TabBar(active=0, id="chat-tab-bar")
         yield Static(self._header_text(), id="chat-header")
         yield AgentCompactBar()
         yield Static("─" * 120, id="chat-sep-top")

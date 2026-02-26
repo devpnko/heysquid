@@ -6,6 +6,7 @@ from textual.widgets import Static
 from textual.containers import Horizontal, VerticalScroll
 
 from ..widgets.agent_bar import AgentCompactBar
+from ..widgets.tab_bar import TabBar
 from ..widgets.kanban_input import KanbanInput
 from ..data_poller import load_agent_status, is_executor_live
 from ..colors import AGENT_COLORS
@@ -63,6 +64,7 @@ class KanbanScreen(Screen):
     """
 
     def compose(self) -> ComposeResult:
+        yield TabBar(active=1, id="kanban-tab-bar")
         yield Static(self._header_text(), id="kanban-header")
         yield AgentCompactBar()
         yield Static("\u2500" * 200, id="kanban-sep-top")
@@ -121,24 +123,35 @@ class KanbanScreen(Screen):
         # 컬럼별 카드 텍스트 수집
         groups: dict[str, list[str]] = {key: [] for key, _, _ in _COLUMNS}
 
-        # Automations
+        # Automations — 카드 스타일
         for name, sk in skills.items():
             if not sk.get("enabled", True):
                 continue
             st = sk.get("status", "idle")
-            icon = {"idle": "[dim]\u2713[/dim]", "running": "[yellow]\u23f3[/yellow]", "error": "[red]\u2717[/red]"}.get(st, st)
+            icon = {"idle": "[dim]✓[/dim]", "running": "[yellow]⏳[/yellow]", "error": "[red]✗[/red]"}.get(st, st)
             sched = sk.get("schedule", "")
             sched_s = f" {sched}" if sched else ""
             runs = sk.get("run_count", 0)
-            groups["automation"].append(f"{icon} {name}{sched_s}\n  [dim]runs:{runs}[/dim]")
+            card = f"[#cc66ff]╭─[/#cc66ff]\n"
+            card += f"[#cc66ff]│[/#cc66ff] {icon} [bold]{name}[/bold]{sched_s}\n"
+            card += f"[#cc66ff]│[/#cc66ff] [dim]runs:{runs}[/dim]\n"
+            card += f"[#cc66ff]╰─[/#cc66ff]"
+            groups["automation"].append(card)
 
-        # Task cards — assign sequential numbers (non-done, non-automation)
+        # Task cards — 카드 스타일
+        col_border = {
+            "todo": "#00d4ff",
+            "in_progress": "#ff9f43",
+            "waiting": "#ffd32a",
+            "done": "#26de81",
+        }
         card_num = 0
         for task in tasks:
             col = task.get("column", "todo")
             if col not in groups:
                 continue
-            title = task.get("title", "")[:28]
+            bc = col_border.get(col, "#555555")
+            title = task.get("title", "")[:26]
             tags = task.get("tags", [])
             tag_s = " ".join(f"[dim]#{t}[/dim]" for t in tags[:2]) if tags else ""
             updated = task.get("updated_at") or ""
@@ -146,25 +159,41 @@ class KanbanScreen(Screen):
             logs_n = len(task.get("activity_log", []))
             result = task.get("result")
 
-            # Number non-done/non-automation cards
+            lines = [f"[{bc}]╭─[/{bc}]"]
+
+            # ID + title
             if col not in ("done", "automation"):
                 sid = task.get("short_id", f"#{card_num + 1}")
                 card_num += 1
-                card = f"[bold cyan]{sid}[/bold cyan] {title}"
+                lines.append(f"[{bc}]│[/{bc}] [bold cyan]{sid}[/bold cyan] {title}")
             else:
-                card = title
+                lines.append(f"[{bc}]│[/{bc}] [dim]✓[/dim] {title}")
+
+            # tags
             if tag_s:
-                card += f"\n  {tag_s}"
+                lines.append(f"[{bc}]│[/{bc}]  {tag_s}")
+
+            # meta
             meta = []
             if time_s:
                 meta.append(time_s)
             if logs_n:
                 meta.append(f"{logs_n}log")
             if result:
-                meta.append("[green]\u2713[/green]")
+                meta.append("[green]✓[/green]")
             if meta:
-                card += f"\n  [dim]{' '.join(meta)}[/dim]"
-            groups[col].append(card)
+                lines.append(f"[{bc}]│[/{bc}]  [dim]{' '.join(meta)}[/dim]")
+
+            # progress bar for in_progress
+            if col == "in_progress":
+                lines.append(f"[{bc}]│[/{bc}]  [{bc}]▰▰▰▰▰▱▱▱[/{bc}]")
+
+            # waiting label
+            if col == "waiting":
+                lines.append(f"[{bc}]│[/{bc}]  [#ffd32a]⏳ 대기 중[/#ffd32a]")
+
+            lines.append(f"[{bc}]╰─[/{bc}]")
+            groups[col].append("\n".join(lines))
 
         # 각 컬럼 위젯 업데이트
         for key, label, color in _COLUMNS:
@@ -182,8 +211,7 @@ class KanbanScreen(Screen):
             try:
                 body = self.query_one(f"#kbody-{key}", Static)
                 if items:
-                    sep = f"\n[dim]{'─' * 20}[/dim]\n"
-                    body.update(sep.join(items))
+                    body.update("\n".join(items))
                 else:
                     body.update("[dim](empty)[/dim]")
             except Exception:
