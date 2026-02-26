@@ -1,5 +1,6 @@
 """KanbanInput — 칸반 전용 커맨드 입력 (항상 표시, / 불필요)"""
 
+from textual.binding import Binding
 from textual.widgets import Input
 from textual.message import Message
 
@@ -12,11 +13,14 @@ class KanbanInput(Input):
 
     DEFAULT_CSS = """
     KanbanInput {
-        dock: bottom;
-        height: 1;
+        height: auto;
         margin: 0 1;
     }
     """
+
+    BINDINGS = [
+        Binding("tab", "tab_complete", "Tab Complete", show=False),
+    ]
 
     class KanbanCommandSubmitted(Message):
         """칸반 커맨드 제출 이벤트"""
@@ -32,22 +36,22 @@ class KanbanInput(Input):
         self._tab_index = 0
         self._tab_candidates: list[str] = []
 
-    def try_tab_complete(self) -> bool:
-        """칸반 커맨드 자동완성."""
+    def action_tab_complete(self) -> None:
+        """Tab 키 → 칸반 커맨드 자동완성"""
         text = self.value.strip()
         # 이미 완성된 커맨드 → cycling
         if self.value.endswith(" ") and text.lower() in KANBAN_COMMANDS and self._tab_candidates:
             selected = self._tab_candidates[self._tab_index % len(self._tab_candidates)]
             self.value = selected + " "
             self._tab_index += 1
-            return True
+            return
         # 빈 입력 → 전체 목록
         if not text:
             self._tab_candidates = list(KANBAN_COMMANDS)
             selected = self._tab_candidates[self._tab_index % len(self._tab_candidates)]
             self.value = selected + " "
             self._tab_index += 1
-            return True
+            return
         # partial → 필터링
         candidates = [c for c in KANBAN_COMMANDS if c.startswith(text.lower())]
         if candidates:
@@ -55,8 +59,6 @@ class KanbanInput(Input):
             selected = candidates[self._tab_index % len(candidates)]
             self.value = selected + " "
             self._tab_index += 1
-            return True
-        return False
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         """Enter 키 처리"""
@@ -66,13 +68,7 @@ class KanbanInput(Input):
             self.post_message(KanbanInput.KanbanCommandSubmitted(text))
         self.value = ""
 
-    def _on_key(self, event) -> None:
-        """Tab 자동완성"""
-        if event.key == "tab":
-            if self.try_tab_complete():
-                event.stop()
-                event.prevent_default()
-                return
-        if event.key not in ("tab",):
-            self._tab_index = 0
-            self._tab_candidates = []
+    def on_input_changed(self, event: Input.Changed) -> None:
+        """입력 변경 시 탭 상태 리셋"""
+        self._tab_index = 0
+        self._tab_candidates = []

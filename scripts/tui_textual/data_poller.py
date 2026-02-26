@@ -17,12 +17,16 @@ log = logging.getLogger("tui.poller")
 
 # --- 파일 경로 ---
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-STATUS_FILE = os.path.join(ROOT, "data", "agent_status.json")
+DATA_DIR = os.path.join(ROOT, "data")
+STATUS_FILE = os.path.join(DATA_DIR, "agent_status.json")
+KANBAN_FILE = os.path.join(DATA_DIR, "kanban.json")
+AUTOMATIONS_FILE = os.path.join(DATA_DIR, "automations.json")
+WORKSPACES_FILE = os.path.join(DATA_DIR, "workspaces.json")
 STREAM_FILE = os.path.join(ROOT, "logs", "executor.stream.jsonl")
-MESSAGES_FILE = os.path.join(ROOT, "data", "messages.json")
-EXECUTOR_LOCK = os.path.join(ROOT, "data", "executor.lock")
+MESSAGES_FILE = os.path.join(DATA_DIR, "messages.json")
+EXECUTOR_LOCK = os.path.join(DATA_DIR, "executor.lock")
 
-SQUAD_HISTORY_FILE = os.path.join(ROOT, "data", "squad_history.json")
+SQUAD_HISTORY_FILE = os.path.join(DATA_DIR, "squad_history.json")
 CHAT_MAX_MESSAGES = 200
 STREAM_BUFFER_SIZE = 200
 
@@ -54,11 +58,29 @@ def _safe_load_json(path: str, cache: dict, key: str = "data"):
 
 
 _status_cache: dict = {"mtime": 0.0, "data": {}}
+_kanban_cache: dict = {"mtime": 0.0, "data": {}}
+_automations_cache: dict = {"mtime": 0.0, "data": {}}
+_workspaces_cache: dict = {"mtime": 0.0, "data": {}}
 
 
 def load_agent_status() -> dict:
-    """agent_status.json 로드 (mtime 기반 캐시, 자가 복구)"""
-    return _safe_load_json(STATUS_FILE, _status_cache)
+    """agent_status.json + 분리 파일(kanban/automations/workspaces) merge 로드."""
+    base = _safe_load_json(STATUS_FILE, _status_cache)
+
+    # 분리 파일 우선 (최신 데이터), 없으면 base fallback
+    kanban = _safe_load_json(KANBAN_FILE, _kanban_cache)
+    if kanban:
+        base["kanban"] = kanban
+
+    automations = _safe_load_json(AUTOMATIONS_FILE, _automations_cache)
+    if automations:
+        base["automations"] = automations
+
+    workspaces = _safe_load_json(WORKSPACES_FILE, _workspaces_cache)
+    if workspaces:
+        base["workspaces"] = workspaces
+
+    return base
 
 
 def is_executor_live() -> bool:

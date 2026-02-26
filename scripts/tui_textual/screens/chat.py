@@ -34,6 +34,7 @@ class ChatScreen(Screen):
         color: $surface;
     }
     #chat-status-bar {
+        dock: bottom;
         height: 1;
         background: $surface;
         padding: 0 1;

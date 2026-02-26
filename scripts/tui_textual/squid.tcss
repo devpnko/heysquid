@@ -9,7 +9,6 @@ Screen {
 TabBar {
     height: 1;
     background: #12122a;
-    border-bottom: solid #2a2a50;
 }
 
 /* === Chat Mode === */
@@ -61,22 +60,24 @@ ChatInput:focus {
     background: #0a0a1a;
 }
 
-.kanban-col-header {
-    background: #12122a;
-}
-
 .kanban-col-body {
-    padding: 1 1;
+    height: 1fr;
+    scrollbar-size: 1 1;
 }
 
 KanbanInput {
     border: solid #2a2a50;
-    background: #12122a;
+    background: #1a1a35;
     color: #00d4ff;
 }
 
 KanbanInput:focus {
     border: solid #00d4ff;
+}
+
+#kanban-info-panel {
+    background: #12122a;
+    scrollbar-size: 1 1;
 }
 
 /* === Squad Mode === */
@@ -125,7 +126,6 @@ CommandInput:focus {
 
 #chat-status-bar, #squad-status-bar, #log-status-bar, #skill-status-bar, #kanban-status-bar {
     background: #12122a;
-    border-top: solid #2a2a50;
 }
 
 /* === Agent Bar === */

@@ -7,6 +7,7 @@ from textual.containers import Horizontal, Vertical
 
 from heysquid.core.agents import AGENTS, KRAKEN_CREW
 
+from ..widgets.agent_bar import AgentCompactBar
 from ..widgets.agent_panel import AgentPanel
 from ..widgets.tab_bar import TabBar
 from ..widgets.squad_view import SquadHistoryList, SquadEntryView
@@ -58,6 +59,7 @@ class SquadScreen(Screen):
     def compose(self) -> ComposeResult:
         yield TabBar(active=2, id="squad-tab-bar")
         yield Static(self._header_text(), id="squad-header")
+        yield AgentCompactBar()
         yield Static("", id="squad-subheader")
         yield Static("─" * 120, id="squad-sep")
         with Horizontal(id="squad-body"):
@@ -83,6 +85,13 @@ class SquadScreen(Screen):
         try:
             header = self.query_one("#squad-header", Static)
             header.update(self._header_text())
+        except Exception:
+            pass
+
+        # Agent 컴팩트 바
+        try:
+            bar = self.query_one(AgentCompactBar)
+            bar.update_status(status)
         except Exception:
             pass
 

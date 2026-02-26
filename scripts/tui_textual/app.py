@@ -248,8 +248,16 @@ class SquidApp(App):
 
     def on_kanban_input_kanban_command_submitted(self, event: KanbanInput.KanbanCommandSubmitted) -> None:
         """칸반 전용 커맨드 제출 — / 없이 바로 실행"""
-        result = execute_command(event.value, self._stream_buffer)
-        if result:
+        cmd_text = event.value.strip()
+        is_info = cmd_text.lower().startswith("info")
+        result = execute_command(cmd_text, self._stream_buffer)
+        if result and is_info and isinstance(self.screen, KanbanScreen):
+            # info 결과는 info 패널에 표시
+            self.screen.show_info(result)
+        elif result:
+            # info 외 커맨드는 기존 flash 처리 + info 패널 숨기기
+            if isinstance(self.screen, KanbanScreen):
+                self.screen.hide_info()
             self._set_flash(result)
         self._poll_data()
 

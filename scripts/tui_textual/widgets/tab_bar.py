@@ -31,18 +31,18 @@ class TabBar(Widget):
         self._active = active
 
     def compose(self) -> ComposeResult:
-        yield Static(self._render(), id="tab-bar-content")
+        yield Static(self._build_tabs(), id="tab-bar-content")
 
     def set_active(self, index: int) -> None:
         """활성 탭 변경."""
         self._active = index
         try:
             content = self.query_one("#tab-bar-content", Static)
-            content.update(self._render())
+            content.update(self._build_tabs())
         except Exception:
             pass
 
-    def _render(self) -> str:
+    def _build_tabs(self) -> str:
         parts = []
         for i, (name, shortcut) in enumerate(TABS):
             if i == self._active:

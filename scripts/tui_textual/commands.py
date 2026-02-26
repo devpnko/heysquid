@@ -22,6 +22,12 @@ COMMAND_REGISTRY = {
     "resume":   {"desc": "executor 재시작"},
     "doctor":   {"desc": "시스템 진단"},
     "skill":    {"desc": "스킬 목록/실행"},
+    "merge":    {"desc": "칸반 카드 병합 (/merge K1 K2)"},
+    "done":     {"desc": "카드 Done 처리 (/done K1 또는 /done all)"},
+    "clean":    {"desc": "활성 카드 전부 Done 처리"},
+    "del":      {"desc": "카드 삭제 (/del K1)"},
+    "move":     {"desc": "카드 컬럼 이동 (/move K1 waiting)"},
+    "info":     {"desc": "카드 상세 보기 (/info K1)"},
     "squid":    {"desc": "Squid 토론 시작"},
     "kraken":   {"desc": "Kraken 토론 시작"},
     "endsquad": {"desc": "토론 종료"},
@@ -524,6 +530,181 @@ def _open_dashboard() -> str:
     return "대시보드 열림"
 
 
+def _get_numbered_cards() -> list[dict]:
+    """칸반에서 번호가 붙는 카드 목록 반환 (non-done, non-automation, 순서 보존)."""
+    from .data_poller import load_agent_status
+    status = load_agent_status()
+    tasks = status.get("kanban", {}).get("tasks", [])
+    return [t for t in tasks if t.get("column") not in ("done", "automation")]
+
+
+def _list_cards_display() -> str:
+    """활성 카드 K-ID 목록 문자열."""
+    cards = _get_numbered_cards()
+    if not cards:
+        return "활성 카드 없음"
+    lines = ["칸반 카드 목록:"]
+    for c in cards:
+        sid = c.get("short_id", "?")
+        col = c.get("column", "?")[:4].upper()
+        title = c.get("title", "")[:40]
+        lines.append(f"  {sid} [{col}] {title}")
+    return "\n".join(lines)
+
+
+def _resolve_args(args_str: str) -> list[dict] | str:
+    """공백 구분 K-ID들을 파싱하여 카드 리스트 반환. 실패 시 에러 문자열."""
+    from heysquid.dashboard.kanban import resolve_card
+    parts = args_str.strip().split()
+    cards = []
+    for p in parts:
+        card = resolve_card(p)
+        if not card:
+            return f"카드를 찾을 수 없음: {p}"
+        cards.append(card)
+    return cards
+
+
+def _merge_kanban_cards(args_str: str) -> str:
+    """칸반 카드 병합. /merge K1 K2 → K1을 K2에 병합."""
+    from heysquid.dashboard.kanban import resolve_card
+    parts = args_str.strip().split()
+    if len(parts) != 2:
+        return _list_cards_display() + "\n\n사용법: /merge <source> <target> (K-ID 또는 번호)"
+
+    # K-ID 또는 숫자 지원
+    def _find_card(token):
+        card = resolve_card(token)
+        if card:
+            return card
+        try:
+            num = int(token)
+            cards = _get_numbered_cards()
+            if 1 <= num <= len(cards):
+                return cards[num - 1]
+        except ValueError:
+            pass
+        return None
+
+    src = _find_card(parts[0])
+    tgt = _find_card(parts[1])
+    if not src:
+        return f"카드를 찾을 수 없음: {parts[0]}"
+    if not tgt:
+        return f"카드를 찾을 수 없음: {parts[1]}"
+    if src["id"] == tgt["id"]:
+        return "같은 카드끼리는 병합 불가"
+
+    from heysquid.dashboard.kanban import merge_kanban_tasks
+    ok = merge_kanban_tasks(src["id"], tgt["id"])
+    if ok:
+        src_sid = src.get("short_id", "?")
+        tgt_sid = tgt.get("short_id", "?")
+        return f"✓ {src_sid} → {tgt_sid} 병합 완료"
+    return "병합 실패 (카드를 찾을 수 없음)"
+
+
+def _done_kanban_card(args_str: str) -> str:
+    """카드 Done 처리. /done K1 또는 /done all"""
+    arg = args_str.strip().lower()
+    if not arg:
+        return _list_cards_display() + "\n\n사용법: /done <K-ID> 또는 /done all"
+    if arg == "all":
+        return _clean_kanban_cards()
+    resolved = _resolve_args(args_str)
+    if isinstance(resolved, str):
+        return resolved
+    from heysquid.dashboard.kanban import move_kanban_task
+    done_ids = []
+    for card in resolved:
+        if move_kanban_task(card["id"], "done"):
+            done_ids.append(card.get("short_id", card["id"]))
+    if done_ids:
+        return f"✓ {', '.join(done_ids)} Done 처리 완료"
+    return "처리 실패"
+
+
+def _clean_kanban_cards() -> str:
+    """활성 카드 전부 Done 처리."""
+    from heysquid.dashboard.kanban import move_kanban_task
+    cards = _get_numbered_cards()
+    if not cards:
+        return "활성 카드 없음 — 이미 깨끗!"
+    count = 0
+    for c in cards:
+        if move_kanban_task(c["id"], "done"):
+            count += 1
+    return f"✓ {count}개 카드 전부 Done 처리 완료"
+
+
+def _del_kanban_card(args_str: str) -> str:
+    """카드 삭제. /del K1"""
+    if not args_str.strip():
+        return _list_cards_display() + "\n\n사용법: /del <K-ID>"
+    resolved = _resolve_args(args_str)
+    if isinstance(resolved, str):
+        return resolved
+    from heysquid.dashboard.kanban import delete_kanban_task
+    deleted = []
+    for card in resolved:
+        if delete_kanban_task(card["id"]):
+            deleted.append(card.get("short_id", card["id"]))
+    if deleted:
+        return f"✓ {', '.join(deleted)} 삭제 완료"
+    return "삭제 실패"
+
+
+def _move_kanban_card(args_str: str) -> str:
+    """카드 컬럼 이동. /move K1 waiting"""
+    parts = args_str.strip().split()
+    if len(parts) != 2:
+        return "사용법: /move <K-ID> <컬럼>\n컬럼: todo, in_progress(ip), waiting(wait), done"
+    from heysquid.dashboard.kanban import resolve_card, move_kanban_task
+    card = resolve_card(parts[0])
+    if not card:
+        return f"카드를 찾을 수 없음: {parts[0]}"
+    col = parts[1].lower()
+    col_aliases = {"prog": "in_progress", "ip": "in_progress", "wait": "waiting", "tw": "todo"}
+    col = col_aliases.get(col, col)
+    if col not in ("todo", "in_progress", "waiting", "done"):
+        return f"잘못된 컬럼: {parts[1]}\n사용 가능: todo, in_progress(ip), waiting(wait), done"
+    sid = card.get("short_id", card["id"])
+    ok = move_kanban_task(card["id"], col)
+    if ok:
+        return f"✓ {sid} → {col}"
+    return "이동 실패"
+
+
+def _info_kanban_card(args_str: str) -> str:
+    """카드 상세 보기. /info K1"""
+    if not args_str.strip():
+        return _list_cards_display() + "\n\n사용법: /info <K-ID>"
+    from heysquid.dashboard.kanban import resolve_card
+    card = resolve_card(args_str.strip())
+    if not card:
+        return f"카드를 찾을 수 없음: {args_str.strip()}"
+    sid = card.get("short_id", "?")
+    lines = [
+        f"── {sid} ──",
+        f"제목: {card.get('title', '')}",
+        f"컬럼: {card.get('column', '?')}",
+        f"생성: {card.get('created_at', '?')}",
+        f"수정: {card.get('updated_at', '?')}",
+    ]
+    tags = card.get("tags", [])
+    if tags:
+        lines.append(f"태그: {', '.join(tags)}")
+    logs = card.get("activity_log", [])
+    if logs:
+        lines.append(f"로그: {len(logs)}개")
+        for entry in logs[-5:]:
+            lines.append(f"  [{entry.get('time','')}] {entry.get('agent','')}: {entry.get('message','')}")
+    result = card.get("result")
+    if result:
+        lines.append(f"결과: {str(result)[:100]}")
+    return "\n".join(lines)
+
+
 def dispatch_command(raw: str, stream_buffer: deque) -> str | None:
     """통합 커맨드 디스패치. '/cmd args' → handler 호출. 커맨드 아니면 None."""
     cmd = raw.strip()
@@ -547,6 +728,24 @@ def dispatch_command(raw: str, stream_buffer: deque) -> str | None:
 
     if name == "skill":
         return _run_skill_command(args)
+
+    if name == "merge":
+        return _merge_kanban_cards(args)
+
+    if name == "done":
+        return _done_kanban_card(args)
+
+    if name == "clean":
+        return _clean_kanban_cards()
+
+    if name == "del":
+        return _del_kanban_card(args)
+
+    if name == "move":
+        return _move_kanban_card(args)
+
+    if name == "info":
+        return _info_kanban_card(args)
 
     if name == "squid":
         return _start_squid_squad(args, stream_buffer)

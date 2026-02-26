@@ -9,6 +9,7 @@ from textual.containers import Vertical, VerticalScroll
 
 from heysquid.core.agents import AGENTS
 
+from ..widgets.agent_bar import AgentCompactBar
 from ..widgets.log_view import MissionLogView, StreamLogView
 from ..widgets.tab_bar import TabBar
 from ..widgets.command_input import CommandInput
@@ -48,6 +49,7 @@ class LogScreen(Screen):
     def compose(self) -> ComposeResult:
         yield TabBar(active=3, id="log-tab-bar")
         yield Static(self._header_text(), id="log-header")
+        yield AgentCompactBar()
         yield Static("─" * 120, id="log-sep-top")
         yield MissionLogView(id="log-mission")
         yield StreamLogView(id="log-stream")
@@ -62,6 +64,8 @@ class LogScreen(Screen):
 
     def refresh_data(self, stream_buffer: deque, flash: str = "") -> None:
         """폴링 데이터로 화면 갱신 — 각 섹션 독립적으로 보호"""
+        status = load_agent_status()
+
         # Stream Log 최우선 (가장 중요한 실시간 데이터)
         try:
             stream = self.query_one(StreamLogView)
@@ -69,9 +73,8 @@ class LogScreen(Screen):
         except Exception:
             pass
 
-        # Mission Log (agent_status 의존)
+        # Mission Log
         try:
-            status = load_agent_status()
             mission = self.query_one(MissionLogView)
             mission.update_log(status.get("mission_log", []))
         except Exception:
@@ -81,6 +84,13 @@ class LogScreen(Screen):
         try:
             header = self.query_one("#log-header", Static)
             header.update(self._header_text())
+        except Exception:
+            pass
+
+        # Agent 바
+        try:
+            bar = self.query_one(AgentCompactBar)
+            bar.update_status(status)
         except Exception:
             pass
 

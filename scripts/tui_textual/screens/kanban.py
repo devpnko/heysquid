@@ -1,9 +1,10 @@
-"""KanbanScreen — 칸반 보드 뷰 (가로 5컬럼, 읽기 전용)"""
+"""KanbanScreen — 칸반 보드 뷰 (가로 5컬럼)"""
 
+import unicodedata
 from textual.screen import Screen
 from textual.app import ComposeResult
 from textual.widgets import Static
-from textual.containers import Horizontal, VerticalScroll
+from textual.containers import Horizontal, Vertical, VerticalScroll
 
 from ..widgets.agent_bar import AgentCompactBar
 from ..widgets.tab_bar import TabBar
@@ -11,13 +12,24 @@ from ..widgets.kanban_input import KanbanInput
 from ..data_poller import load_agent_status, is_executor_live
 from ..colors import AGENT_COLORS
 
+
+def _trunc(text: str, max_cells: int) -> str:
+    """터미널 셀 폭 기준으로 텍스트 자르기 (한글=2cell)"""
+    width = 0
+    for i, ch in enumerate(text):
+        w = 2 if unicodedata.east_asian_width(ch) in ("W", "F") else 1
+        if width + w > max_cells:
+            return text[:i]
+        width += w
+    return text
+
 # 컬럼 정의: (key, short_label, color_hex)
 _COLUMNS = [
-    ("automation", "⚙️Auto", "#cc66ff"),
-    ("todo", "📥Todo", "#00d4ff"),
-    ("in_progress", "⚡Prog", "#ff9f43"),
-    ("waiting", "⏳Wait", "#ffd32a"),
-    ("done", "✅Done", "#26de81"),
+    ("automation", "Auto", "#cc66ff"),
+    ("todo", "Todo", "#00d4ff"),
+    ("in_progress", "Prog", "#ff9f43"),
+    ("waiting", "Wait", "#ffd32a"),
+    ("done", "Done", "#26de81"),
 ]
 
 
@@ -41,24 +53,26 @@ class KanbanScreen(Screen):
     .kanban-col {
         width: 1fr;
         height: 100%;
-        border-right: solid dimgray;
-    }
-    .kanban-col:last-child {
-        border-right: none;
     }
     .kanban-col-header {
         height: 1;
         padding: 0 1;
         text-align: center;
+        background: #12122a;
     }
     .kanban-col-body {
-        height: 1fr;
-        padding: 0;
+        padding: 0 1;
+    }
+    #kanban-info-panel {
+        height: auto;
+        max-height: 8;
+        padding: 0 1;
+        background: #12122a;
+        border-top: solid #2a2a50;
+        display: none;
     }
     #kanban-status-bar {
-        dock: bottom;
         height: 1;
-        background: $surface;
         padding: 0 1;
     }
     """
@@ -70,14 +84,34 @@ class KanbanScreen(Screen):
         yield Static("\u2500" * 200, id="kanban-sep-top")
         with Horizontal(id="kanban-board"):
             for key, label, color in _COLUMNS:
-                with VerticalScroll(classes="kanban-col", id=f"kcol-{key}"):
-                    yield Static(f"[bold {color}]{label} (0)[/bold {color}]", classes="kanban-col-header", id=f"khead-{key}")
-                    yield Static("", classes="kanban-col-body", id=f"kbody-{key}")
+                with Vertical(classes="kanban-col", id=f"kcol-{key}"):
+                    yield Static(
+                        f"[bold {color}]{label} (0)[/bold {color}]",
+                        classes="kanban-col-header",
+                        id=f"khead-{key}",
+                    )
+                    yield VerticalScroll(
+                        Static("", id=f"kbody-{key}"),
+                        classes="kanban-col-body",
+                        can_focus=False,
+                    )
+        yield VerticalScroll(
+            Static("", id="kanban-info-content"),
+            id="kanban-info-panel",
+            can_focus=False,
+        )
         yield KanbanInput(id="kanban-cmd")
         yield Static(
-            "[dim] q:quit  Ctrl+1~5:mode  Tab:자동완성  Ctrl+C:복사[/dim]",
+            "[dim] done K1 | move K1 ip | del K1 | info K1 | merge K1 K2 | clean   Tab:\uc644\uc131  q:quit  ^1~5:mode[/dim]",
             id="kanban-status-bar",
         )
+
+    def on_screen_resume(self) -> None:
+        """화면 전환 시 입력창에 자동 포커스"""
+        try:
+            self.query_one(KanbanInput).focus()
+        except Exception:
+            pass
 
     def _header_text(self) -> str:
         pm_color = AGENT_COLORS.get("pm", "#ff6b9d")
@@ -86,6 +120,24 @@ class KanbanScreen(Screen):
             "[bold green]\u25cf LIVE[/bold green]" if live else "[dim]\u25cb IDLE[/dim]"
         )
         return f"[bold]\U0001f991 SQUID[/bold]  [bold {pm_color}]\\[KANBAN][/bold {pm_color}]  {indicator}"
+
+    def show_info(self, text: str) -> None:
+        """info 패널에 카드 상세 정보 표시"""
+        try:
+            panel = self.query_one("#kanban-info-panel")
+            content = self.query_one("#kanban-info-content", Static)
+            content.update(text)
+            panel.styles.display = "block"
+        except Exception:
+            pass
+
+    def hide_info(self) -> None:
+        """info 패널 숨기기"""
+        try:
+            panel = self.query_one("#kanban-info-panel")
+            panel.styles.display = "none"
+        except Exception:
+            pass
 
     def refresh_data(self, flash: str = "") -> None:
         status = load_agent_status()
@@ -123,20 +175,29 @@ class KanbanScreen(Screen):
         # 컬럼별 카드 텍스트 수집
         groups: dict[str, list[str]] = {key: [] for key, _, _ in _COLUMNS}
 
+        # 글로벌 카드 번호 (모든 카드에 K-ID 부여)
+        card_num = 0
+
         # Automations — 카드 스타일
+        bc_auto = "#cc66ff"
         for name, sk in skills.items():
             if not sk.get("enabled", True):
                 continue
+            card_num += 1
+            sid = f"A{card_num}"
             st = sk.get("status", "idle")
-            icon = {"idle": "[dim]✓[/dim]", "running": "[yellow]⏳[/yellow]", "error": "[red]✗[/red]"}.get(st, st)
+            icon = {"idle": "[dim]\u2713[/dim]", "running": "[yellow]\u23f3[/yellow]", "error": "[red]\u2717[/red]"}.get(st, st)
             sched = sk.get("schedule", "")
             sched_s = f" {sched}" if sched else ""
             runs = sk.get("run_count", 0)
-            card = f"[#cc66ff]╭─[/#cc66ff]\n"
-            card += f"[#cc66ff]│[/#cc66ff] {icon} [bold]{name}[/bold]{sched_s}\n"
-            card += f"[#cc66ff]│[/#cc66ff] [dim]runs:{runs}[/dim]\n"
-            card += f"[#cc66ff]╰─[/#cc66ff]"
-            groups["automation"].append(card)
+            short_name = _trunc(name, 10)
+            lines = [
+                f"[{bc_auto}]\u256d\u2500[/{bc_auto}]",
+                f"[{bc_auto}]\u2502[/{bc_auto}] [bold cyan]{sid}[/bold cyan] {icon} [bold]{short_name}[/bold]",
+                f"[{bc_auto}]\u2502[/{bc_auto}] [dim]{sched_s} runs:{runs}[/dim]",
+                f"[{bc_auto}]\u2570\u2500[/{bc_auto}]",
+            ]
+            groups["automation"].append("\n".join(lines))
 
         # Task cards — 카드 스타일
         col_border = {
@@ -145,54 +206,45 @@ class KanbanScreen(Screen):
             "waiting": "#ffd32a",
             "done": "#26de81",
         }
-        card_num = 0
         for task in tasks:
             col = task.get("column", "todo")
             if col not in groups:
                 continue
             bc = col_border.get(col, "#555555")
-            title = task.get("title", "")[:26]
-            tags = task.get("tags", [])
-            tag_s = " ".join(f"[dim]#{t}[/dim]" for t in tags[:2]) if tags else ""
+            sid = task.get("short_id", "")
+            title = _trunc(task.get("title", ""), 12)
             updated = task.get("updated_at") or ""
             time_s = updated.split(" ")[1][:5] if " " in updated else ""
             logs_n = len(task.get("activity_log", []))
             result = task.get("result")
 
-            lines = [f"[{bc}]╭─[/{bc}]"]
+            lines = [f"[{bc}]\u256d\u2500[/{bc}]"]
 
-            # ID + title
-            if col not in ("done", "automation"):
-                sid = task.get("short_id", f"#{card_num + 1}")
-                card_num += 1
-                lines.append(f"[{bc}]│[/{bc}] [bold cyan]{sid}[/bold cyan] {title}")
+            # 모든 카드에 ID 표시
+            id_label = f"[bold cyan]{sid}[/bold cyan] " if sid else ""
+            if col == "done":
+                lines.append(f"[{bc}]\u2502[/{bc}] {id_label}[dim]\u2713[/dim] {title}")
             else:
-                lines.append(f"[{bc}]│[/{bc}] [dim]✓[/dim] {title}")
+                lines.append(f"[{bc}]\u2502[/{bc}] {id_label}{title}")
 
-            # tags
-            if tag_s:
-                lines.append(f"[{bc}]│[/{bc}]  {tag_s}")
-
-            # meta
+            # 두 번째 줄: 메타 정보 (항상 표시)
             meta = []
             if time_s:
                 meta.append(time_s)
             if logs_n:
                 meta.append(f"{logs_n}log")
             if result:
-                meta.append("[green]✓[/green]")
-            if meta:
-                lines.append(f"[{bc}]│[/{bc}]  [dim]{' '.join(meta)}[/dim]")
-
-            # progress bar for in_progress
+                meta.append("[green]\u2713[/green]")
             if col == "in_progress":
-                lines.append(f"[{bc}]│[/{bc}]  [{bc}]▰▰▰▰▰▱▱▱[/{bc}]")
-
-            # waiting label
+                meta.append(f"[{bc}]\u25b0\u25b0\u25b0\u25b1\u25b1[/{bc}]")
             if col == "waiting":
-                lines.append(f"[{bc}]│[/{bc}]  [#ffd32a]⏳ 대기 중[/#ffd32a]")
+                meta.append("[#ffd32a]\u23f3\ub300\uae30[/#ffd32a]")
+            if meta:
+                lines.append(f"[{bc}]\u2502[/{bc}]  [dim]{' '.join(meta)}[/dim]")
+            else:
+                lines.append(f"[{bc}]\u2502[/{bc}]  [dim]\u2500[/dim]")
 
-            lines.append(f"[{bc}]╰─[/{bc}]")
+            lines.append(f"[{bc}]\u2570\u2500[/{bc}]")
             groups[col].append("\n".join(lines))
 
         # 각 컬럼 위젯 업데이트
@@ -200,14 +252,12 @@ class KanbanScreen(Screen):
             items = groups[key]
             count = len(items)
 
-            # 헤더 업데이트
             try:
                 head = self.query_one(f"#khead-{key}", Static)
                 head.update(f"[bold {color}]{label} ({count})[/bold {color}]")
             except Exception:
                 pass
 
-            # 바디 업데이트
             try:
                 body = self.query_one(f"#kbody-{key}", Static)
                 if items:
