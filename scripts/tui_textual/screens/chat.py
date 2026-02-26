@@ -10,7 +10,7 @@ from ..widgets.message_view import MessageView
 from ..widgets.chat_input import ChatInput
 from ..widgets.command_input import COMMANDS
 from ..utils import get_at_context
-from ..data_poller import poll_chat_messages, load_agent_status, is_executor_live
+from ..data_poller import poll_chat_messages, load_agent_status, is_executor_live, get_executor_processes
 from ..colors import AGENT_COLORS
 
 
@@ -63,7 +63,11 @@ class ChatScreen(Screen):
     def _header_text(self, pm_status: str = "idle") -> str:
         pm_color = AGENT_COLORS.get("pm", "#ff6b9d")
         live = is_executor_live()
-        indicator = f"[bold green]● LIVE[/bold green]" if live else "[dim]○ IDLE[/dim]"
+        up = sum(1 for v in get_executor_processes().values() if v)
+        if live:
+            indicator = f"[bold green]● LIVE[/bold green] [dim]({up}/4)[/dim]"
+        else:
+            indicator = f"[bold red]● OFFLINE[/bold red] [dim]({up}/4)[/dim]"
         # PM 상태 표시
         pm_indicator = ""
         if pm_status == "chatting":

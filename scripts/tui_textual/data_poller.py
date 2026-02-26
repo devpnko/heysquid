@@ -6,6 +6,8 @@
 import json
 import logging
 import os
+import subprocess
+import time
 from collections import deque
 from datetime import datetime
 
@@ -25,6 +27,8 @@ WORKSPACES_FILE = os.path.join(DATA_DIR, "workspaces.json")
 STREAM_FILE = os.path.join(ROOT, "logs", "executor.stream.jsonl")
 MESSAGES_FILE = os.path.join(DATA_DIR, "messages.json")
 EXECUTOR_LOCK = os.path.join(DATA_DIR, "executor.lock")
+EXECUTOR_PID_FILE = os.path.join(DATA_DIR, "executor.pid")
+CLAUDE_PID_FILE = os.path.join(DATA_DIR, "claude.pid")
 
 SQUAD_HISTORY_FILE = os.path.join(DATA_DIR, "squad_history.json")
 CHAT_MAX_MESSAGES = 200
@@ -84,8 +88,74 @@ def load_agent_status() -> dict:
 
 
 def is_executor_live() -> bool:
-    """executor.lock 존재 여부"""
-    return os.path.exists(EXECUTOR_LOCK)
+    """executor가 실행 중인지 (claude PM 프로세스 기준)"""
+    procs = get_executor_processes()
+    return procs["claude"]
+
+
+# --- Executor 프로세스 상태 ---
+_proc_cache: dict = {"ts": 0.0, "data": {
+    "executor": False, "claude": False, "caffeinate": False, "viewer": False,
+}}
+
+
+def _pid_alive(pid: int) -> bool:
+    """PID가 살아있는지 확인 (os.kill signal 0)"""
+    try:
+        os.kill(pid, 0)
+        return True
+    except (OSError, ProcessLookupError):
+        return False
+
+
+def _read_pids(path: str) -> list[int]:
+    """PID 파일에서 PID 목록 읽기"""
+    try:
+        with open(path) as f:
+            return [int(l.strip()) for l in f if l.strip().isdigit()]
+    except (FileNotFoundError, ValueError):
+        return []
+
+
+def get_executor_processes() -> dict:
+    """executor 관련 4개 프로세스 상태 (5초 캐시)"""
+    now = time.time()
+    if now - _proc_cache["ts"] < 5:
+        return _proc_cache["data"]
+
+    procs = {
+        "executor": False,
+        "claude": False,
+        "caffeinate": False,
+        "viewer": False,
+    }
+
+    # executor.pid
+    for pid in _read_pids(EXECUTOR_PID_FILE):
+        if _pid_alive(pid):
+            procs["executor"] = True
+            break
+
+    # claude.pid (line 1: claude, line 2: caffeinate)
+    pids = _read_pids(CLAUDE_PID_FILE)
+    if len(pids) >= 1 and _pid_alive(pids[0]):
+        procs["claude"] = True
+    if len(pids) >= 2 and _pid_alive(pids[1]):
+        procs["caffeinate"] = True
+
+    # viewer: pgrep (tail -F executor.stream.jsonl)
+    try:
+        r = subprocess.run(
+            ["pgrep", "-f", "tail.*executor.stream"],
+            capture_output=True, timeout=2,
+        )
+        procs["viewer"] = r.returncode == 0
+    except Exception:
+        pass
+
+    _proc_cache["ts"] = now
+    _proc_cache["data"] = procs
+    return procs
 
 
 # --- Chat 데이터 폴링 ---

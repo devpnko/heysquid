@@ -13,7 +13,7 @@ from ..widgets.agent_bar import AgentCompactBar
 from ..widgets.log_view import MissionLogView, StreamLogView
 from ..widgets.tab_bar import TabBar
 from ..widgets.command_input import CommandInput
-from ..data_poller import load_agent_status, is_executor_live
+from ..data_poller import load_agent_status, is_executor_live, get_executor_processes
 from ..colors import AGENT_COLORS
 
 
@@ -27,6 +27,11 @@ class LogScreen(Screen):
     #log-header {
         height: 1;
         padding: 0 1;
+    }
+    #log-process-bar {
+        height: 1;
+        padding: 0 1;
+        background: #0a0a1a;
     }
     #log-sep-top {
         height: 1;
@@ -50,6 +55,7 @@ class LogScreen(Screen):
         yield TabBar(active=3, id="log-tab-bar")
         yield Static(self._header_text(), id="log-header")
         yield AgentCompactBar()
+        yield Static(self._process_status_text(), id="log-process-bar")
         yield Static("─" * 120, id="log-sep-top")
         yield MissionLogView(id="log-mission")
         yield StreamLogView(id="log-stream")
@@ -59,8 +65,33 @@ class LogScreen(Screen):
     def _header_text(self) -> str:
         pm_color = AGENT_COLORS.get("pm", "#ff6b9d")
         live = is_executor_live()
-        indicator = f"[bold green]● LIVE[/bold green]" if live else "[dim]○ IDLE[/dim]"
+        up = sum(1 for v in get_executor_processes().values() if v)
+        if live:
+            indicator = f"[bold green]● LIVE[/bold green] [dim]({up}/4)[/dim]"
+        else:
+            indicator = f"[bold red]● OFFLINE[/bold red] [dim]({up}/4)[/dim]"
         return f"[bold]🦑 SQUID[/bold]  [bold {pm_color}]\\[LOG][/bold {pm_color}]  {indicator}"
+
+    def _process_status_text(self) -> str:
+        procs = get_executor_processes()
+        parts = []
+        labels = [
+            ("executor", "executor"),
+            ("claude", "claude PM"),
+            ("caffeinate", "caffeinate"),
+            ("viewer", "viewer"),
+        ]
+        up = 0
+        for key, label in labels:
+            alive = procs.get(key, False)
+            if alive:
+                parts.append(f"[green]●[/green] {label}")
+                up += 1
+            else:
+                parts.append(f"[red]●[/red] [dim]{label}[/dim]")
+        status = "  ".join(parts)
+        count_color = "green" if up == 4 else "yellow" if up > 0 else "red"
+        return f"{status}    [{count_color}]({up}/4)[/{count_color}]"
 
     def refresh_data(self, stream_buffer: deque, flash: str = "") -> None:
         """폴링 데이터로 화면 갱신 — 각 섹션 독립적으로 보호"""
@@ -84,6 +115,13 @@ class LogScreen(Screen):
         try:
             header = self.query_one("#log-header", Static)
             header.update(self._header_text())
+        except Exception:
+            pass
+
+        # 프로세스 상태 바
+        try:
+            proc_bar = self.query_one("#log-process-bar", Static)
+            proc_bar.update(self._process_status_text())
         except Exception:
             pass
 

@@ -8,7 +8,7 @@ from textual.containers import VerticalScroll
 from ..widgets.agent_bar import AgentCompactBar
 from ..widgets.tab_bar import TabBar
 from ..widgets.command_input import CommandInput
-from ..data_poller import load_agent_status, is_executor_live
+from ..data_poller import load_agent_status, is_executor_live, get_executor_processes
 from ..colors import AGENT_COLORS
 
 
@@ -62,9 +62,11 @@ class SkillScreen(Screen):
     def _header_text(self) -> str:
         pm_color = AGENT_COLORS.get("pm", "#ff6b9d")
         live = is_executor_live()
-        indicator = (
-            "[bold green]\u25cf LIVE[/bold green]" if live else "[dim]\u25cb IDLE[/dim]"
-        )
+        up = sum(1 for v in get_executor_processes().values() if v)
+        if live:
+            indicator = f"[bold green]\u25cf LIVE[/bold green] [dim]({up}/4)[/dim]"
+        else:
+            indicator = f"[bold red]\u25cf OFFLINE[/bold red] [dim]({up}/4)[/dim]"
         return f"[bold]\U0001f991 SQUID[/bold]  [bold {pm_color}]\\[AUTOMATION][/bold {pm_color}]  {indicator}"
 
     def refresh_data(self, flash: str = "") -> None:

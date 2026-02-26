@@ -12,7 +12,7 @@ from ..widgets.agent_panel import AgentPanel
 from ..widgets.tab_bar import TabBar
 from ..widgets.squad_view import SquadHistoryList, SquadEntryView
 from ..widgets.command_input import CommandInput
-from ..data_poller import load_agent_status, load_squad_history, is_executor_live
+from ..data_poller import load_agent_status, load_squad_history, is_executor_live, get_executor_processes
 from ..colors import AGENT_COLORS
 
 
@@ -73,7 +73,11 @@ class SquadScreen(Screen):
     def _header_text(self) -> str:
         pm_color = AGENT_COLORS.get("pm", "#ff6b9d")
         live = is_executor_live()
-        indicator = f"[bold green]● LIVE[/bold green]" if live else "[dim]○ IDLE[/dim]"
+        up = sum(1 for v in get_executor_processes().values() if v)
+        if live:
+            indicator = f"[bold green]● LIVE[/bold green] [dim]({up}/4)[/dim]"
+        else:
+            indicator = f"[bold red]● OFFLINE[/bold red] [dim]({up}/4)[/dim]"
         return f"[bold]🦑 SQUID[/bold]  [bold {pm_color}]\\[SQUAD][/bold {pm_color}]  {indicator}"
 
     def refresh_data(self, flash: str = "") -> None:
