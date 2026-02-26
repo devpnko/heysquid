@@ -66,13 +66,28 @@ Channels live in `heysquid/channels/`. To add a new messaging platform:
 4. Register in `heysquid/core/daemon.py`
 5. Add optional dependency group in `pyproject.toml`
 
-## Adding a New Skill
+## Adding a New Skill or Automation
 
-Skills live in `heysquid/skills/`. Each skill is a self-contained module:
+Plugins use auto-discovery — no registration step needed.
 
-1. Create `heysquid/skills/your_skill/`
-2. Inherit from `heysquid/skills/_base.py`
-3. Register in `data/agent_status.json` (skills section)
+```python
+# heysquid/skills/your_skill/__init__.py
+
+SKILL_META = {
+    "name": "your_skill",
+    "description": "What this skill does",
+    "trigger": "manual",       # "manual" | "webhook"
+    "enabled": True,
+}
+
+def execute(**kwargs) -> dict:
+    """
+    kwargs: triggered_by, chat_id, args, payload, callback_url
+    """
+    return {"ok": True}
+```
+
+Drop the folder into `skills/` (manual) or `automations/` (scheduled) — the plugin loader picks it up automatically. See [skills/GUIDE.md](heysquid/skills/GUIDE.md) for the full reference.
 
 ## Questions?
 

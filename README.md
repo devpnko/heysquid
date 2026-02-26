@@ -15,7 +15,8 @@ Most AI coding tools wait for you to sit at a computer. heysquid works while you
 - **PM Protocol** — Every task follows Plan → Confirm → Execute → Report. No surprises.
 - **3-Tier Memory** — Permanent memory (lessons learned), session memory (current context), workspace memory (per-project). Your PM remembers everything.
 - **Agent Team** — 6 specialists auto-dispatched by the PM. The right model for the right job.
-- **Multi-Channel** — Telegram, Slack, Discord. Message your PM from wherever you work.
+- **Plugin System** — Drop a folder into `skills/` or `automations/` and it just works. Auto-discovery, zero config.
+- **Multi-Channel** — Telegram, Slack, Discord, X, Threads. Message your PM from wherever you work.
 - **Always-On** — Daemon-based architecture. Send a message at 3am, get a response in seconds.
 - **Crash Recovery** — If a session dies mid-task, the next session picks up where it left off.
 
@@ -75,14 +76,56 @@ The PM orchestrates 6 specialized agents, auto-escalating to stronger models whe
 
 **Escalation**: If Haiku fails → auto-promote to Sonnet → Opus. No manual intervention.
 
+## Plugin System
+
+heysquid uses a drop-in plugin architecture. Create a folder, add `SKILL_META` + `execute()`, done.
+
+### Skills (manual trigger)
+
+```python
+# heysquid/skills/my_skill/__init__.py
+
+SKILL_META = {
+    "name": "my_skill",
+    "description": "What this skill does",
+    "trigger": "manual",
+    "enabled": True,
+}
+
+def execute(**kwargs) -> dict:
+    # Your logic here
+    return {"ok": True, "message": "Done!"}
+```
+
+### Automations (scheduled)
+
+```python
+# heysquid/automations/daily_report/__init__.py
+
+SKILL_META = {
+    "name": "daily_report",
+    "description": "Daily status report at 9am",
+    "trigger": "schedule",
+    "schedule": "09:00",
+    "enabled": True,
+}
+
+def execute(**kwargs) -> dict:
+    # Runs every day at 09:00
+    return {"ok": True}
+```
+
+Plugins are auto-discovered at startup. See [skills/GUIDE.md](heysquid/skills/GUIDE.md) for the full reference.
+
 ## Features
 
 | Feature | Description |
 |---------|-------------|
 | **Telegram Control** | Chat naturally, request tasks, approve plans — all from your phone |
 | **Interrupt Anytime** | Send "stop" / "cancel" to halt current work within 10 seconds |
-| **Daily Briefing** | Automated morning briefing with project status + curated tech news |
 | **Multi-Workspace** | Switch between projects seamlessly. Each has its own context |
+| **Plugin System** | Skills + Automations — auto-discovery, config override, webhook trigger |
+| **SNS Channels** | Post to X (Twitter) and Threads via channel adapters |
 | **Real-time Dashboard** | Browser-based agent status visualization |
 | **TUI Monitor** | Terminal UI for live monitoring and direct PM interaction |
 | **Crash Recovery** | Detects interrupted sessions and resumes automatically |
@@ -138,13 +181,14 @@ The PM auto-saves session memory every 30 minutes and writes session highlights 
 ```
 heysquid/
 ├── heysquid/               # Core package
-│   ├── core/               # Config, CLI, daemon, agents registry
-│   ├── channels/           # Messaging adapters (Telegram, Slack, Discord)
-│   ├── skills/             # Pluggable skills (briefing, threads, marketing)
+│   ├── core/               # Config, CLI, daemon, plugin loader
+│   ├── channels/           # Messaging adapters (Telegram, Slack, Discord, X, Threads)
+│   ├── skills/             # Pluggable skills (drop-in auto-discovery)
+│   ├── automations/        # Scheduled automations (drop-in auto-discovery)
 │   ├── memory/             # Session, tasks, crash recovery
-│   ├── dashboard/          # Agent status visualization
+│   ├── dashboard/          # Agent status visualization + kanban
 │   └── templates/          # Plist templates, env examples
-├── scripts/                # Shell scripts (executor, setup, monitoring)
+├── scripts/                # Shell scripts (executor, setup, monitoring, TUI)
 ├── data/                   # Runtime data (gitignored)
 ├── tasks/                  # Per-message task memory (gitignored)
 ├── workspaces/             # Project contexts (gitignored)
@@ -197,6 +241,9 @@ heysquid is a thin orchestration layer on top of Claude Code:
 - [x] Crash recovery
 - [x] `pip install heysquid`
 - [x] Multi-channel (Telegram + Slack + Discord)
+- [x] SNS channels (X + Threads)
+- [x] Plugin system (skills + automations)
+- [x] Real-time dashboard + TUI
 - [ ] Linux support (systemd)
 - [ ] Department mode (parallel Claude Code processes)
 - [ ] Voice input (Whisper → task instruction)
