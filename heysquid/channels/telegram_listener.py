@@ -139,6 +139,7 @@ def _kill_executor():
 async def _handle_stop_command(msg_data):
     """
     중단 명령어 처리 (async — fetch_new_messages 안에서 호출):
+    0. 세션 메모리 강제 갱신 (kill 전에!)
     1. executor kill
     2. interrupted.json 저장
     3. 사용자에게 알림
@@ -148,6 +149,14 @@ async def _handle_stop_command(msg_data):
     message_id = msg_data["message_id"]
 
     print(f"[STOP] 중단 명령 감지: '{msg_data['text']}' from {msg_data['first_name']}")
+
+    # 0. 세션 메모리 강제 갱신 (kill 전에!)
+    try:
+        from heysquid.memory.session import compact_session_memory, save_session_summary
+        compact_session_memory()
+        save_session_summary()
+    except Exception:
+        pass
 
     killed, working_info = _kill_executor()
 

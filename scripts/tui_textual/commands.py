@@ -782,8 +782,15 @@ def dispatch_command(raw: str, stream_buffer: deque) -> str | None:
     args = parts[1] if len(parts) > 1 else ""
 
     if name == "stop":
+        # kill 전에 세션 메모리 강제 갱신 (컨텍스트 보존)
+        try:
+            from heysquid.memory.session import compact_session_memory, save_session_summary
+            compact_session_memory()
+            save_session_summary()
+        except Exception:
+            pass
         killed = _kill_executor()
-        return "작업 중단됨" if killed else "실행 중인 작업 없음"
+        return "작업 중단됨 (세션 메모리 저장 완료)" if killed else "실행 중인 작업 없음"
 
     if name == "resume":
         ok, msg = _resume_executor()
