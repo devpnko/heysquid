@@ -295,7 +295,7 @@ log "[INFO] Starting new session (permanent memory + session memory)..."
 
 # Claude → tee → 로그 파일 (stream_viewer는 분리 — 죽어도 claude에 영향 없음)
 caffeinate -ims "$CLAUDE_EXE" -p --dangerously-skip-permissions \
-    --model opus \
+    --model sonnet \
     --output-format stream-json --verbose \
     --append-system-prompt-file "$SPF" \
     "$PROMPT" \

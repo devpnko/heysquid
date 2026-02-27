@@ -128,14 +128,19 @@ tasks/
 
 ---
 
-## 상세 규칙 파일 안내
+## 규칙 파일
 
-상황별 상세 규칙은 `.claude/rules/`에 분리되어 있다:
+### 항상 활성 (.claude/rules/ — 자동 로드)
+- `pm-workflow.md` — PM 4개 모드, 대기 루프, 동시작업 방지
+- `telegram-api.md` — 텔레그램 함수 시그니처, 워크스페이스
 
-| 파일 | 내용 | 언제 참조 |
-|------|------|----------|
-| `pm-workflow.md` | PM 4개 모드 (대화/계획/실행/대기) + 대기루프 + 동시작업방지 | 메시지 처리 시 |
-| `telegram-api.md` | 텔레그램 함수 레퍼런스 + 워크스페이스 | 텔레그램 작업 시 |
-| `agent-team.md` | 에이전트 위임 + 에스컬레이션 | 작업 위임 시 |
-| `dashboard.md` | 대시보드 로깅 규칙 | 대시보드 업데이트 시 |
-| `squad-mode.md` | Squid/Kraken 토론 모드 | 팀 토론 시 |
+### 온디맨드 참조 (.claude/refs/ — 필요 시 Read)
+
+| 트리거 조건 | 파일 |
+|------------|------|
+| 에이전트 위임 / 복잡한 코딩 | `Read .claude/refs/agent-team.md` |
+| 대시보드 업데이트 / _dashboard_log | `Read .claude/refs/dashboard.md` |
+| `:squid` / `:kraken` / 팀 토론 | `Read .claude/refs/squad-mode.md` |
+| "딥워크" / 반복 정제 작업 | `Read .claude/refs/deep-work.md` |
+
+트리거에 해당하면 Read로 해당 파일을 읽은 후 지침을 따른다.

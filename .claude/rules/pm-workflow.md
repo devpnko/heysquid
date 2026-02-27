@@ -10,11 +10,6 @@
 - 상태 확인 → 정보 조회 후 답하고 **대기 루프 진입**
 - `reply_telegram(chat_id, message_id, text)`으로 응답
 
-```python
-from telegram_bot import reply_telegram
-reply_telegram(chat_id, message_id, "안녕하세요! 무엇을 도와드릴까요?")
-```
-
 ## 계획 모드 (작업 요청 감지 시)
 
 작업이 필요한 메시지를 받으면:
@@ -23,50 +18,14 @@ reply_telegram(chat_id, message_id, "안녕하세요! 무엇을 도와드릴까�
 3. **"이렇게 진행할까요?"** 확인 요청
 4. **대기 루프 진입** (사용자 답변 대기 — 같은 세션에서 이어짐)
 
-```python
-from telegram_bot import reply_telegram
-plan = """홈페이지를 만들어드릴게요.
-- HTML + CSS 반응형 페이지
-- 메뉴판, 위치, 연락처 섹션
-진행할까요?"""
-reply_telegram(chat_id, message_id, plan)
-```
-
 ## 실행 모드 (사용자 확인 후)
 
 사용자가 확인하면 ("응", "해줘", "진행해", "좋아" 등):
-
-```python
-from telegram_bot import (
-    create_working_lock, reserve_memory_telegram,
-    report_telegram, mark_done_telegram, remove_working_lock
-)
-from telegram_sender import send_message_sync
-
-# 1. 작업 잠금
-create_working_lock(message_ids, instruction, chat_id)
-
-# 2. 메모리 예약
-reserve_memory_telegram(instruction, chat_id, timestamps, message_ids)
-
-# 3. 작업 실행 + 중간 보고
-send_message_sync(chat_id, "작업 시작합니다!")
-# ... 실제 작업 ...
-send_message_sync(chat_id, "진행 중... 50%")
-
-# 4. 결과 전송
-report_telegram(instruction, result_text, chat_id, timestamps, message_ids, files)
-
-# 5. 처리 완료
-mark_done_telegram(message_ids)
-
-# 6. 잠금 해제
-remove_working_lock()
-```
+`create_working_lock` → `reserve_memory_telegram` → 작업 실행 + 중간 보고(`send_message_sync`) → `report_telegram` → `mark_done_telegram` → `remove_working_lock`
 
 ## 작업 큐 모드 (Task Queue)
 
-check_telegram()이 여러 메시지를 반환하면, combine_tasks() 대신 pick_next_task()로 **1개씩** 처리한다.
+check_telegram()이 여러 메시지를 반환하면, pick_next_task()로 **1개씩** 처리한다.
 
 ### 흐름
 
@@ -79,35 +38,13 @@ check_telegram()이 여러 메시지를 반환하면, combine_tasks() 대신 pic
 
 ### 카드 병합 제안
 
-check_telegram() 후 pending이 있으면, 작업 시작 전에 병합 기회를 확인:
-
-```python
-from telegram_bot import suggest_card_merge
-suggestion = suggest_card_merge(chat_id)
-if suggestion and len(suggestion["cards"]) >= 3:
-    # 카드 3개 이상이면 제안 (2개는 자동 병합이 처리하므로 제안 불필요)
-    ask_and_wait(chat_id, message_ids, suggestion["text"])
-    # 사용자 답장 시 merge 실행 또는 스킵
-```
-
-**제안 기준**: 활성 카드 3개 이상일 때만.
+check_telegram() 후 활성 카드 **3개 이상**이면 `suggest_card_merge(chat_id)`로 병합 제안.
 2개는 `append_message_to_active_card()`가 자동 처리하므로 별도 제안 불필요.
 
-### WAITING 전환
+### WAITING 전환/재개
 
-PM이 사용자에게 확인/피드백이 필요할 때:
-
-```python
-ask_and_wait(chat_id, message_ids, "이렇게 진행할까요?")
-# → 칸반: IN_PROGRESS → WAITING (sent_message_id 저장)
-# → working lock 해제 (다른 TODO 처리 가능)
-```
-
-### WAITING 재개
-
-사용자가 답장하면 pick_next_task()가 자동 매칭:
-- reply_to_message_id → WAITING 카드의 waiting_sent_ids 비교
-- 매칭 성공 → picked["waiting_card"]에 원래 컨텍스트(activity_log, instruction 등)
+- 확인 필요 시: `ask_and_wait(chat_id, message_ids, text)` → 칸반 WAITING 전환 + lock 해제
+- 사용자 답장 시: pick_next_task()가 reply_to_message_id로 WAITING 카드 자동 매칭
 
 ## 판단 기준
 
@@ -130,70 +67,29 @@ PM은 새 세션에서 `check_interrupted()`로 중단 사실을 확인할 뿐.
 작업 완료 또는 대화 응답 후, **바로 종료하지 않는다**.
 세션은 **타임아웃 없이 영구 유지**된다. 프로세스가 죽거나 Mac이 재시작될 때만 세션이 끝난다.
 
-**흐름:**
-1. 작업/응답 완료 후 `remove_working_lock()` 호출 (working lock이 있는 경우)
-2. 30초 대기 (Bash: `sleep 30`)
-3. `poll_new_messages()`로 새 메시지 확인
-4. 새 메시지 있으면 → 처리 (전체 흐름 반복)
-5. 없으면 → 2번으로 (무한 반복, 타임아웃 없음)
+### Sleep 전 잔여 카드 체크
 
-**핵심**: 세션은 죽지 않는다. 메시지가 없어도 계속 대기한다.
-poll_new_messages()는 로컬 파일만 읽으므로 idle 중 토큰 소비는 0이다.
+작업/응답 완료 후 `check_remaining_cards()`로 잔여 카드 확인:
+- 있으면 → `ask_and_wait`로 사용자에게 정리/시작/나중에 선택지
+- 없으면 → 바로 대기 루프 진입
 
-**대기 루프 코드:**
+**TUI 카드 관리**: `/done K1`, `/done all`, `/del K1`, `/move K1 waiting`, `/info K1`, `/merge K1 K2`
+
+### 대기 루프
 
 ```python
-import time
-from telegram_bot import poll_new_messages, compact_session_memory
-
-POLL_INTERVAL = 30  # 30초
-memory_update_counter = 0
-
 while True:
-    time.sleep(POLL_INTERVAL)  # Bash: sleep 30
-    memory_update_counter += 1
-
+    sleep(30)
     new_msgs = poll_new_messages()
-    if new_msgs:
-        # 새 메시지 처리 (check_telegram → 평소 흐름)
+    if new_msgs:  # 새 메시지 → check_telegram 흐름
         memory_update_counter = 0
-        # ... 메시지 처리 후 다시 대기 루프 계속
-
-    # 30분(60사이클)마다 세션 메모리 자동 갱신
-    if memory_update_counter > 0 and memory_update_counter % 60 == 0:
-        # data/session_memory.md 갱신 (세션 중간 저장)
+        # ... 메시지 처리 후 다시 대기 루프
+    if memory_update_counter % 60 == 0:  # 30분마다 세션 메모리 갱신
         compact_session_memory()
 ```
 
-**세션 메모리 갱신 타이밍:**
-- 30분마다 자동 갱신 (세션이 죽어도 최근 상태 보존)
-- 중요한 작업 완료 후에도 즉시 갱신
-- compact 시 삭제되는 대화의 톤/이벤트가 자동으로 한 줄 요약 메모됨
-
-**세션 종료 시 핵심 3줄 기록:**
-- 세션이 끝나기 전(또는 중요 작업 완료 후) `save_session_summary()` 호출
-- permanent_memory.md의 `## 세션 핵심 로그` 섹션에 오늘 날짜로 핵심 이벤트 3개 기록
-- 최대 7일치 유지, 같은 날짜는 덮어씀
-- 다음 세션 시작 시 이 로그를 보고 "어제 뭐 했는지" 즉시 파악 가능
-
-```python
-from telegram_bot import save_session_summary
-save_session_summary()  # 세션 종료 직전 또는 중요 작업 완료 후
-```
-
-**`data/session_memory.md` 형식:**
-
-```markdown
-# SQUID 세션 메모리
-
-## 최근 대화
-- [MM/DD HH:MM] 👤 사용자 메시지 요약
-- [MM/DD HH:MM] 🤖 SQUID 응답 요약
-(이번 세션 대화를 항목당 1줄로 추가. 기존 항목 유지.)
-
-## 활성 작업
-- 진행 중인 작업 (완료된 건 제거)
-```
+**세션 메모리**: 30분마다 자동 갱신 + 중요 작업 완료 시 즉시 갱신.
+**세션 종료 시**: `save_session_summary()` → permanent_memory.md에 핵심 이벤트 3개 기록 (최대 7일치).
 
 **주의:**
 - 대기 중에도 `executor.lock`은 유지 (listener 중복 방지)
