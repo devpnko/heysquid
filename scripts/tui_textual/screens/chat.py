@@ -92,6 +92,14 @@ class ChatScreen(Screen):
             hint_widget.update("")
             hint_widget.remove_class("has-hint")
 
+    # 커맨드 카테고리 (힌트 표시용)
+    _CMD_GROUPS = [
+        ("제어", ["stop", "resume", "doctor"]),
+        ("칸반", ["done", "clean", "del", "move", "merge", "info"]),
+        ("팀", ["squid", "kraken", "endsquad"]),
+        ("기타", ["skill", "dashboard"]),
+    ]
+
     def _compute_autocomplete_hint(self, text: str) -> str:
         """입력 텍스트 기반 자동완성 힌트 계산"""
         # 슬래시 커맨드
@@ -99,7 +107,13 @@ class ChatScreen(Screen):
             partial = text.lstrip("/").rstrip(" ").lower()
             if text.endswith(" ") and partial in COMMANDS:
                 return ""
-            candidates = COMMANDS if not partial else [c for c in COMMANDS if c.startswith(partial)]
+            if not partial:
+                # 전체 목록 — 카테고리별 그룹핑
+                parts = []
+                for label, cmds in self._CMD_GROUPS:
+                    parts.append(f"[{label}] " + " ".join(f"/{c}" for c in cmds))
+                return "  " + "  ".join(parts)
+            candidates = [c for c in COMMANDS if c.startswith(partial)]
             if candidates:
                 return "  " + " · ".join(f"/{c}" for c in candidates)
             return ""
