@@ -14,6 +14,16 @@ logger = logging.getLogger(__name__)
 
 AGENTS_DIR = Path(__file__).parent / "agents"
 
+# 에이전트별 활동 설정 기본값 (Phase 1: 제한 없음)
+DEFAULT_ACTIVITY = {
+    "schedule_hours": 1,              # heartbeat 주기 (시간)
+    "min_post_interval_hours": 0,     # 글쓰기 최소 간격 (0 = 제한 없음)
+    "min_comment_interval_sec": 3,    # 댓글 간 sleep (API 부하 방지)
+    "max_comments_per_beat": 10,      # heartbeat당 최대 댓글
+    "max_replies_per_beat": 20,       # heartbeat당 최대 답변
+    "post_ratio_free": 70,            # 무료 글 비율 (0-100)
+}
+
 
 def _agent_path(handle: str) -> Path:
     return AGENTS_DIR / f"{handle}.json"
@@ -125,7 +135,7 @@ def create_agent(name: str, description: str, category: str = "build",
         "persona": persona or f"너는 {name} — {description}\n\n톤: 친근하고 전문적. 핵심을 짚어서 설명.",
         "category": category,
         "tags": tags or [],
-        "post_ratio_free": 70,
+        "activity": dict(DEFAULT_ACTIVITY),
         "created_at": _now(),
         "last_post_at": None,
         "last_heartbeat_at": None,
@@ -187,6 +197,50 @@ def apply_blueprint(handle: str, template: str | dict) -> dict:
 
     recipe_names = [r["name"] for r in blueprint.get("recipes", [])]
     return {"ok": True, "handle": handle, "recipes": recipe_names}
+
+
+def get_activity(agent: dict) -> dict:
+    """에이전트의 activity 설정 반환. 없는 키는 기본값으로 채움.
+
+    하위호환: 기존 top-level schedule_hours, post_ratio_free도 읽음.
+    """
+    stored = agent.get("activity", {})
+    result = dict(DEFAULT_ACTIVITY)
+    result.update(stored)
+    # 하위호환: 기존 top-level 키 → activity로 승격
+    if "schedule_hours" in agent and "schedule_hours" not in stored:
+        result["schedule_hours"] = agent["schedule_hours"]
+    if "post_ratio_free" in agent and "post_ratio_free" not in stored:
+        result["post_ratio_free"] = agent["post_ratio_free"]
+    return result
+
+
+def update_activity(handle: str, changes: dict) -> dict:
+    """에이전트의 activity 설정 업데이트. 유효한 키만 반영."""
+    agent = load_agent(handle)
+    if not agent:
+        return {"ok": False, "error": f"에이전트 없음: {handle}"}
+
+    activity = agent.get("activity", {})
+    applied = {}
+    for key, val in changes.items():
+        if key not in DEFAULT_ACTIVITY:
+            continue
+        # 타입 검증
+        expected = type(DEFAULT_ACTIVITY[key])
+        try:
+            val = expected(val)
+        except (ValueError, TypeError):
+            continue
+        activity[key] = val
+        applied[key] = val
+
+    if not applied:
+        return {"ok": False, "error": "유효한 설정값 없음. 가능: " + ", ".join(DEFAULT_ACTIVITY.keys())}
+
+    agent["activity"] = activity
+    save_agent(handle, agent)
+    return {"ok": True, "handle": handle, "applied": applied, "activity": get_activity(agent)}
 
 
 def get_stats() -> dict:

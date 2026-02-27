@@ -5,19 +5,13 @@ import random
 import time
 from datetime import datetime, timedelta
 
-from .agent_manager import load_agent, save_agent, list_agents
+from .agent_manager import load_agent, save_agent, list_agents, get_activity
 from .api_client import FanMoltClient
 from .content_gen import generate_post, generate_post_from_recipe, generate_reply, generate_comment
 
 logger = logging.getLogger(__name__)
 
-# 쿨다운 (보수적 — API rate limit의 2배)
-MIN_POST_INTERVAL_HOURS = 2
-MIN_COMMENT_INTERVAL_SEC = 30
-MAX_COMMENTS_PER_BEAT = 3
-MAX_REPLIES_PER_BEAT = 5
 MAX_COMMENTED_POSTS_CACHE = 100  # ring buffer 최대 크기
-DEFAULT_SCHEDULE_HOURS = 4  # 에이전트별 기본 heartbeat 주기
 
 
 def _now() -> str:
@@ -72,11 +66,13 @@ def run_heartbeat(handle: str) -> dict:
     """에이전트 1명의 heartbeat 1사이클.
 
     우선순위: 댓글 답변 > 피드 참여 > 글 작성
+    activity 설정은 에이전트별 JSON에서 읽음.
     """
     agent = load_agent(handle)
     if not agent:
         return {"ok": False, "error": f"에이전트 없음: {handle}", "handle": handle}
 
+    act = get_activity(agent)
     client = FanMoltClient(agent["api_key"])
     persona = agent.get("persona", "")
     blueprint = agent.get("blueprint")
@@ -85,7 +81,7 @@ def run_heartbeat(handle: str) -> dict:
 
     llm_failed = False
 
-    # 1. 알림 확인 → 댓글 답변 (최우선, MAX_REPLIES_PER_BEAT 상한)
+    # 1. 알림 확인 → 댓글 답변 (최우선)
     reply_style = engagement.get("reply_style")
     try:
         last_noti_id = agent.get("last_notification_id")
@@ -98,14 +94,15 @@ def run_heartbeat(handle: str) -> dict:
         )
         replied = 0
         for n in notifications:
-            if replied >= MAX_REPLIES_PER_BEAT:
+            if replied >= act["max_replies_per_beat"]:
                 break
             if n.get("type") in ("comment.created", "comment.reply"):
                 try:
                     reply = generate_reply(persona, n, reply_style=reply_style)
                     client.create_comment(n["post_id"], reply, parent_id=n.get("comment_id"))
                     replied += 1
-                    time.sleep(MIN_COMMENT_INTERVAL_SEC)
+                    if act["min_comment_interval_sec"] > 0:
+                        time.sleep(act["min_comment_interval_sec"])
                 except RuntimeError:
                     llm_failed = True
                     logger.warning("%s: LLM 불가 — 답변 스킵", handle)
@@ -127,7 +124,7 @@ def run_heartbeat(handle: str) -> dict:
             commented = 0
             commented_posts = set(agent.get("commented_posts", []))
             for post in feed:
-                if commented >= MAX_COMMENTS_PER_BEAT:
+                if commented >= act["max_comments_per_beat"]:
                     break
                 post_id = post.get("id", "")
                 # 내 글 또는 이미 댓글 단 포스트 스킵
@@ -142,7 +139,8 @@ def run_heartbeat(handle: str) -> dict:
                         client.create_comment(post_id, comment)
                         commented += 1
                         commented_posts.add(post_id)
-                        time.sleep(MIN_COMMENT_INTERVAL_SEC)
+                        if act["min_comment_interval_sec"] > 0:
+                            time.sleep(act["min_comment_interval_sec"])
                 except RuntimeError:
                     llm_failed = True
                     logger.warning("%s: LLM 불가 — 댓글 스킵", handle)
@@ -156,7 +154,9 @@ def run_heartbeat(handle: str) -> dict:
             logger.warning("피드 조회 실패: %s", e)
 
     # 3. 글 작성 (쿨다운 체크, LLM 실패 시 스킵)
-    if not llm_failed and _hours_since(agent.get("last_post_at")) >= MIN_POST_INTERVAL_HOURS:
+    post_interval = act["min_post_interval_hours"]
+    can_post = post_interval <= 0 or _hours_since(agent.get("last_post_at")) >= post_interval
+    if not llm_failed and can_post:
         try:
             prev_titles = _get_prev_titles(client)
             due_recipes = _get_due_recipes(agent)
@@ -185,7 +185,7 @@ def run_heartbeat(handle: str) -> dict:
             else:
                 # 기존 모드: blueprint 없거나 due 레시피 없음
                 post_data = generate_post(persona, agent.get("category", "build"), prev_titles)
-                ratio = agent.get("post_ratio_free", 70)
+                ratio = act["post_ratio_free"]
                 post_data["is_free"] = random.random() * 100 < ratio
                 client.create_post(**post_data)
                 result["posted"] = True
@@ -229,13 +229,14 @@ def run_all() -> list[dict]:
 def run_due_agents() -> list[dict]:
     """schedule_hours 기반으로 시간이 된 에이전트만 heartbeat.
 
-    에이전트 JSON의 schedule_hours (기본 4) 경과 시에만 실행.
+    에이전트별 activity.schedule_hours 경과 시에만 실행.
     """
     agents = list_agents()
     results = []
     for agent in agents:
         handle = agent.get("handle", "?")
-        interval = agent.get("schedule_hours", DEFAULT_SCHEDULE_HOURS)
+        act = get_activity(agent)
+        interval = act["schedule_hours"]
         elapsed = _hours_since(agent.get("last_heartbeat_at"))
         if elapsed < interval:
             continue

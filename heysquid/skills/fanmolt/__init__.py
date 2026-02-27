@@ -12,6 +12,7 @@ SQUID가 FanMolt 에이전트를 관리하는 리모컨.
     fanmolt post <이름> [레시피명]        — 글 1개 작성
     fanmolt blueprint <이름> <템플릿>     — Blueprint 적용
     fanmolt instructions <이름>           — 지시문 조회
+    fanmolt config <이름> [key=value ...] — 활동 설정 조회/변경
     fanmolt del <이름>                   — 삭제
 """
 
@@ -63,6 +64,8 @@ def execute(**kwargs) -> dict:
         return _cmd_blueprint(cmd_args, chat_id)
     elif cmd == "instructions":
         return _cmd_instructions(cmd_args, chat_id)
+    elif cmd == "config":
+        return _cmd_config(cmd_args, chat_id)
     elif cmd == "del":
         return _cmd_del(cmd_args, chat_id)
     else:
@@ -75,6 +78,7 @@ def execute(**kwargs) -> dict:
             "  post <이름> [레시피명]        — 글 작성\n"
             "  blueprint <이름> <템플릿>     — Blueprint 적용\n"
             "  instructions <이름>           — 지시문 조회\n"
+            "  config <이름> [key=val ...]  — 활동 설정\n"
             "  del <이름>                   — 삭제"
         )
         _send_telegram(chat_id, msg)
@@ -99,7 +103,7 @@ def _cmd_create(args: str, chat_id: int) -> dict:
 
 
 def _cmd_list(chat_id: int) -> dict:
-    from .agent_manager import list_agents
+    from .agent_manager import list_agents, get_activity
 
     agents = list_agents()
     if not agents:
@@ -108,7 +112,9 @@ def _cmd_list(chat_id: int) -> dict:
         lines = [f"📋 에이전트 {len(agents)}개:"]
         for a in agents:
             posts = a.get("stats", {}).get("posts", 0)
-            lines.append(f"  • {a['name']} (@{a['handle']}) — 글 {posts}개")
+            act = get_activity(a)
+            sched = act["schedule_hours"]
+            lines.append(f"  • {a['name']} (@{a['handle']}) — 글 {posts}개 | ⏱{sched}h")
         msg = "\n".join(lines)
     _send_telegram(chat_id, msg)
     return {"ok": True, "agents": agents}
@@ -198,6 +204,60 @@ def _cmd_instructions(args: str, chat_id: int) -> dict:
         msg = f"❌ 지시문 조회 실패: {e}"
         _send_telegram(chat_id, msg)
         return {"ok": False, "error": str(e)}
+
+
+def _cmd_config(args: str, chat_id: int) -> dict:
+    from .agent_manager import load_agent, get_activity, update_activity, DEFAULT_ACTIVITY
+
+    parts = args.strip().split()
+    if not parts:
+        # 설정 가능한 키 목록 안내
+        lines = ["⚙️ fanmolt config <이름> [key=val ...]\n\n설정 가능한 키:"]
+        for k, v in DEFAULT_ACTIVITY.items():
+            lines.append(f"  {k} = {v}  ({type(v).__name__})")
+        lines.append("\n예: fanmolt config my_agent schedule_hours=2 max_comments_per_beat=5")
+        msg = "\n".join(lines)
+        _send_telegram(chat_id, msg)
+        return {"ok": True, "message": msg}
+
+    handle = parts[0]
+    agent = load_agent(handle)
+    if not agent:
+        msg = f"❌ 에이전트 없음: {handle}"
+        _send_telegram(chat_id, msg)
+        return {"ok": False, "error": msg}
+
+    # key=value 파싱
+    changes = {}
+    for part in parts[1:]:
+        if "=" in part:
+            k, v = part.split("=", 1)
+            changes[k] = v
+
+    if not changes:
+        # 조회 모드: 현재 설정 표시
+        act = get_activity(agent)
+        lines = [f"⚙️ {handle} 활동 설정:"]
+        for k, v in act.items():
+            default = DEFAULT_ACTIVITY.get(k)
+            marker = "" if v == default else " ✏️"
+            lines.append(f"  {k} = {v}{marker}")
+        msg = "\n".join(lines)
+        _send_telegram(chat_id, msg)
+        return {"ok": True, "activity": act}
+
+    # 변경 모드
+    result = update_activity(handle, changes)
+    if result.get("ok"):
+        applied = result["applied"]
+        lines = [f"✅ {handle} 설정 변경:"]
+        for k, v in applied.items():
+            lines.append(f"  {k} = {v}")
+        msg = "\n".join(lines)
+    else:
+        msg = f"❌ {result.get('error')}"
+    _send_telegram(chat_id, msg)
+    return result
 
 
 def _cmd_del(args: str, chat_id: int) -> dict:
