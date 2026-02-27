@@ -13,6 +13,11 @@ from ..data_poller import load_agent_status, is_executor_live, get_executor_proc
 from ..colors import AGENT_COLORS
 
 
+def _cell_width(text: str) -> int:
+    """터미널 셀 폭 계산 (한글=2cell)"""
+    return sum(2 if unicodedata.east_asian_width(ch) in ("W", "F") else 1 for ch in text)
+
+
 def _trunc(text: str, max_cells: int) -> str:
     """터미널 셀 폭 기준으로 텍스트 자르기 (한글=2cell)"""
     width = 0
@@ -22,6 +27,31 @@ def _trunc(text: str, max_cells: int) -> str:
             return text[:i]
         width += w
     return text
+
+
+def _wrap_lines(text: str, max_cells: int, max_lines: int = 2) -> list[str]:
+    """텍스트를 셀 폭 기준으로 여러 줄로 나누기 (한글=2cell)."""
+    lines = []
+    remaining = text
+    for _ in range(max_lines):
+        if not remaining:
+            break
+        width = 0
+        cut = len(remaining)
+        for i, ch in enumerate(remaining):
+            w = 2 if unicodedata.east_asian_width(ch) in ("W", "F") else 1
+            if width + w > max_cells:
+                cut = i
+                break
+            width += w
+        lines.append(remaining[:cut])
+        remaining = remaining[cut:]
+    if remaining and lines:
+        # 마지막 줄 말줄임
+        last = lines[-1]
+        trimmed = _trunc(last, max_cells - 1)
+        lines[-1] = trimmed + "\u2026"
+    return lines
 
 # 컬럼 정의: (key, short_label, color_hex)
 _COLUMNS = [
@@ -214,7 +244,7 @@ class KanbanScreen(Screen):
                 continue
             bc = col_border.get(col, "#555555")
             sid = task.get("short_id", "")
-            title = _trunc(task.get("title", ""), 12)
+            raw_title = task.get("title", "")
             updated = task.get("updated_at") or ""
             time_s = updated.split(" ")[1][:5] if " " in updated else ""
             logs_n = len(task.get("activity_log", []))
@@ -222,14 +252,26 @@ class KanbanScreen(Screen):
 
             lines = [f"[{bc}]\u256d\u2500[/{bc}]"]
 
-            # 모든 카드에 ID 표시
+            # ID + 아이콘 접두어 폭 계산 후 제목 줄바꿈
             id_label = f"[bold cyan]{sid}[/bold cyan] " if sid else ""
-            if col == "done":
-                lines.append(f"[{bc}]\u2502[/{bc}] {id_label}[dim]\u2713[/dim] {title}")
-            else:
-                lines.append(f"[{bc}]\u2502[/{bc}] {id_label}{title}")
+            prefix_icon = "[dim]\u2713[/dim] " if col == "done" else ""
+            # ID(ex: "K1 ")=4cells + 아이콘("✓ ")=2cells → 첫줄은 좁고 둘째줄은 넓음
+            id_cells = _cell_width(sid) + 1 if sid else 0  # +1 for space
+            icon_cells = 2 if col == "done" else 0
+            first_line_max = 14 - id_cells - icon_cells
+            cont_line_max = 14
 
-            # 두 번째 줄: 메타 정보 (항상 표시)
+            title_lines = _wrap_lines(raw_title, first_line_max, max_lines=1)
+            if _cell_width(raw_title) > first_line_max:
+                # 첫 줄에 안 담기면 2줄로 분배
+                title_lines = _wrap_lines(raw_title, cont_line_max, max_lines=2)
+                lines.append(f"[{bc}]\u2502[/{bc}] {id_label}{prefix_icon}{title_lines[0]}")
+                for tl in title_lines[1:]:
+                    lines.append(f"[{bc}]\u2502[/{bc}]  {tl}")
+            else:
+                lines.append(f"[{bc}]\u2502[/{bc}] {id_label}{prefix_icon}{title_lines[0]}")
+
+            # 메타 정보
             meta = []
             if time_s:
                 meta.append(time_s)
