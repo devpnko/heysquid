@@ -10,7 +10,7 @@ readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"
 authors = [
-    {name = "Sanghyuk Yoon"},
+    {name = "Sanghyuk Yoon", email = "hyuk@hype5.co.kr"},
 ]
 keywords = ["ai", "agent", "telegram", "project-manager", "claude", "automation"]
 classifiers = [

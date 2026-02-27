@@ -290,6 +290,10 @@ heysquid is a thin orchestration layer on top of Claude Code:
 
 Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
+## Author
+
+**Sanghyuk Yoon** — [hyuk@hype5.co.kr](mailto:hyuk@hype5.co.kr)
+
 ## License
 
 [Apache License 2.0](LICENSE)
