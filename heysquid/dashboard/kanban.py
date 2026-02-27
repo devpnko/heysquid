@@ -30,12 +30,44 @@ MAX_DONE_TASKS = 50
 # --- Section registration + one-time migration ---
 
 def _default_kanban():
-    return {"tasks": []}
+    return {"tasks": [], "next_short_id": 1}
 
 store.register(SectionConfig("kanban", "kanban.json", _default_kanban))
 
 _cfg = store.get_config("kanban")
 migrate_section_from_status("kanban", _cfg.file_path, _cfg.lock_path, _cfg.bak_path)
+
+
+def _migrate_short_ids():
+    """기존 카드에 short_id가 없으면 부여."""
+    def _modify(data):
+        counter = data.get("next_short_id", 1)
+        changed = False
+        for t in data.get("tasks", []):
+            if "short_id" not in t:
+                t["short_id"] = f"K{counter}"
+                counter += 1
+                changed = True
+        if changed:
+            data["next_short_id"] = counter
+        else:
+            return False  # skip save
+
+    store.modify("kanban", _modify)
+
+_migrate_short_ids()
+
+
+def resolve_card(identifier: str):
+    """K-ID(예: 'K3', 'k3')로 카드를 찾아 반환. 없으면 None."""
+    sid = identifier.strip().upper()
+    if not sid.startswith("K"):
+        return None
+    data = store.load("kanban")
+    for t in data.get("tasks", []):
+        if t.get("short_id", "").upper() == sid:
+            return t
+    return None
 
 
 def _generate_id():
@@ -81,8 +113,10 @@ def add_kanban_task(title, column=COL_TODO, source_message_ids=None,
                 return False  # skip save
 
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        short_id_num = data.get("next_short_id", 1)
         task = {
             "id": _generate_id(),
+            "short_id": f"K{short_id_num}",
             "title": title[:100],
             "column": column,
             "tags": tags or [],
@@ -96,6 +130,7 @@ def add_kanban_task(title, column=COL_TODO, source_message_ids=None,
             "result": None,
         }
         tasks.append(task)
+        data["next_short_id"] = short_id_num + 1
         result_task[0] = task
 
     store.modify("kanban", _modify)
@@ -148,6 +183,21 @@ def get_mergeable_cards(chat_id):
         and t["column"] in (COL_IN_PROGRESS, COL_TODO, COL_WAITING)
     ]
     return sorted(cards, key=lambda t: t.get("created_at", ""))
+
+
+def get_all_active_cards():
+    """모든 활성 카드(non-done, non-automation) 목록을 컬럼별로 반환.
+
+    Returns:
+        dict: {"todo": [...], "in_progress": [...], "waiting": [...]}
+    """
+    data = store.load("kanban")
+    result = {"todo": [], "in_progress": [], "waiting": []}
+    for t in data.get("tasks", []):
+        col = t.get("column")
+        if col in result:
+            result[col].append(t)
+    return result
 
 
 def merge_kanban_tasks(source_id, target_id):

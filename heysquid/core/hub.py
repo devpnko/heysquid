@@ -606,6 +606,45 @@ def suggest_card_merge(chat_id):
     }
 
 
+def check_remaining_cards():
+    """Sleep 전 잔여 카드 확인. 활성 카드가 있으면 제안 텍스트 반환.
+
+    Returns:
+        dict or None: {
+            "text": 사용자에게 보낼 메시지,
+            "cards": {"todo": [...], "in_progress": [...], "waiting": [...]},
+            "card_ids": [전체 카드 ID 리스트],
+        }
+    """
+    from ..dashboard.kanban import get_all_active_cards
+    cards = get_all_active_cards()
+
+    total = sum(len(v) for v in cards.values())
+    if total == 0:
+        return None
+
+    lines = [f"대기 모드 가기 전에 — 칸반에 카드 {total}개가 남아있어:"]
+    for col, label in [("in_progress", "⚡ 진행중"), ("todo", "📋 할일"), ("waiting", "⏳ 대기")]:
+        for c in cards[col]:
+            title = c.get("title", "")[:40]
+            lines.append(f"  {label} | {title}")
+    lines.append("")
+    lines.append("어떻게 할까?")
+    lines.append("1) 전부 정리 (Done 처리)")
+    lines.append("2) 바로 작업 시작")
+    lines.append("3) 그냥 대기 (나중에)")
+
+    all_ids = []
+    for col_cards in cards.values():
+        all_ids.extend(c["id"] for c in col_cards)
+
+    return {
+        "text": "\n".join(lines),
+        "cards": cards,
+        "card_ids": all_ids,
+    }
+
+
 def ask_and_wait(chat_id, message_id, text):
     """PM이 질문 전송 + 칸반 IN_PROGRESS→WAITING + working lock 해제.
 

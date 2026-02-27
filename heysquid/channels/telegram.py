@@ -56,6 +56,7 @@ async def send_message(chat_id, text, parse_mode="Markdown"):
 
     try:
         bot = _get_bot()
+        last_sent_id = None
 
         # 텔레그램 메시지 길이 제한 (4096자)
         if len(text) > 4000:
@@ -64,38 +65,42 @@ async def send_message(chat_id, text, parse_mode="Markdown"):
                 if i > 0:
                     await asyncio.sleep(0.5)
                 try:
-                    await bot.send_message(
+                    sent = await bot.send_message(
                         chat_id=chat_id,
                         text=chunk,
                         parse_mode=parse_mode
                     )
+                    last_sent_id = sent.message_id
                 except Exception as e:
                     if parse_mode and "parse" in str(e).lower():
-                        await bot.send_message(
+                        sent = await bot.send_message(
                             chat_id=chat_id,
                             text=chunk,
                             parse_mode=None
                         )
+                        last_sent_id = sent.message_id
                     else:
                         raise
         else:
             try:
-                await bot.send_message(
+                sent = await bot.send_message(
                     chat_id=chat_id,
                     text=text,
                     parse_mode=parse_mode
                 )
+                last_sent_id = sent.message_id
             except Exception as e:
                 if parse_mode and "parse" in str(e).lower():
-                    await bot.send_message(
+                    sent = await bot.send_message(
                         chat_id=chat_id,
                         text=text,
                         parse_mode=None
                     )
+                    last_sent_id = sent.message_id
                 else:
                     raise
 
-        return True
+        return last_sent_id or True  # int(msg_id) or True
 
     except Exception as e:
         print(f"[ERROR] 메시지 전송 실패: {e}")
@@ -213,12 +218,14 @@ def send_message_sync(chat_id, text, parse_mode="Markdown", _save=True):
     result = run_async_safe(send_message(chat_id, text, parse_mode))
 
     if result:
+        sent_message_id = result if isinstance(result, int) else None
         if _save:
             try:
                 import time
                 from ._msg_store import save_bot_response
                 msg_id = f"bot_progress_{int(time.time() * 1000)}"
-                save_bot_response(chat_id, text, [msg_id], channel="telegram")
+                save_bot_response(chat_id, text, [msg_id], channel="telegram",
+                                  sent_message_id=sent_message_id)
             except Exception as e:
                 print(f"[WARN] 봇 응답 저장 실패: {e}")
         try:

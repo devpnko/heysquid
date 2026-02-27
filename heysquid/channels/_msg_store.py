@@ -91,8 +91,14 @@ def load_and_modify(modifier_fn):
             fcntl.flock(lock_fd, fcntl.LOCK_UN)
 
 
-def save_bot_response(chat_id, text, reply_to_message_ids, files=None, channel="system"):
-    """봇 응답을 messages.json에 저장 (대화 컨텍스트 유지) — flock 사용"""
+def save_bot_response(chat_id, text, reply_to_message_ids, files=None,
+                      channel="system", sent_message_id=None):
+    """봇 응답을 messages.json에 저장 (대화 컨텍스트 유지) — flock 사용
+
+    Safety net: channel이 단일 채널("tui", "telegram", "dashboard")이면
+    다른 활성 채널에도 자동 릴레이 (응답 누락 방지).
+    broadcast_all()을 통한 응답은 channel="broadcast"로 오므로 릴레이 안 함.
+    """
     bot_message = {
         "message_id": f"bot_{reply_to_message_ids[0]}",
         "type": "bot",
@@ -102,8 +108,10 @@ def save_bot_response(chat_id, text, reply_to_message_ids, files=None, channel="
         "files": files or [],
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "reply_to": reply_to_message_ids,
-        "processed": True
+        "processed": True,
     }
+    if sent_message_id is not None:
+        bot_message["sent_message_id"] = sent_message_id
 
     def _append_bot_msg(data):
         data["messages"].append(bot_message)
@@ -111,6 +119,15 @@ def save_bot_response(chat_id, text, reply_to_message_ids, files=None, channel="
 
     load_and_modify(_append_bot_msg)
     print(f"[LOG] 봇 응답 저장 완료 (reply_to: {reply_to_message_ids})")
+
+    # Safety net: 단일 채널 응답이면 다른 채널에도 릴레이
+    _SINGLE_CHANNELS = {"tui", "telegram", "dashboard"}
+    if channel in _SINGLE_CHANNELS:
+        try:
+            from ._router import broadcast_all
+            broadcast_all(text, exclude_channels={channel})
+        except Exception as e:
+            print(f"[WARN] 릴레이 실패: {e}")
 
 
 def get_cursor(channel, key=None):

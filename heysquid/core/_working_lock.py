@@ -22,12 +22,19 @@ from ..channels._msg_store import load_telegram_messages, _poll_telegram_once
 
 
 def _dashboard_log(agent, message):
-    """Add mission log entry to dashboard (silent fail)."""
+    """Add mission log entry to dashboard + kanban activity (silent fail).
+
+    Batched: mission_log + pm.speech in 1 flock on agent_status.json,
+    kanban activity in 1 flock on kanban.json. Total: 2 flocks (was 3).
+    """
     try:
-        from ..agent_dashboard import add_mission_log, set_pm_speech
-        add_mission_log(agent, message)
-        if agent == 'pm':
-            set_pm_speech(message)
+        from ..dashboard import add_mission_log_and_speech
+        add_mission_log_and_speech(agent, message)
+    except Exception:
+        pass
+    try:
+        from ..dashboard.kanban import log_agent_activity
+        log_agent_activity(agent, message)
     except Exception:
         pass
 
@@ -107,10 +114,18 @@ def create_working_lock(message_id, instruction, chat_id=None):
         print(f"[LOCK] 작업 잠금 생성: message_id={msg_id_str}")
         _dashboard_log('pm', f'Starting: {summary}')
 
-        # Kanban: move to In Progress
+        # Kanban: move to In Progress (없으면 자동 생성)
         try:
-            from ..dashboard.kanban import update_kanban_by_message_ids, COL_IN_PROGRESS
-            update_kanban_by_message_ids(message_ids, COL_IN_PROGRESS)
+            from ..dashboard.kanban import update_kanban_by_message_ids, add_kanban_task, COL_IN_PROGRESS, COL_TODO
+            moved = update_kanban_by_message_ids(message_ids, COL_IN_PROGRESS)
+            if not moved:
+                # 카드가 없음 → TODO 생성 후 즉시 IN_PROGRESS
+                add_kanban_task(
+                    title=summary,
+                    column=COL_IN_PROGRESS,
+                    source_message_ids=message_ids,
+                    chat_id=chat_id,
+                )
         except Exception:
             pass
 
@@ -243,8 +258,13 @@ def clear_new_instructions():
             print(f"[WARN] new_instructions.json 삭제 오류: {e}")
 
 
-def remove_working_lock():
-    """작업 잠금 파일 삭제"""
+def remove_working_lock(transition_to_waiting=False):
+    """작업 잠금 파일 삭제.
+
+    Args:
+        transition_to_waiting: True면 WAITING 상태 전환 (다른 TODO 처리 가능하게).
+            로그 메시지만 변경, pm.speech는 유지.
+    """
     # Stop typing indicator before removing lock
     try:
         from ..channels._typing import stop as _typing_stop
@@ -254,10 +274,14 @@ def remove_working_lock():
 
     if os.path.exists(WORKING_LOCK_FILE):
         os.remove(WORKING_LOCK_FILE)
-        print("[UNLOCK] 작업 잠금 해제")
-        _dashboard_log('pm', 'Standing by...')
-        try:
-            from ..agent_dashboard import set_pm_speech
-            set_pm_speech('')  # Clear pm.speech so idle lines can play
-        except Exception:
-            pass
+        if transition_to_waiting:
+            print("[UNLOCK] 작업 잠금 해제 (WAITING 전환)")
+            _dashboard_log('pm', 'Waiting for feedback...')
+        else:
+            print("[UNLOCK] 작업 잠금 해제")
+            _dashboard_log('pm', 'Standing by...')
+            try:
+                from ..dashboard import set_pm_speech
+                set_pm_speech('')  # Clear pm.speech so idle lines can play
+            except Exception:
+                pass
