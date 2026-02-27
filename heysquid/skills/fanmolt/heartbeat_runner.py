@@ -1,6 +1,7 @@
 """Heartbeat 러너 — 에이전트 활동 1사이클."""
 
 import logging
+import random
 import time
 from datetime import datetime, timedelta
 
@@ -16,6 +17,7 @@ MIN_COMMENT_INTERVAL_SEC = 30
 MAX_COMMENTS_PER_BEAT = 3
 MAX_REPLIES_PER_BEAT = 5
 MAX_COMMENTED_POSTS_CACHE = 100  # ring buffer 최대 크기
+DEFAULT_SCHEDULE_HOURS = 4  # 에이전트별 기본 heartbeat 주기
 
 
 def _now() -> str:
@@ -45,6 +47,8 @@ def run_heartbeat(handle: str) -> dict:
     persona = agent.get("persona", "")
     result = {"handle": handle, "replies": 0, "comments": 0, "posted": False}
 
+    llm_failed = False
+
     # 1. 알림 확인 → 댓글 답변 (최우선, MAX_REPLIES_PER_BEAT 상한)
     try:
         last_noti_id = agent.get("last_notification_id")
@@ -65,6 +69,10 @@ def run_heartbeat(handle: str) -> dict:
                     client.create_comment(n["post_id"], reply, parent_id=n.get("comment_id"))
                     replied += 1
                     time.sleep(MIN_COMMENT_INTERVAL_SEC)
+                except RuntimeError:
+                    llm_failed = True
+                    logger.warning("%s: LLM 불가 — 답변 스킵", handle)
+                    break
                 except Exception as e:
                     logger.warning("답변 실패: %s", e)
             # cursor 갱신 (처리 여부와 무관하게)
@@ -75,45 +83,59 @@ def run_heartbeat(handle: str) -> dict:
         logger.warning("알림 조회 실패: %s", e)
 
     # 2. 피드 탐색 → 댓글 달기 (이미 댓글 단 포스트 스킵)
-    try:
-        feed = client.get_feed(sort="new", limit=15)
-        commented = 0
-        commented_posts = set(agent.get("commented_posts", []))
-        for post in feed:
-            if commented >= MAX_COMMENTS_PER_BEAT:
-                break
-            post_id = post.get("id", "")
-            # 내 글 또는 이미 댓글 단 포스트 스킵
-            creator = post.get("creator", {})
-            if creator.get("handle") == handle:
-                continue
-            if post_id in commented_posts:
-                continue
-            try:
-                comment = generate_comment(persona, post)
-                if comment:
-                    client.create_comment(post_id, comment)
-                    commented += 1
-                    commented_posts.add(post_id)
-                    time.sleep(MIN_COMMENT_INTERVAL_SEC)
-            except Exception as e:
-                logger.warning("댓글 실패: %s", e)
-        result["comments"] = commented
-        # ring buffer: 최근 100개만 유지
-        agent["commented_posts"] = list(commented_posts)[-MAX_COMMENTED_POSTS_CACHE:]
-    except Exception as e:
-        logger.warning("피드 조회 실패: %s", e)
+    if not llm_failed:
+        try:
+            feed = client.get_feed(sort="new", limit=15)
+            commented = 0
+            commented_posts = set(agent.get("commented_posts", []))
+            for post in feed:
+                if commented >= MAX_COMMENTS_PER_BEAT:
+                    break
+                post_id = post.get("id", "")
+                # 내 글 또는 이미 댓글 단 포스트 스킵
+                creator = post.get("creator", {})
+                if creator.get("handle") == handle:
+                    continue
+                if post_id in commented_posts:
+                    continue
+                try:
+                    comment = generate_comment(persona, post)
+                    if comment:
+                        client.create_comment(post_id, comment)
+                        commented += 1
+                        commented_posts.add(post_id)
+                        time.sleep(MIN_COMMENT_INTERVAL_SEC)
+                except RuntimeError:
+                    llm_failed = True
+                    logger.warning("%s: LLM 불가 — 댓글 스킵", handle)
+                    break
+                except Exception as e:
+                    logger.warning("댓글 실패: %s", e)
+            result["comments"] = commented
+            # ring buffer: 최근 100개만 유지
+            agent["commented_posts"] = list(commented_posts)[-MAX_COMMENTED_POSTS_CACHE:]
+        except Exception as e:
+            logger.warning("피드 조회 실패: %s", e)
 
-    # 3. 글 작성 (쿨다운 체크)
-    if _hours_since(agent.get("last_post_at")) >= MIN_POST_INTERVAL_HOURS:
+    # 3. 글 작성 (쿨다운 체크, LLM 실패 시 스킵)
+    if not llm_failed and _hours_since(agent.get("last_post_at")) >= MIN_POST_INTERVAL_HOURS:
         try:
             prev_titles = _get_prev_titles(client)
             post_data = generate_post(persona, agent.get("category", "build"), prev_titles)
+            # post_ratio_free 적용 (LLM 판단 대신 확률 기반)
+            ratio = agent.get("post_ratio_free", 70)
+            post_data["is_free"] = random.random() * 100 < ratio
             client.create_post(**post_data)
             result["posted"] = True
             agent["last_post_at"] = _now()
+        except RuntimeError:
+            llm_failed = True
+            logger.warning("%s: LLM 불가 — 글 작성 스킵", handle)
         except Exception as e:
             logger.warning("글 작성 실패: %s", e)
+
+    if llm_failed:
+        result["llm_unavailable"] = True
 
     # 4. 상태 저장
     agent["last_heartbeat_at"] = _now()
@@ -130,7 +152,7 @@ def run_heartbeat(handle: str) -> dict:
 
 
 def run_all() -> list[dict]:
-    """모든 에이전트 순회 heartbeat."""
+    """모든 에이전트 순회 heartbeat (스케줄 무시, 전부 실행)."""
     agents = list_agents()
     results = []
     for agent in agents:
@@ -139,6 +161,27 @@ def run_all() -> list[dict]:
             results.append(r)
         except Exception as e:
             results.append({"handle": agent.get("handle", "?"), "ok": False, "error": str(e)})
+    return results
+
+
+def run_due_agents() -> list[dict]:
+    """schedule_hours 기반으로 시간이 된 에이전트만 heartbeat.
+
+    에이전트 JSON의 schedule_hours (기본 4) 경과 시에만 실행.
+    """
+    agents = list_agents()
+    results = []
+    for agent in agents:
+        handle = agent.get("handle", "?")
+        interval = agent.get("schedule_hours", DEFAULT_SCHEDULE_HOURS)
+        elapsed = _hours_since(agent.get("last_heartbeat_at"))
+        if elapsed < interval:
+            continue
+        try:
+            r = run_heartbeat(handle)
+            results.append(r)
+        except Exception as e:
+            results.append({"handle": handle, "ok": False, "error": str(e)})
     return results
 
 
