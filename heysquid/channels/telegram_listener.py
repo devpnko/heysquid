@@ -48,24 +48,71 @@ def _is_stop_command(text):
 
 
 def _kill_executor():
-    """실행 중인 executor Claude 프로세스를 종료"""
+    """실행 중인 executor Claude 프로세스를 종료 — executor.sh kill_all_pm과 동일 로직"""
     killed = False
+    pidfile = os.path.join(PROJECT_ROOT, "data", "claude.pid")
 
-    # 1. Claude executor 프로세스 kill
+    # 1차: PID 파일 (가장 확실 — orphan claude도 잡음)
+    if os.path.exists(pidfile):
+        try:
+            with open(pidfile, "r") as f:
+                for line in f:
+                    pid = line.strip()
+                    if pid:
+                        subprocess.run(["kill", pid], capture_output=True)
+                        print(f"[STOP] PID 파일에서 프로세스 종료: PID {pid}")
+                        killed = True
+        except Exception as e:
+            print(f"[WARN] PID 파일 읽기 실패: {e}")
+
+    # 2차: caffeinate 패턴 → 부모(claude) kill
     try:
         result = subprocess.run(
-            ["pgrep", "-f", "claude.*append-system-prompt-file"],
+            ["pgrep", "-f", "caffeinate.*append-system-prompt-file"],
             capture_output=True, text=True
         )
         if result.returncode == 0:
-            pids = result.stdout.strip().split("\n")
-            for pid in pids:
-                if pid.strip():
-                    subprocess.run(["kill", pid.strip()], capture_output=True)
-                    print(f"[STOP] Claude executor 프로세스 종료: PID {pid.strip()}")
+            for cafe_pid in result.stdout.strip().split("\n"):
+                cafe_pid = cafe_pid.strip()
+                if cafe_pid:
+                    ppid_result = subprocess.run(
+                        ["ps", "-p", cafe_pid, "-o", "ppid="],
+                        capture_output=True, text=True
+                    )
+                    parent = ppid_result.stdout.strip()
+                    if parent:
+                        subprocess.run(["kill", parent], capture_output=True)
+                        print(f"[STOP] claude 프로세스 종료: PID {parent} (caffeinate={cafe_pid}의 부모)")
+                        killed = True
+                    subprocess.run(["kill", cafe_pid], capture_output=True)
                     killed = True
     except Exception as e:
-        print(f"[WARN] 프로세스 kill 실패: {e}")
+        print(f"[WARN] caffeinate 패턴 kill 실패: {e}")
+
+    # 3차: pkill fallback
+    subprocess.run(["pkill", "-f", "append-system-prompt-file"], capture_output=True)
+
+    # force kill — 2초 후 생존자 kill -9
+    if killed:
+        import time
+        time.sleep(2)
+        if os.path.exists(pidfile):
+            try:
+                with open(pidfile, "r") as f:
+                    for line in f:
+                        pid = line.strip()
+                        if pid:
+                            subprocess.run(["kill", "-9", pid], capture_output=True)
+            except Exception:
+                pass
+        subprocess.run(["pkill", "-9", "-f", "append-system-prompt-file"], capture_output=True)
+
+    # PID 파일 삭제
+    try:
+        if os.path.exists(pidfile):
+            os.remove(pidfile)
+    except OSError:
+        pass
 
     # 2. executor.lock 삭제
     if os.path.exists(EXECUTOR_LOCK_FILE):
@@ -416,7 +463,8 @@ async def fetch_new_messages():
                 "files": files,
                 "location": location_info,
                 "timestamp": msg.date.astimezone(ZoneInfo("Asia/Seoul")).strftime("%Y-%m-%d %H:%M:%S"),
-                "processed": False
+                "processed": False,
+                "reply_to_message_id": msg.reply_to_message.message_id if msg.reply_to_message else None,
             }
 
             new_messages.append(message_data)

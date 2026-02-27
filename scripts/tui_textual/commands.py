@@ -206,20 +206,70 @@ def _broadcast_to_channels(text: str):
 
 
 def _kill_executor() -> bool:
-    """executor Claude 프로세스 종료"""
+    """executor Claude 프로세스 종료 — executor.sh kill_all_pm과 동일 로직"""
     killed = False
+    pidfile = os.path.join(ROOT, "data", "claude.pid")
+
+    # 1차: PID 파일 (가장 확실 — orphan claude도 잡음)
+    if os.path.exists(pidfile):
+        try:
+            with open(pidfile, "r") as f:
+                for line in f:
+                    pid = line.strip()
+                    if pid:
+                        subprocess.run(["kill", pid], capture_output=True)
+                        killed = True
+        except Exception:
+            pass
+
+    # 2차: caffeinate 패턴 → 부모(claude) kill
     try:
         result = subprocess.run(
-            ["pgrep", "-f", "claude.*append-system-prompt-file"],
+            ["pgrep", "-f", "caffeinate.*append-system-prompt-file"],
             capture_output=True, text=True,
         )
         if result.returncode == 0:
-            for pid in result.stdout.strip().split("\n"):
-                pid = pid.strip()
-                if pid:
-                    subprocess.run(["kill", pid], capture_output=True)
+            for cafe_pid in result.stdout.strip().split("\n"):
+                cafe_pid = cafe_pid.strip()
+                if cafe_pid:
+                    # caffeinate의 부모 = claude
+                    ppid_result = subprocess.run(
+                        ["ps", "-p", cafe_pid, "-o", "ppid="],
+                        capture_output=True, text=True,
+                    )
+                    parent = ppid_result.stdout.strip()
+                    if parent:
+                        subprocess.run(["kill", parent], capture_output=True)
+                        killed = True
+                    subprocess.run(["kill", cafe_pid], capture_output=True)
                     killed = True
     except Exception:
+        pass
+
+    # 3차: pkill fallback
+    subprocess.run(["pkill", "-f", "append-system-prompt-file"], capture_output=True)
+
+    # force kill — 2초 후 생존자 kill -9
+    if killed:
+        import time
+        time.sleep(2)
+        if os.path.exists(pidfile):
+            try:
+                with open(pidfile, "r") as f:
+                    for line in f:
+                        pid = line.strip()
+                        if pid:
+                            subprocess.run(["kill", "-0", pid], capture_output=True)
+                            subprocess.run(["kill", "-9", pid], capture_output=True)
+            except Exception:
+                pass
+        subprocess.run(["pkill", "-9", "-f", "append-system-prompt-file"], capture_output=True)
+
+    # PID 파일 삭제
+    try:
+        if os.path.exists(pidfile):
+            os.remove(pidfile)
+    except OSError:
         pass
 
     try:
