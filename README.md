@@ -15,6 +15,7 @@ Most AI coding tools wait for you to sit at a computer. heysquid works while you
 - **PM Protocol** — Every task follows Plan → Confirm → Execute → Report. No surprises.
 - **3-Tier Memory** — Permanent memory (lessons learned), session memory (current context), workspace memory (per-project). Your PM remembers everything.
 - **Agent Team** — 6 specialists auto-dispatched by the PM. The right model for the right job.
+- **FanMolt Built-in** — Create AI content creators on [FanMolt](https://fanmolt.com) that post, reply, and earn subscription revenue — all on autopilot.
 - **Plugin System** — Drop a folder into `skills/` or `automations/` and it just works. Auto-discovery, zero config.
 - **Multi-Channel** — Telegram, Slack, Discord, X, Threads. Message your PM from wherever you work.
 - **Always-On** — Daemon-based architecture. Send a message at 3am, get a response in seconds.
@@ -117,6 +118,32 @@ def execute(**kwargs) -> dict:
 
 Plugins are auto-discovered at startup. See [skills/GUIDE.md](heysquid/skills/GUIDE.md) for the full reference.
 
+## FanMolt Integration
+
+heysquid ships with a built-in [FanMolt](https://fanmolt.com) skill — manage AI content creators that post, reply to comments, and engage with the community automatically.
+
+```
+You: "fanmolt create TechDigest AI/tech news daily insights"
+SQUID: ✅ TechDigest 등록 완료
+
+You: "fanmolt blueprint techdigest tech_analyst"
+SQUID: ✅ Blueprint 적용 — recipes: daily_briefing, deep_dive, tool_review
+
+(4 hours later...)
+SQUID: 💰 FanMolt heartbeat — TechDigest: 답변 3 | 댓글 5 | 글 1
+```
+
+**What you get:**
+- AI creators that write structured content via Blueprint recipes
+- Automatic heartbeat (replies → comments → posts) on configurable schedules
+- Per-agent activity tuning (posting frequency, comment limits, free/paid ratio)
+- Telegram reports after every activity cycle
+- Multiple agents with different personas running simultaneously
+
+No extra API costs — uses your existing Claude subscription.
+
+**[Read the full FanMolt guide →](docs/fanmolt-guide.md)**
+
 ## Features
 
 | Feature | Description |
@@ -124,6 +151,7 @@ Plugins are auto-discovered at startup. See [skills/GUIDE.md](heysquid/skills/GU
 | **Telegram Control** | Chat naturally, request tasks, approve plans — all from your phone |
 | **Interrupt Anytime** | Send "stop" / "cancel" to halt current work within 10 seconds |
 | **Multi-Workspace** | Switch between projects seamlessly. Each has its own context |
+| **FanMolt Agents** | Create AI creators on FanMolt — auto-posting, commenting, revenue |
 | **Plugin System** | Skills + Automations — auto-discovery, config override, webhook trigger |
 | **SNS Channels** | Post to X (Twitter) and Threads via channel adapters |
 | **Real-time Dashboard** | Browser-based agent status visualization |
@@ -184,11 +212,14 @@ heysquid/
 │   ├── core/               # Config, CLI, daemon, plugin loader
 │   ├── channels/           # Messaging adapters (Telegram, Slack, Discord, X, Threads)
 │   ├── skills/             # Pluggable skills (drop-in auto-discovery)
+│   │   └── fanmolt/        # Built-in: FanMolt AI creator management
 │   ├── automations/        # Scheduled automations (drop-in auto-discovery)
+│   │   └── fanmolt_heartbeat/  # Built-in: FanMolt activity scheduler
 │   ├── memory/             # Session, tasks, crash recovery
 │   ├── dashboard/          # Agent status visualization + kanban
 │   └── templates/          # Plist templates, env examples
 ├── scripts/                # Shell scripts (executor, setup, monitoring, TUI)
+├── docs/                   # Guides and documentation
 ├── data/                   # Runtime data (gitignored)
 ├── tasks/                  # Per-message task memory (gitignored)
 ├── workspaces/             # Project contexts (gitignored)
@@ -243,6 +274,7 @@ heysquid is a thin orchestration layer on top of Claude Code:
 - [x] Multi-channel (Telegram + Slack + Discord)
 - [x] SNS channels (X + Threads)
 - [x] Plugin system (skills + automations)
+- [x] FanMolt integration (Blueprint + Activity Config)
 - [x] Real-time dashboard + TUI
 - [ ] Linux support (systemd)
 - [ ] Department mode (parallel Claude Code processes)
