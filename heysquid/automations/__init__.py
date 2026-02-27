@@ -1,4 +1,4 @@
-"""heysquid.automations — 자동 반복 플러그인 (schedule/interval)."""
+"""heysquid.automations — automated recurring plugins (schedule/interval)."""
 
 from pathlib import Path
 
@@ -8,7 +8,7 @@ _DIR = Path(__file__).parent
 
 
 def discover_automations() -> dict[str, dict]:
-    """automations/ 하위 폴더 스캔 → SKILL_META가 있는 모듈 자동 수집."""
+    """Scan automations/ subfolders and auto-collect modules with SKILL_META."""
     return discover_plugins("heysquid.automations", _DIR)
 
 
@@ -16,7 +16,7 @@ _registry_cache = None
 
 
 def get_automation_registry() -> dict[str, dict]:
-    """캐시된 automation 레지스트리 반환."""
+    """Return cached automation registry."""
     global _registry_cache
     if _registry_cache is None:
         _registry_cache = discover_automations()
@@ -24,13 +24,13 @@ def get_automation_registry() -> dict[str, dict]:
 
 
 def reload_automations():
-    """automation 레지스트리 새로고침."""
+    """Refresh automation registry."""
     global _registry_cache
     _registry_cache = None
     return get_automation_registry()
 
 
 def run_automation(name: str, ctx: PluginContext | None = None) -> dict:
-    """automation을 이름으로 실행."""
+    """Run an automation by name."""
     registry = get_automation_registry()
     return run_plugin("heysquid.automations", name, ctx, registry=registry)

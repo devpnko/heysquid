@@ -1,4 +1,4 @@
-"""에이전트 레지스트리 — 모든 에이전트 정보의 단일 소스."""
+"""Agent registry — single source of truth for all agent information."""
 
 AGENTS = {
     "pm": {
@@ -9,7 +9,7 @@ AGENTS = {
         "css_class": "squid-pixel-lg",
         "label": "SQUID",
         "model": "opus",
-        "role": "PM/팀 리더",
+        "role": "PM/Team Lead",
     },
     "researcher": {
         "animal": "octopus",
@@ -19,7 +19,7 @@ AGENTS = {
         "css_class": "octopus-pixel",
         "label": "Explorer",
         "model": "haiku",
-        "role": "탐색/조사",
+        "role": "Exploration/Research",
     },
     "developer": {
         "animal": "shark",
@@ -29,7 +29,7 @@ AGENTS = {
         "css_class": "shark-pixel",
         "label": "Engineer",
         "model": "opus",
-        "role": "구현/코딩",
+        "role": "Implementation/Coding",
     },
     "reviewer": {
         "animal": "turtle",
@@ -39,7 +39,7 @@ AGENTS = {
         "css_class": "turtle-pixel",
         "label": "Reviewer",
         "model": "sonnet",
-        "role": "리뷰/검토",
+        "role": "Review/Audit",
     },
     "tester": {
         "animal": "pufferfish",
@@ -49,7 +49,7 @@ AGENTS = {
         "css_class": "puffer-pixel",
         "label": "Tester",
         "model": "haiku",
-        "role": "테스트/QA",
+        "role": "Testing/QA",
     },
     "writer": {
         "animal": "lobster",
@@ -59,11 +59,11 @@ AGENTS = {
         "css_class": "lobster-pixel",
         "label": "Writer",
         "model": "sonnet",
-        "role": "작성/콘텐츠",
+        "role": "Writing/Content",
     },
 }
 
-# 도구 이모지 (stream_viewer + dashboard 공용)
+# Tool emoji (shared between stream_viewer + dashboard)
 TOOL_EMOJI = {
     "Read": "📖",
     "Edit": "✏️",
@@ -77,7 +77,7 @@ TOOL_EMOJI = {
     "sleep": "💤",
 }
 
-# Claude Code subagent_type → 대시보드 에이전트 매핑
+# Claude Code subagent_type -> dashboard agent mapping
 SUBAGENT_MAP = {
     "Explore": "researcher",
     "researcher": "researcher",
@@ -90,23 +90,23 @@ SUBAGENT_MAP = {
     "Bash": None,
 }
 
-# 편의 상수/함수
+# Convenience constants/functions
 AGENT_NAMES = [k for k in AGENTS if k != "pm"]
 VALID_AGENTS = list(AGENTS.keys())
 
 
 def get_emoji(agent_name):
-    """에이전트 이름 → 동물 이모지"""
+    """Agent name -> animal emoji"""
     return AGENTS.get(agent_name, {}).get("emoji", "🤖")
 
 
 def get_color(agent_name):
-    """에이전트 이름 → 색상 hex"""
+    """Agent name -> color hex"""
     return AGENTS.get(agent_name, {}).get("color_hex", "#ffffff")
 
 
 def get_role_emoji(agent_name):
-    """에이전트 이름 → 역할 이모지 (mission_log 포맷용)"""
+    """Agent name -> role emoji (for mission_log formatting)"""
     role_emojis = {
         "pm": "🦑",
         "researcher": "🔭",
@@ -118,37 +118,37 @@ def get_role_emoji(agent_name):
     return role_emojis.get(agent_name, "🔧")
 
 
-# Kraken Crew — Kraken 모드 전용 가상 전문가 (PM이 시뮬레이션)
-# 크라켄이 소환하는 심해 크루 — 해양생물 습성이 역할과 매칭
+# Kraken Crew — Virtual experts exclusive to Kraken mode (PM simulates them)
+# Deep-sea crew summoned by the Kraken — marine creature traits match their roles
 KRAKEN_CREW = {
-    # Builders (개발/비즈니스)
-    "seal":      {"name": "Seal",      "animal": "물범",     "role": "Analyst",          "emoji": "🦭",  "crew": "builders",
-                  "style": "조용한 관찰, 근거 기반, 숨겨진 인사이트 발굴, 시장/경쟁 프레임워크"},
-    "whale":     {"name": "Whale",     "animal": "고래",     "role": "Architect",        "emoji": "🐋",  "crew": "builders",
-                  "style": "거시적 시각, 실용적 아키텍처, 확장성 트레이드오프, 검증된 기술"},
-    "crab":      {"name": "Crab",      "animal": "게",       "role": "Developer",        "emoji": "🦀",  "crew": "builders",
-                  "style": "정밀한 구현, TDD 철저, 테스트 100% 필수, 견고한 코드"},
-    "dolphin":   {"name": "Dolphin",   "animal": "돌고래",   "role": "PM",               "emoji": "🐬",  "crew": "builders",
-                  "style": "WHY 추적, 데이터 기반, 소통의 달인, 최소 기능 검증 우선"},
-    "sailfish":  {"name": "Sailfish",  "animal": "돛새치",   "role": "Solo Dev",         "emoji": "🐟",  "crew": "builders",
-                  "style": "바다 최속, Quick Flow, 최소 오버헤드, shipped > perfect"},
-    "otter":     {"name": "Otter",     "animal": "해달",     "role": "Scrum Master",     "emoji": "🦦",  "crew": "builders",
-                  "style": "도구 사용, 체크리스트, 모호함 제로, 서번트 리더"},
-    "nautilus":  {"name": "Nautilus",  "animal": "앵무조개", "role": "Tech Writer",      "emoji": "🐚",  "crew": "builders",
-                  "style": "황금비율 구조, 명확성 최우선, 다이어그램 > 긴 설명"},
-    "coral":     {"name": "Coral",     "animal": "산호",     "role": "UX Designer",      "emoji": "🪸",  "crew": "builders",
-                  "style": "생태계 기반 설계, 스토리텔링, 공감, 단순함→피드백"},
-    # Dreamers (창의/혁신)
-    "clownfish": {"name": "Clownfish", "animal": "흰동가리", "role": "Brainstorm Coach", "emoji": "🐠",  "crew": "dreamers",
-                  "style": "안전한 환경 조성, 와일드 아이디어, 놀이 기반 발상"},
-    "jellyfish": {"name": "Jellyfish", "animal": "해파리",   "role": "Problem Solver",   "emoji": "🪼",  "crew": "dreamers",
-                  "style": "5억년 적응력, 꿰뚫어 봄, TRIZ, 시스템 씽킹, 모순 해결"},
-    "shrimp":    {"name": "Shrimp",    "animal": "청소새우", "role": "Design Thinking",  "emoji": "🦐",  "crew": "dreamers",
-                  "style": "사용자 중심 봉사, 가정 검증, 프로토타입 우선"},
-    "flyingfish":{"name": "Flyingfish","animal": "날치",     "role": "Innovation",       "emoji": "🐟",  "crew": "dreamers",
-                  "style": "경계 돌파, 기존 틀 깨기, 비즈니스 모델 혁신"},
-    "cuttlefish":{"name": "Cuttlefish","animal": "갑오징어", "role": "Presentation",     "emoji": "🦑",  "crew": "dreamers",
-                  "style": "몸 전체 색/패턴 변환, 비주얼 내러티브, 시각 계층"},
+    # Builders (development/business)
+    "seal":      {"name": "Seal",      "animal": "seal",        "role": "Analyst",          "emoji": "🦭",  "crew": "builders",
+                  "style": "Quiet observation, evidence-based, uncovers hidden insights, market/competition frameworks"},
+    "whale":     {"name": "Whale",     "animal": "whale",       "role": "Architect",        "emoji": "🐋",  "crew": "builders",
+                  "style": "Big-picture thinking, pragmatic architecture, scalability tradeoffs, proven technologies"},
+    "crab":      {"name": "Crab",      "animal": "crab",        "role": "Developer",        "emoji": "🦀",  "crew": "builders",
+                  "style": "Precise implementation, strict TDD, 100% test coverage required, robust code"},
+    "dolphin":   {"name": "Dolphin",   "animal": "dolphin",     "role": "PM",               "emoji": "🐬",  "crew": "builders",
+                  "style": "WHY-driven, data-based, communication master, validate minimum features first"},
+    "sailfish":  {"name": "Sailfish",  "animal": "sailfish",    "role": "Solo Dev",         "emoji": "🐟",  "crew": "builders",
+                  "style": "Fastest in the sea, Quick Flow, minimal overhead, shipped > perfect"},
+    "otter":     {"name": "Otter",     "animal": "otter",       "role": "Scrum Master",     "emoji": "🦦",  "crew": "builders",
+                  "style": "Tool usage, checklists, zero ambiguity, servant leader"},
+    "nautilus":  {"name": "Nautilus",  "animal": "nautilus",    "role": "Tech Writer",      "emoji": "🐚",  "crew": "builders",
+                  "style": "Golden-ratio structure, clarity first, diagrams > long explanations"},
+    "coral":     {"name": "Coral",     "animal": "coral",       "role": "UX Designer",      "emoji": "🪸",  "crew": "builders",
+                  "style": "Ecosystem-based design, storytelling, empathy, simplicity->feedback"},
+    # Dreamers (creativity/innovation)
+    "clownfish": {"name": "Clownfish", "animal": "clownfish",   "role": "Brainstorm Coach", "emoji": "🐠",  "crew": "dreamers",
+                  "style": "Safe environment, wild ideas, play-based ideation"},
+    "jellyfish": {"name": "Jellyfish", "animal": "jellyfish",   "role": "Problem Solver",   "emoji": "🪼",  "crew": "dreamers",
+                  "style": "500M years of adaptability, sees through, TRIZ, systems thinking, resolves contradictions"},
+    "shrimp":    {"name": "Shrimp",    "animal": "cleaner shrimp", "role": "Design Thinking",  "emoji": "🦐",  "crew": "dreamers",
+                  "style": "User-centered service, validate assumptions, prototype first"},
+    "flyingfish":{"name": "Flyingfish","animal": "flying fish",  "role": "Innovation",       "emoji": "🐟",  "crew": "dreamers",
+                  "style": "Break boundaries, shatter existing molds, business model innovation"},
+    "cuttlefish":{"name": "Cuttlefish","animal": "cuttlefish",  "role": "Presentation",     "emoji": "🦑",  "crew": "dreamers",
+                  "style": "Full-body color/pattern transformation, visual narrative, visual hierarchy"},
 }
 
 KRAKEN_CREW_NAMES = list(KRAKEN_CREW.keys())

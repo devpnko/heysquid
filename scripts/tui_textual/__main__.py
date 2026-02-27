@@ -1,4 +1,4 @@
-"""python -m scripts.tui_textual 로 실행 가능"""
+"""Runnable via python -m scripts.tui_textual"""
 from .app import main
 
 main()

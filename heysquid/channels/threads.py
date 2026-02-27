@@ -1,13 +1,13 @@
 """
-Threads 채널 어댑터 — heysquid
+Threads channel adapter — heysquid
 
-Meta Graph API를 사용하여 Threads에 게시합니다.
-2단계: 컨테이너 생성 → 게시(publish).
+Posts to Threads using the Meta Graph API.
+Two-step process: create container → publish.
 
-필요 환경변수:
+Required environment variables:
     THREADS_ACCESS_TOKEN, THREADS_USER_ID
 
-Meta Developer 앱 + Instagram Business 계정 필요:
+Requires Meta Developer app + Instagram Business account:
     https://developers.facebook.com/docs/threads
 """
 
@@ -35,28 +35,28 @@ def _is_configured() -> bool:
 
 
 class ThreadsChannel(ChannelAdapter):
-    """Meta Threads API 채널 어댑터."""
+    """Meta Threads API channel adapter."""
 
     def send_message(self, chat_id, text, **kwargs):
-        """Threads에 텍스트 게시.
+        """Post text to Threads.
 
-        2단계 프로세스:
-        1. POST /{user-id}/threads → 컨테이너 생성
-        2. POST /{user-id}/threads_publish → 게시
+        Two-step process:
+        1. POST /{user-id}/threads → create container
+        2. POST /{user-id}/threads_publish → publish
 
         Args:
-            chat_id: 무시됨 (자기 계정에 게시)
-            text: 게시 내용 (500자 권장)
+            chat_id: Ignored (posts to own account)
+            text: Post content (500 chars recommended)
 
         Returns:
             dict: {"ok": bool, "thread_id": str | None, "error": str | None}
         """
         if not _is_configured():
-            logger.warning("Threads API 미설정. .env 파일을 확인하세요.")
-            return {"ok": False, "error": "Threads API 미설정"}
+            logger.warning("Threads API not configured. Check your .env file.")
+            return {"ok": False, "error": "Threads API not configured"}
 
         try:
-            # Step 1: 컨테이너 생성
+            # Step 1: Create container
             create_url = f"{GRAPH_API_BASE}/{THREADS_USER_ID}/threads"
             create_resp = requests.post(
                 create_url,
@@ -70,14 +70,14 @@ class ThreadsChannel(ChannelAdapter):
 
             if create_resp.status_code != 200:
                 error = create_resp.text[:200]
-                logger.error(f"[Threads] 컨테이너 생성 실패 ({create_resp.status_code}): {error}")
-                return {"ok": False, "error": f"컨테이너 생성 실패: {error}"}
+                logger.error(f"[Threads] Container creation failed ({create_resp.status_code}): {error}")
+                return {"ok": False, "error": f"Container creation failed: {error}"}
 
             container_id = create_resp.json().get("id")
             if not container_id:
-                return {"ok": False, "error": "컨테이너 ID 없음"}
+                return {"ok": False, "error": "No container ID returned"}
 
-            # Step 2: 게시 (약간의 딜레이 권장)
+            # Step 2: Publish (slight delay recommended)
             time.sleep(2)
 
             publish_url = f"{GRAPH_API_BASE}/{THREADS_USER_ID}/threads_publish"
@@ -92,22 +92,22 @@ class ThreadsChannel(ChannelAdapter):
 
             if publish_resp.status_code != 200:
                 error = publish_resp.text[:200]
-                logger.error(f"[Threads] 게시 실패 ({publish_resp.status_code}): {error}")
-                return {"ok": False, "error": f"게시 실패: {error}"}
+                logger.error(f"[Threads] Publish failed ({publish_resp.status_code}): {error}")
+                return {"ok": False, "error": f"Publish failed: {error}"}
 
             thread_id = publish_resp.json().get("id", "")
-            logger.info(f"[Threads] 게시 완료: {thread_id}")
+            logger.info(f"[Threads] Published: {thread_id}")
             return {"ok": True, "thread_id": thread_id}
 
         except Exception as e:
-            logger.error(f"[Threads] 게시 오류: {e}")
+            logger.error(f"[Threads] Post error: {e}")
             return {"ok": False, "error": str(e)}
 
     def send_file(self, chat_id, file_path, **kwargs):
-        """Threads 이미지/동영상 게시.
+        """Post image/video to Threads.
 
-        이미지: media_type=IMAGE + image_url 필요 (공개 URL)
-        현재는 미지원 — 텍스트 전용.
+        Image: requires media_type=IMAGE + image_url (public URL)
+        Currently unsupported — text only.
         """
-        logger.warning("[Threads] 파일 첨부는 현재 미지원 (텍스트 전용)")
-        return {"ok": False, "error": "Threads 파일 첨부 미지원"}
+        logger.warning("[Threads] File attachments not currently supported (text only)")
+        return {"ok": False, "error": "Threads file attachment not supported"}

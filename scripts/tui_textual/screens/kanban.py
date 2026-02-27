@@ -1,4 +1,4 @@
-"""KanbanScreen — 칸반 보드 뷰 (가로 5컬럼)"""
+"""KanbanScreen -- Kanban board view (horizontal 5 columns)."""
 
 import unicodedata
 from textual.screen import Screen
@@ -14,12 +14,12 @@ from ..colors import AGENT_COLORS
 
 
 def _cell_width(text: str) -> int:
-    """터미널 셀 폭 계산 (한글=2cell)"""
+    """Calculate terminal cell width (CJK=2 cells)."""
     return sum(2 if unicodedata.east_asian_width(ch) in ("W", "F") else 1 for ch in text)
 
 
 def _trunc(text: str, max_cells: int) -> str:
-    """터미널 셀 폭 기준으로 텍스트 자르기 (한글=2cell)"""
+    """Truncate text by terminal cell width (CJK=2 cells)."""
     width = 0
     for i, ch in enumerate(text):
         w = 2 if unicodedata.east_asian_width(ch) in ("W", "F") else 1
@@ -30,7 +30,7 @@ def _trunc(text: str, max_cells: int) -> str:
 
 
 def _wrap_lines(text: str, max_cells: int, max_lines: int = 2) -> list[str]:
-    """텍스트를 셀 폭 기준으로 여러 줄로 나누기 (한글=2cell)."""
+    """Split text into multiple lines by cell width (CJK=2 cells)."""
     lines = []
     remaining = text
     for _ in range(max_lines):
@@ -47,13 +47,13 @@ def _wrap_lines(text: str, max_cells: int, max_lines: int = 2) -> list[str]:
         lines.append(remaining[:cut])
         remaining = remaining[cut:]
     if remaining and lines:
-        # 마지막 줄 말줄임
+        # Ellipsis on last line
         last = lines[-1]
         trimmed = _trunc(last, max_cells - 1)
         lines[-1] = trimmed + "\u2026"
     return lines
 
-# 컬럼 정의: (key, short_label, color_hex)
+# Column definitions: (key, short_label, color_hex)
 _COLUMNS = [
     ("automation", "Auto", "#cc66ff"),
     ("todo", "Todo", "#00d4ff"),
@@ -64,7 +64,7 @@ _COLUMNS = [
 
 
 class KanbanScreen(Screen):
-    """Kanban 모드 — MISSION BOARD (가로 5컬럼)"""
+    """Kanban mode -- MISSION BOARD (horizontal 5 columns)."""
 
     DEFAULT_CSS = """
     KanbanScreen {
@@ -132,12 +132,12 @@ class KanbanScreen(Screen):
         )
         yield KanbanInput(id="kanban-cmd")
         yield Static(
-            "[dim] done K1 | move K1 ip | del K1 | info K1 | merge K1 K2 | clean   Tab:\uc644\uc131  q:quit  ^1~5:mode[/dim]",
+            "[dim] done K1 | move K1 ip | del K1 | info K1 | merge K1 K2 | clean   Tab:complete  q:quit  ^1~5:mode[/dim]",
             id="kanban-status-bar",
         )
 
     def on_screen_resume(self) -> None:
-        """화면 전환 시 입력창에 자동 포커스"""
+        """Auto-focus input on screen switch."""
         try:
             self.query_one(KanbanInput).focus()
         except Exception:
@@ -154,7 +154,7 @@ class KanbanScreen(Screen):
         return f"[bold]\U0001f991 SQUID[/bold]  [bold {pm_color}]\\[KANBAN][/bold {pm_color}]  {indicator}"
 
     def show_info(self, text: str) -> None:
-        """info 패널에 카드 상세 정보 표시"""
+        """Show card details in info panel."""
         try:
             panel = self.query_one("#kanban-info-panel")
             content = self.query_one("#kanban-info-content", Static)
@@ -164,7 +164,7 @@ class KanbanScreen(Screen):
             pass
 
     def hide_info(self) -> None:
-        """info 패널 숨기기"""
+        """Hide info panel."""
         try:
             panel = self.query_one("#kanban-info-panel")
             panel.styles.display = "none"
@@ -199,32 +199,32 @@ class KanbanScreen(Screen):
                 pass
 
     def _get_card_width(self) -> int:
-        """컬럼 body 위젯의 실제 content 폭에서 카드 텍스트 폭 계산."""
+        """Calculate card text width from column body widget's actual content width."""
         try:
-            # VerticalScroll (kanban-col-body) 의 content 영역 폭
+            # VerticalScroll (kanban-col-body) content area width
             body_scroll = self.query_one("#kbody-todo").parent
-            # content_region = 패딩·스크롤바 제외한 실제 콘텐츠 영역
+            # content_region = actual content area excluding padding/scrollbar
             w = body_scroll.content_region.width
-            # 카드 테두리 "│ " = 2셀 제외
+            # Card border chars = 2 cells excluded
             return max(w - 2, 8)
         except Exception:
             return 14
 
     def _render_columns(self, status: dict) -> None:
-        """각 컬럼 위젯에 데이터 렌더링"""
+        """Render data into each column widget."""
         kanban = status.get("kanban", {})
         tasks = kanban.get("tasks", [])
         skills = status.get("automations", {})
 
         card_w = self._get_card_width()
 
-        # 컬럼별 카드 텍스트 수집
+        # Collect card text per column
         groups: dict[str, list[str]] = {key: [] for key, _, _ in _COLUMNS}
 
-        # 글로벌 카드 번호 (모든 카드에 K-ID 부여)
+        # Global card number (K-ID assigned to all cards)
         card_num = 0
 
-        # Automations — 카드 스타일
+        # Automations -- card style
         bc_auto = "#cc66ff"
         for name, sk in skills.items():
             if not sk.get("enabled", True):
@@ -236,7 +236,7 @@ class KanbanScreen(Screen):
             sched = sk.get("schedule", "")
             sched_s = f" {sched}" if sched else ""
             runs = sk.get("run_count", 0)
-            short_name = _trunc(name, card_w - 6)  # sid+icon 공간 제외
+            short_name = _trunc(name, card_w - 6)  # exclude sid+icon space
             lines = [
                 f"[{bc_auto}]\u256d\u2500[/{bc_auto}]",
                 f"[{bc_auto}]\u2502[/{bc_auto}] [bold cyan]{sid}[/bold cyan] {icon} [bold]{short_name}[/bold]",
@@ -245,7 +245,7 @@ class KanbanScreen(Screen):
             ]
             groups["automation"].append("\n".join(lines))
 
-        # Task cards — 카드 스타일
+        # Task cards -- card style
         col_border = {
             "todo": "#00d4ff",
             "in_progress": "#ff9f43",
@@ -266,17 +266,17 @@ class KanbanScreen(Screen):
 
             lines = [f"[{bc}]\u256d\u2500[/{bc}]"]
 
-            # ID + 아이콘 접두어 폭 계산 후 제목 줄바꿈
+            # Calculate ID + icon prefix width, then wrap title
             id_label = f"[bold cyan]{sid}[/bold cyan] " if sid else ""
             prefix_icon = "[dim]\u2713[/dim] " if col == "done" else ""
             id_cells = _cell_width(sid) + 1 if sid else 0  # +1 for space
             icon_cells = 2 if col == "done" else 0
             first_line_max = card_w - id_cells - icon_cells
-            cont_line_max = card_w - 1  # 들여쓰기 1칸
+            cont_line_max = card_w - 1  # 1 cell indent
 
             title_lines = _wrap_lines(raw_title, first_line_max, max_lines=1)
             if _cell_width(raw_title) > first_line_max:
-                # 첫 줄에 안 담기면 2줄로 분배
+                # If first line can't fit, distribute across 2 lines
                 title_lines = _wrap_lines(raw_title, cont_line_max, max_lines=2)
                 lines.append(f"[{bc}]\u2502[/{bc}] {id_label}{prefix_icon}{title_lines[0]}")
                 for tl in title_lines[1:]:
@@ -284,7 +284,7 @@ class KanbanScreen(Screen):
             else:
                 lines.append(f"[{bc}]\u2502[/{bc}] {id_label}{prefix_icon}{title_lines[0]}")
 
-            # 메타 정보
+            # Meta info
             meta = []
             if time_s:
                 meta.append(time_s)
@@ -295,7 +295,7 @@ class KanbanScreen(Screen):
             if col == "in_progress":
                 meta.append(f"[{bc}]\u25b0\u25b0\u25b0\u25b1\u25b1[/{bc}]")
             if col == "waiting":
-                meta.append("[#ffd32a]\u23f3\ub300\uae30[/#ffd32a]")
+                meta.append("[#ffd32a]\u23f3wait[/#ffd32a]")
             if meta:
                 lines.append(f"[{bc}]\u2502[/{bc}]  [dim]{' '.join(meta)}[/dim]")
             else:
@@ -304,7 +304,7 @@ class KanbanScreen(Screen):
             lines.append(f"[{bc}]\u2570\u2500[/{bc}]")
             groups[col].append("\n".join(lines))
 
-        # 각 컬럼 위젯 업데이트
+        # Update each column widget
         for key, label, color in _COLUMNS:
             items = groups[key]
             count = len(items)

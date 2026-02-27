@@ -1,1 +1,1 @@
-"""SQUID TUI — Textual 기반 채팅 + 토론 + 통합 로그"""
+"""SQUID TUI -- Textual-based chat + discussion + unified log."""

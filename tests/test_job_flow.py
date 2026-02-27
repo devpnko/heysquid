@@ -1,4 +1,4 @@
-"""IU-016 적용 테스트 — mark_done_telegram이 flock을 사용하는지"""
+"""IU-016 applied test — verify mark_done_telegram uses flock"""
 
 import json
 import os
@@ -9,7 +9,7 @@ import pytest
 
 
 def _setup_store(tmp_data_dir, initial_data):
-    """격리된 _msg_store를 셋업하고 함수 반환"""
+    """Set up isolated _msg_store and return functions"""
     import heysquid.channels._msg_store as store
 
     msg_file = str(tmp_data_dir / "telegram_messages.json")
@@ -34,10 +34,10 @@ def _setup_store(tmp_data_dir, initial_data):
 
 
 class TestMarkDoneTelegram:
-    """mark_done_telegram이 flock을 경유하여 processed를 마킹하는지"""
+    """Verify mark_done_telegram marks processed via flock"""
 
     def test_single_message_marked(self, tmp_path):
-        """단일 메시지 처리 완료 마킹"""
+        """Mark single message as processed"""
         initial = {
             "messages": [
                 {"message_id": 100, "type": "user", "processed": False},
@@ -48,7 +48,7 @@ class TestMarkDoneTelegram:
         store, msg_file, restore = _setup_store(tmp_path, initial)
 
         try:
-            # _working_lock의 함수들을 모킹 (파일 경로 의존성 회피)
+            # Mock _working_lock functions (avoid file path dependencies)
             with patch("heysquid.core._job_flow.load_new_instructions", return_value=[]), \
                  patch("heysquid.core._job_flow.clear_new_instructions"):
                 from heysquid.core._job_flow import mark_done_telegram
@@ -58,13 +58,13 @@ class TestMarkDoneTelegram:
             msg100 = next(m for m in data["messages"] if m["message_id"] == 100)
             msg101 = next(m for m in data["messages"] if m["message_id"] == 101)
 
-            assert msg100["processed"] is True, "msg 100이 processed가 아님"
-            assert msg101["processed"] is False, "msg 101이 잘못 processed됨"
+            assert msg100["processed"] is True, "msg 100 is not processed"
+            assert msg101["processed"] is False, "msg 101 incorrectly marked as processed"
         finally:
             restore()
 
     def test_multiple_messages_marked(self, tmp_path):
-        """리스트로 전달한 여러 메시지 처리 완료"""
+        """Mark multiple messages as processed via list"""
         initial = {
             "messages": [
                 {"message_id": 200, "type": "user", "processed": False},
@@ -89,7 +89,7 @@ class TestMarkDoneTelegram:
             restore()
 
     def test_with_new_instructions(self, tmp_path):
-        """작업 중 추가된 지시사항도 함께 처리되는지"""
+        """New instructions added during work should also be processed"""
         initial = {
             "messages": [
                 {"message_id": 300, "type": "user", "processed": False},
@@ -99,7 +99,7 @@ class TestMarkDoneTelegram:
         }
         store, msg_file, restore = _setup_store(tmp_path, initial)
 
-        new_insts = [{"message_id": 301, "text": "추가 지시"}]
+        new_insts = [{"message_id": 301, "text": "additional instruction"}]
 
         try:
             with patch("heysquid.core._job_flow.load_new_instructions", return_value=new_insts), \
@@ -109,17 +109,17 @@ class TestMarkDoneTelegram:
 
             data = store.load_telegram_messages()
             assert all(m["processed"] for m in data["messages"]), (
-                "새 지시사항 메시지(301)가 함께 처리되지 않음"
+                "New instruction message (301) was not processed together"
             )
         finally:
             restore()
 
 
 class TestReplyTelegramFlock:
-    """reply_telegram이 flock을 경유하여 processed/rollback하는지"""
+    """Verify reply_telegram handles processed/rollback via flock"""
 
     def test_processed_marking_on_success(self, tmp_path):
-        """전송 성공 시 processed가 True가 되는지"""
+        """processed should be True on successful send"""
         initial = {
             "messages": [
                 {"message_id": 400, "type": "user", "processed": False},
@@ -138,14 +138,14 @@ class TestReplyTelegramFlock:
             user_msg = next(m for m in data["messages"] if m["message_id"] == 400)
             assert user_msg["processed"] is True
 
-            # 봇 응답도 저장되었는지
+            # Verify bot response was also saved
             bot_msgs = [m for m in data["messages"] if m["type"] == "bot"]
             assert len(bot_msgs) == 1
         finally:
             restore()
 
     def test_processed_rollback_on_failure(self, tmp_path):
-        """전송 실패 시 processed가 False로 롤백되는지"""
+        """processed should be rolled back to False on send failure"""
         initial = {
             "messages": [
                 {"message_id": 500, "type": "user", "processed": False},
@@ -157,11 +157,11 @@ class TestReplyTelegramFlock:
         try:
             with patch("heysquid.channels.telegram.send_message_sync", return_value=False):
                 from heysquid.core.hub import reply_telegram
-                success = reply_telegram(12345, 500, "실패할 메시지")
+                success = reply_telegram(12345, 500, "message that will fail")
 
             assert success is False
             data = store.load_telegram_messages()
             user_msg = next(m for m in data["messages"] if m["message_id"] == 500)
-            assert user_msg["processed"] is False, "전송 실패인데 processed가 롤백되지 않음"
+            assert user_msg["processed"] is False, "processed was not rolled back despite send failure"
         finally:
             restore()

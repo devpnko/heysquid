@@ -1,19 +1,19 @@
 #!/bin/bash
-# heysquid executor — Mac 포팅 (mybot_autoexecutor.bat → executor.sh)
+# heysquid executor — Mac port (mybot_autoexecutor.bat -> executor.sh)
 #
-# 핵심 로직:
-# 1. Claude CLI 설치 확인
-# 2. 프로세스 충돌 감지 (3중 안전장치)
-# 3. quick_check.py로 메시지 유무 확인
-# 4. 세션 재개 시도 (claude -p -c) → 실패 시 새 세션
-# 5. 락 파일 정리
+# Core logic:
+# 1. Verify Claude CLI installation
+# 2. Detect process collisions (triple safety check)
+# 3. Check for new messages via quick_check.py
+# 4. Attempt session resume (claude -p -c) -> fall back to new session
+# 5. Clean up lock files
 
 set -euo pipefail
 
-# Claude Code 중첩 세션 방지 해제 (executor는 독립 세션이므로)
+# Disable Claude Code nested session prevention (executor runs as an independent session)
 unset CLAUDECODE 2>/dev/null || true
 
-# 경로 설정
+# Path configuration
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(dirname "$SCRIPT_DIR")"
 HEYSQUID_DIR="$ROOT/heysquid"
@@ -25,30 +25,30 @@ LOCKFILE="$ROOT/data/executor.lock"
 PIDFILE="$ROOT/data/claude.pid"
 EXECUTOR_PIDFILE="$ROOT/data/executor.pid"
 
-# 로그 디렉토리 생성
+# Create log directories
 mkdir -p "$LOG_DIR"
 mkdir -p "$ROOT/data"
 
-# 로그 함수
+# Log function
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOG"
 }
 
 # ========================================
-# PM 프로세스 kill 함수
+# PM process kill function
 # ========================================
-# claude CLI는 시작 후 cmdline을 "claude"로 재작성하므로 pgrep으로 못 찾음.
-# 해결: caffeinate(시스템 바이너리, cmdline 불변) → 부모 PID = 실제 claude.
-# PID 파일 불필요, 어떤 환경에서든 동작.
+# claude CLI rewrites its cmdline to "claude" after start, so pgrep cannot find it.
+# Solution: caffeinate (system binary, cmdline immutable) -> parent PID = actual claude.
+# No PID file needed, works in any environment.
 
 kill_all_pm() {
-    # 1차: PID 파일 (가장 확실 — orphan claude도 잡음)
+    # Primary: PID file (most reliable -- catches orphan claude too)
     if [ -f "$PIDFILE" ]; then
         while IFS= read -r OLD_PID; do
             [ -n "$OLD_PID" ] && kill "$OLD_PID" 2>/dev/null && log "[KILL] PID=$OLD_PID (from pidfile)"
         done < "$PIDFILE"
     fi
-    # 2차: caffeinate → 부모(claude) 찾아서 kill
+    # Secondary: find caffeinate -> kill parent (claude)
     local CAFE_PIDS
     CAFE_PIDS=$(pgrep -f "caffeinate.*append-system-prompt-file" 2>/dev/null || true)
     if [ -n "$CAFE_PIDS" ]; then
@@ -59,10 +59,10 @@ kill_all_pm() {
             kill "$CPID" 2>/dev/null && log "[KILL] caffeinate PID=$CPID"
         done
     fi
-    # 3차: pgrep 패턴 (append-system-prompt-file)
+    # Tertiary: pgrep pattern (append-system-prompt-file)
     pkill -f "append-system-prompt-file" 2>/dev/null || true
     sleep 2
-    # force kill (-9): PID 파일 + caffeinate 패턴
+    # force kill (-9): PID file + caffeinate pattern
     if [ -f "$PIDFILE" ]; then
         while IFS= read -r OLD_PID; do
             if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" 2>/dev/null; then
@@ -80,7 +80,7 @@ kill_all_pm() {
         done
     fi
     pkill -9 -f "append-system-prompt-file" 2>/dev/null || true
-    # 확인 후 PID 파일 삭제 (죽었는지 검증)
+    # Verify processes are dead, then delete PID file
     if [ -f "$PIDFILE" ]; then
         local SURVIVOR=0
         while IFS= read -r OLD_PID; do
@@ -98,11 +98,11 @@ kill_all_pm() {
 }
 
 is_pm_alive() {
-    # 1차: caffeinate 패턴 (정상 상태)
+    # Primary: caffeinate pattern (normal state)
     if pgrep -f "caffeinate.*append-system-prompt-file" > /dev/null 2>&1; then
         return 0
     fi
-    # 2차: PID 파일 (caffeinate 죽고 claude만 orphan으로 남은 경우)
+    # Secondary: PID file (caffeinate dead, claude orphaned)
     if [ -f "$PIDFILE" ]; then
         while IFS= read -r OLD_PID; do
             if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" 2>/dev/null; then
@@ -115,12 +115,12 @@ is_pm_alive() {
 }
 
 # ========================================
-# trap 핸들러
+# Trap handler
 # ========================================
 cleanup() {
     local exit_code=${?:-0}
     log "[CLEANUP] executor.sh exiting (code=$exit_code)"
-    # stream_viewer + tail 정리 (이 세션이 spawn한 것 + 고아 프로세스 모두)
+    # Clean up stream_viewer + tail (both spawned by this session and orphan processes)
     [ -n "${VIEWER_PID:-}" ] && kill "$VIEWER_PID" 2>/dev/null || true
     pkill -f "stream_viewer.py" 2>/dev/null || true
     pkill -f "tail.*executor.stream" 2>/dev/null || true
@@ -131,7 +131,7 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 # ========================================
-# Claude CLI 자동 탐지
+# Claude CLI auto-detection
 # ========================================
 CLAUDE_EXE=""
 
@@ -154,14 +154,14 @@ log "===== START ====="
 log "ROOT=$ROOT"
 log "CWD=$(pwd)"
 
-# executor.sh 자신의 PID 기록 (trigger_executor의 dedup 체크에 사용)
+# Record executor.sh's own PID (used for dedup check by trigger_executor)
 echo $$ > "$EXECUTOR_PIDFILE"
 log "[INFO] executor.pid=$$"
 
 # ========================================
-# 좀비 stream_viewer / tail 정리
+# Clean up zombie stream_viewer / tail processes
 # ========================================
-# 이전 세션의 stream_viewer가 남아있으면 old code로 agent_status.json을 오염시킴
+# Leftover stream_viewer from a previous session can pollute agent_status.json with old code
 ZOMBIE_VIEWERS=$(pgrep -f "stream_viewer.py" 2>/dev/null || true)
 if [ -n "$ZOMBIE_VIEWERS" ]; then
     for ZPID in $ZOMBIE_VIEWERS; do
@@ -177,7 +177,7 @@ if [ -n "$ZOMBIE_TAILS" ]; then
 fi
 
 # ========================================
-# 프로세스 중복 실행 방지
+# Prevent duplicate process execution
 # ========================================
 
 if is_pm_alive; then
@@ -198,13 +198,13 @@ if is_pm_alive; then
     fi
 fi
 
-# 2. Lock 파일 확인 (listener가 pre-lock을 생성하므로 여기서 삭제하지 않음)
-#    executor.sh가 step 4에서 lock을 덮어씀. no-message exit 시 정리함.
+# 2. Check lock file (listener creates pre-lock, so we don't delete here)
+#    executor.sh overwrites the lock at step 4. Cleans up on no-message exit.
 if [ -f "$LOCKFILE" ]; then
     log "[INFO] Lock file exists (pre-lock by listener or previous crash). Proceeding..."
 fi
 
-# 3. 빠른 메시지 확인 (Python으로 먼저 확인)
+# 3. Quick message check (check via Python first)
 log "[QUICK_CHECK] Checking for new messages..."
 cd "$ROOT"
 
@@ -225,59 +225,59 @@ fi
 
 log "[NEW_MESSAGE] New messages found. Starting Claude Code..."
 
-# 4. Lock 파일 생성
+# 4. Create lock file
 echo "$(date '+%Y-%m-%d %H:%M:%S')" > "$LOCKFILE"
 log "Lock file created: $LOCKFILE"
 
-# (착수 알림은 listener가 이미 전송하므로 여기서는 생략)
+# (Start notification already sent by listener, so skipped here)
 
-# CLAUDE.md 존재 확인
+# Verify CLAUDE.md exists
 if [ ! -f "$SPF" ]; then
     log "[ERROR] CLAUDE.md not found: $SPF"
     rm -f "$LOCKFILE" 2>/dev/null
     exit 2
 fi
 
-# Claude 버전 기록
+# Record Claude version
 "$CLAUDE_EXE" --version >> "$LOG" 2>&1 || true
 
 export DISABLE_AUTOUPDATER=1
 
-# Claude 실행 프롬프트 — PM 모드
-PROMPT="CLAUDE.md의 지침에 따라 PM으로서 행동할 것.
-1) data/identity.json을 읽어 나의 정체성(display_name이 내 이름)과 사용자를 확인.
-2) data/permanent_memory.md를 읽어 영구 기억(사용자 선호, 핵심 결정, 교훈)을 파악.
-3) data/session_memory.md를 읽어 최근 대화 맥락, 활성 작업을 파악.
-4) check_crash_recovery()로 이전 세션 비정상 종료 확인.
-   - 반환값 있으면: 이전 작업이 중단된 것. 사용자에게 알리고 이어서 처리.
-     복구 정보에 원본 메시지와 작업 내용이 있으므로 사용자에게 다시 묻지 말 것.
-   - None이면: 정상 시작.
-4.5) check_interrupted()로 사용자 의도적 중단 확인.
-   - 반환값 있으면: 사용자가 이전 작업을 중단한 것. 이전 작업 맥락을 기억하되,
-     자동으로 이어서 하지 말 것. 반드시 새 메시지를 먼저 확인하고, 새 메시지의 의도에 따라:
-     · '이어서 해' / '계속' → 이전 작업 재개
-     · '그거 말고 ~해줘' → 새 작업 시작
-     · '그거 하되 ~바꿔' → 이전 맥락 수정 반영
-   - None이면: 중단 없음.
-5) heysquid/telegram_bot.py의 check_telegram()으로 새 메시지 확인.
-6) 메시지 내용에 따라 PM으로서 판단하고 적절히 응답.
-   - 대화(인사/질문/잡담) → reply_telegram()으로 자연스럽게 답변.
-   - 작업 요청 → 계획을 설명하고 확인 요청.
-   - 확인/승인 → 실행 모드로 전환하여 작업 수행.
-7) 작업/응답 완료 후 바로 종료하지 말고, CLAUDE.md의 '대기 모드' 지침에 따라 영구 대기 루프를 실행할 것.
-   - sleep 30 → poll_new_messages() → 새 메시지 있으면 처리
-   - 타임아웃 없음. 세션은 영구 유지. 절대 스스로 종료하지 말 것.
-   - 30분마다 session_memory.md 자동 갱신 (중간 저장).
-8) 세션 중 중요한 결정/교훈/선호가 생기면 data/permanent_memory.md에 기록할 것.
-   - 영구 보관할 가치가 있는 것만 (사용자 선호, 핵심 결정, 반복될 교훈)
-   - 200줄 이내 유지.
-모든 텔레그램 응답은 heysquid/telegram_sender.py의 send_message_sync()를 사용.
-대화용 간편 응답은 heysquid/telegram_bot.py의 reply_telegram()을 사용."
+# Claude execution prompt — PM mode
+PROMPT="Act as a PM following the instructions in CLAUDE.md.
+1) Read data/identity.json to identify yourself (display_name is your name) and the user.
+2) Read data/permanent_memory.md to understand persistent memory (user preferences, key decisions, lessons learned).
+3) Read data/session_memory.md to understand recent conversation context and active tasks.
+4) Call check_crash_recovery() to check for abnormal termination of the previous session.
+   - If return value exists: the previous task was interrupted. Notify the user and continue processing.
+     The recovery info contains the original message and task details, so do not ask the user again.
+   - If None: normal startup.
+4.5) Call check_interrupted() to check for intentional user interruption.
+   - If return value exists: the user interrupted the previous task. Remember the previous task context,
+     but do not automatically resume. Always check new messages first, then act based on intent:
+     * 'continue' / 'resume' -> resume previous task
+     * 'forget that, do X instead' -> start new task
+     * 'do that but change X' -> modify and apply previous context
+   - If None: no interruption.
+5) Call check_telegram() from heysquid/telegram_bot.py to check for new messages.
+6) Evaluate the message content as a PM and respond appropriately.
+   - Conversation (greetings/questions/chat) -> reply naturally via reply_telegram().
+   - Task request -> explain the plan and ask for confirmation.
+   - Confirmation/approval -> switch to execution mode and perform the task.
+7) After completing a task/response, do not exit immediately. Follow the 'standby mode' instructions in CLAUDE.md to run a permanent wait loop.
+   - sleep 30 -> poll_new_messages() -> process if new messages exist
+   - No timeout. The session is permanent. Never terminate on your own.
+   - Auto-refresh session_memory.md every 30 minutes (intermediate save).
+8) If important decisions/lessons/preferences arise during the session, record them in data/permanent_memory.md.
+   - Only things worth permanently keeping (user preferences, key decisions, recurring lessons)
+   - Keep under 200 lines.
+Use send_message_sync() from heysquid/telegram_sender.py for all Telegram responses.
+Use reply_telegram() from heysquid/telegram_bot.py for quick conversational replies."
 
-# 작업 디렉토리를 프로젝트 루트로 설정
+# Set working directory to project root
 cd "$ROOT"
 
-# stream log 조건부 초기화 (30분+ stale일 때만 리셋, 아니면 유지)
+# Conditional stream log reset (only reset if stale 30m+, otherwise keep)
 if [ -f "$STREAM_LOG" ]; then
     LOG_AGE=$(( $(date +%s) - $(stat -f%m "$STREAM_LOG" 2>/dev/null || echo 0) ))
     if [ "$LOG_AGE" -gt 1800 ]; then
@@ -290,10 +290,10 @@ fi
 
 VIEWER="$ROOT/scripts/stream_viewer.py"
 
-# 항상 새 세션 시작 (세션 재개 안 함 — 메모리 시스템으로 맥락 복구)
+# Always start a new session (no session resume -- context recovered via memory system)
 log "[INFO] Starting new session (permanent memory + session memory)..."
 
-# Claude → tee → 로그 파일 (stream_viewer는 분리 — 죽어도 claude에 영향 없음)
+# Claude -> tee -> log file (stream_viewer is separated -- its crash does not affect claude)
 caffeinate -ims "$CLAUDE_EXE" -p --dangerously-skip-permissions \
     --model sonnet \
     --output-format stream-json --verbose \
@@ -302,12 +302,12 @@ caffeinate -ims "$CLAUDE_EXE" -p --dangerously-skip-permissions \
     2>> "$LOG" | tee -a "$STREAM_LOG" > /dev/null &
 PIPE_PID=$!
 
-# stream_viewer: 독립 프로세스 (크래시 시 자동 재시작, claude 파이프와 무관)
+# stream_viewer: independent process (auto-restart on crash, decoupled from claude pipe)
 _run_stream_viewer() {
-    sleep 1  # tee가 파일 쓰기 시작할 때까지 대기
+    sleep 1  # Wait for tee to start writing to file
     while kill -0 "$PIPE_PID" 2>/dev/null; do
         tail -n 0 -F "$STREAM_LOG" 2>/dev/null | "$VENV_PYTHON" -u "$VIEWER" 2>> "$LOG" || true
-        # viewer가 죽으면 재시작 (tail도 SIGPIPE로 자연 종료)
+        # Restart if viewer dies (tail also naturally exits via SIGPIPE)
         kill -0 "$PIPE_PID" 2>/dev/null || break
         log "[WARN] stream_viewer exited, restarting in 2s..."
         sleep 2
@@ -316,32 +316,32 @@ _run_stream_viewer() {
 _run_stream_viewer &
 VIEWER_PID=$!
 
-# caffeinate PID + 실제 claude PID 기록
-# 프로세스 구조: claude(parent) → caffeinate(child)
-# claude CLI는 cmdline을 "claude"로 재작성하므로 PID 파일이 유일한 추적 수단
+# Record caffeinate PID + actual claude PID
+# Process structure: claude (parent) -> caffeinate (child)
+# claude CLI rewrites cmdline to "claude", so PID file is the only tracking method
 sleep 2
 CAFE_PID=$(pgrep -f "caffeinate.*append-system-prompt-file" 2>/dev/null | head -1 || true)
 CLAUDE_PID=""
 if [ -n "$CAFE_PID" ]; then
-    # claude는 caffeinate의 부모 (PPID)
+    # claude is the parent of caffeinate (PPID)
     CLAUDE_PID=$(ps -p "$CAFE_PID" -o ppid= 2>/dev/null | tr -d ' ')
 fi
-# fallback: caffeinate 자체라도 저장
+# fallback: save caffeinate PID itself at minimum
 if [ -z "$CLAUDE_PID" ]; then
     CLAUDE_PID=$(pgrep -f "append-system-prompt-file" 2>/dev/null | head -1 || true)
 fi
-# 둘 다 PID 파일에 저장 (한 줄에 하나씩, 중복 제거)
+# Save both to PID file (one per line, deduplicated)
 : > "$PIDFILE"
 [ -n "$CLAUDE_PID" ] && echo "$CLAUDE_PID" >> "$PIDFILE"
 [ -n "$CAFE_PID" ] && [ "$CAFE_PID" != "$CLAUDE_PID" ] && echo "$CAFE_PID" >> "$PIDFILE"
 log "[INFO] Saved PIDs: claude=$CLAUDE_PID cafe=$CAFE_PID"
 
-# 파이프라인 완료 대기
+# Wait for pipeline to complete
 EC=0
 wait $PIPE_PID || EC=$?
 
 log "EXITCODE=$EC"
 log ""
 
-# cleanup은 trap EXIT에서 자동 실행됨
+# cleanup runs automatically via trap EXIT
 exit $EC

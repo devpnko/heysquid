@@ -1,4 +1,4 @@
-"""에이전트 설정 관리 — JSON 파일 기반 CRUD."""
+"""Agent configuration management — JSON file-based CRUD."""
 
 import json
 import logging
@@ -14,14 +14,14 @@ logger = logging.getLogger(__name__)
 
 AGENTS_DIR = Path(__file__).parent / "agents"
 
-# 에이전트별 활동 설정 기본값 (Phase 1: 제한 없음)
+# Per-agent activity settings defaults (Phase 1: no restrictions)
 DEFAULT_ACTIVITY = {
-    "schedule_hours": 1,              # heartbeat 주기 (시간)
-    "min_post_interval_hours": 0,     # 글쓰기 최소 간격 (0 = 제한 없음)
-    "min_comment_interval_sec": 3,    # 댓글 간 sleep (API 부하 방지)
-    "max_comments_per_beat": 10,      # heartbeat당 최대 댓글
-    "max_replies_per_beat": 20,       # heartbeat당 최대 답변
-    "post_ratio_free": 70,            # 무료 글 비율 (0-100)
+    "schedule_hours": 1,              # heartbeat interval (hours)
+    "min_post_interval_hours": 0,     # minimum post interval (0 = no limit)
+    "min_comment_interval_sec": 3,    # sleep between comments (API throttle)
+    "max_comments_per_beat": 10,      # max comments per heartbeat
+    "max_replies_per_beat": 20,       # max replies per heartbeat
+    "post_ratio_free": 70,            # free post ratio (0-100)
 }
 
 
@@ -34,10 +34,10 @@ def _now() -> str:
 
 
 def _to_handle(name: str) -> str:
-    """이름 → handle 변환 (소문자, 특수문자 제거).
+    """Convert name to handle (lowercase, strip special chars).
 
-    한글 등 비ASCII 이름은 모두 제거되므로,
-    빈 문자열이면 uuid 기반 고유 handle 생성.
+    Non-ASCII characters (e.g. Korean) are removed entirely,
+    so if the result is empty, a uuid-based unique handle is generated.
     """
     h = re.sub(r"[^a-z0-9_]", "", name.lower().replace(" ", "_").replace("-", "_"))
     if not h:
@@ -61,7 +61,7 @@ def save_agent(handle: str, data: dict) -> None:
 
 
 def _fetch_blueprint(template: str | dict) -> dict | None:
-    """Blueprint 로드. 문자열이면 원격 fetch, dict이면 그대로 반환."""
+    """Load blueprint. If string, fetch remotely; if dict, return as-is."""
     if isinstance(template, dict):
         return template
     if isinstance(template, str):
@@ -69,7 +69,7 @@ def _fetch_blueprint(template: str | dict) -> dict | None:
         try:
             return http_get(url)
         except Exception as e:
-            logger.warning("Blueprint fetch 실패 (%s): %s", url, e)
+            logger.warning("Blueprint fetch failed (%s): %s", url, e)
             return None
     return None
 
@@ -77,21 +77,21 @@ def _fetch_blueprint(template: str | dict) -> dict | None:
 def create_agent(name: str, description: str, category: str = "build",
                  persona: str = "", tags: list = None,
                  blueprint_template: str | dict = None) -> dict:
-    """새 에이전트 등록 → API key 발급 → 로컬 설정 저장."""
+    """Register new agent -> issue API key -> save local config."""
     handle = _to_handle(name)
 
-    # 중복 체크
+    # Duplicate check
     if _agent_path(handle).exists():
-        return {"ok": False, "error": f"이미 존재: {handle}"}
+        return {"ok": False, "error": f"Already exists: {handle}"}
 
-    # Blueprint 로드
+    # Load blueprint
     blueprint = None
     if blueprint_template:
         blueprint = _fetch_blueprint(blueprint_template)
         if not blueprint:
-            return {"ok": False, "error": f"Blueprint 로드 실패: {blueprint_template}"}
+            return {"ok": False, "error": f"Failed to load blueprint: {blueprint_template}"}
 
-    # FanMolt 등록
+    # Register with FanMolt
     try:
         resp = register_agent(
             name=name,
@@ -102,20 +102,20 @@ def create_agent(name: str, description: str, category: str = "build",
             blueprint=blueprint,
         )
     except Exception as e:
-        return {"ok": False, "error": f"등록 실패: {e}"}
+        return {"ok": False, "error": f"Registration failed: {e}"}
 
     agent_data = resp.get("agent", {})
     api_key = agent_data.get("api_key", "")
     if not api_key:
-        return {"ok": False, "error": "API key 발급 실패"}
+        return {"ok": False, "error": "Failed to issue API key"}
 
-    # Blueprint에서 persona 동기화
+    # Sync persona from blueprint
     if blueprint:
         bp_persona = blueprint.get("persona", {}).get("system_prompt", "")
         if bp_persona:
             persona = bp_persona
 
-    # 프로필 업데이트
+    # Update profile
     if persona or description:
         try:
             client = FanMoltClient(api_key)
@@ -125,14 +125,14 @@ def create_agent(name: str, description: str, category: str = "build",
                 tags=tags or [],
             )
         except Exception as e:
-            logger.warning("프로필 업데이트 실패: %s", e)
+            logger.warning("Profile update failed: %s", e)
 
-    # 로컬 저장
+    # Save locally
     config = {
         "handle": handle,
         "name": name,
         "api_key": api_key,
-        "persona": persona or f"너는 {name} — {description}\n\n톤: 친근하고 전문적. 핵심을 짚어서 설명.",
+        "persona": persona or f"You are {name} — {description}\n\nTone: friendly and professional. Explain by getting to the point.",
         "category": category,
         "tags": tags or [],
         "activity": dict(DEFAULT_ACTIVITY),
@@ -150,7 +150,7 @@ def create_agent(name: str, description: str, category: str = "build",
 
 
 def list_agents() -> list[dict]:
-    """모든 에이전트 목록."""
+    """List all agents."""
     AGENTS_DIR.mkdir(parents=True, exist_ok=True)
     agents = []
     for p in sorted(AGENTS_DIR.glob("*.json")):
@@ -162,7 +162,7 @@ def list_agents() -> list[dict]:
 
 
 def delete_agent(handle: str) -> bool:
-    """에이전트 삭제 (로컬 설정만 — FanMolt 계정은 유지)."""
+    """Delete agent (local config only — FanMolt account is preserved)."""
     path = _agent_path(handle)
     if not path.exists():
         return False
@@ -171,23 +171,23 @@ def delete_agent(handle: str) -> bool:
 
 
 def apply_blueprint(handle: str, template: str | dict) -> dict:
-    """기존 에이전트에 blueprint 적용 (PUT /agents/me + 로컬 업데이트)."""
+    """Apply blueprint to existing agent (PUT /agents/me + local update)."""
     agent = load_agent(handle)
     if not agent:
-        return {"ok": False, "error": f"에이전트 없음: {handle}"}
+        return {"ok": False, "error": f"Agent not found: {handle}"}
 
     blueprint = _fetch_blueprint(template)
     if not blueprint:
-        return {"ok": False, "error": f"Blueprint 로드 실패: {template}"}
+        return {"ok": False, "error": f"Failed to load blueprint: {template}"}
 
-    # 서버 업데이트
+    # Server update
     try:
         client = FanMoltClient(agent["api_key"])
         client.update_me(blueprint=blueprint)
     except Exception as e:
-        return {"ok": False, "error": f"서버 업데이트 실패: {e}"}
+        return {"ok": False, "error": f"Server update failed: {e}"}
 
-    # 로컬 업데이트
+    # Local update
     agent["blueprint"] = blueprint
     agent["recipe_states"] = agent.get("recipe_states", {})
     bp_persona = blueprint.get("persona", {}).get("system_prompt", "")
@@ -200,14 +200,14 @@ def apply_blueprint(handle: str, template: str | dict) -> dict:
 
 
 def get_activity(agent: dict) -> dict:
-    """에이전트의 activity 설정 반환. 없는 키는 기본값으로 채움.
+    """Return agent's activity settings. Missing keys are filled with defaults.
 
-    하위호환: 기존 top-level schedule_hours, post_ratio_free도 읽음.
+    Backward-compat: also reads legacy top-level schedule_hours, post_ratio_free.
     """
     stored = agent.get("activity", {})
     result = dict(DEFAULT_ACTIVITY)
     result.update(stored)
-    # 하위호환: 기존 top-level 키 → activity로 승격
+    # Backward-compat: promote legacy top-level keys to activity
     if "schedule_hours" in agent and "schedule_hours" not in stored:
         result["schedule_hours"] = agent["schedule_hours"]
     if "post_ratio_free" in agent and "post_ratio_free" not in stored:
@@ -216,17 +216,17 @@ def get_activity(agent: dict) -> dict:
 
 
 def update_activity(handle: str, changes: dict) -> dict:
-    """에이전트의 activity 설정 업데이트. 유효한 키만 반영."""
+    """Update agent's activity settings. Only valid keys are applied."""
     agent = load_agent(handle)
     if not agent:
-        return {"ok": False, "error": f"에이전트 없음: {handle}"}
+        return {"ok": False, "error": f"Agent not found: {handle}"}
 
     activity = agent.get("activity", {})
     applied = {}
     for key, val in changes.items():
         if key not in DEFAULT_ACTIVITY:
             continue
-        # 타입 검증
+        # Type validation
         expected = type(DEFAULT_ACTIVITY[key])
         try:
             val = expected(val)
@@ -236,7 +236,7 @@ def update_activity(handle: str, changes: dict) -> dict:
         applied[key] = val
 
     if not applied:
-        return {"ok": False, "error": "유효한 설정값 없음. 가능: " + ", ".join(DEFAULT_ACTIVITY.keys())}
+        return {"ok": False, "error": "No valid settings provided. Available: " + ", ".join(DEFAULT_ACTIVITY.keys())}
 
     agent["activity"] = activity
     save_agent(handle, agent)
@@ -244,7 +244,7 @@ def update_activity(handle: str, changes: dict) -> dict:
 
 
 def get_stats() -> dict:
-    """전체 에이전트 합산 통계."""
+    """Aggregate statistics across all agents."""
     agents = list_agents()
     total = {"agent_count": len(agents), "total_posts": 0, "total_comments": 0, "total_replies": 0}
     for a in agents:

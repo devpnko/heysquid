@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-DECO 가드 E2E 테스트
+DECO Guard E2E Test
 ====================
-1. DECO ON 상태에서 3초 폴링 후 스킬 머신이 사라지지 않는지
-2. DECO ON 상태에서 에이전트를 드래그로 이동할 수 있는지
-3. DECO OFF 후 스킬/워크스페이스가 정상 렌더되는지
+1. Skill machines should not disappear after 3-second polling with DECO ON
+2. Agents should be draggable with DECO ON
+3. Skills/workspaces should render correctly after DECO OFF
 """
 
 import json
@@ -28,54 +28,54 @@ def screenshot(page, name, desc=""):
 
 
 def test_deco_skills_persist_after_polling(page):
-    """DECO ON 상태에서 3초 폴링 후 스킬 머신이 사라지지 않는지."""
-    print("\n🧪 Test 1: DECO ON — 스킬 머신 폴링 후 유지")
+    """Skill machines should not disappear after 3-second polling with DECO ON."""
+    print("\n🧪 Test 1: DECO ON — skill machine persistence after polling")
 
     page.goto(f"{BASE_URL}/dashboard.html", wait_until="networkidle")
     page.wait_for_timeout(2000)
 
-    # 초기 스킬 개수 확인
+    # Check initial skill count
     initial_count = page.locator(".skill-machine").count()
-    print(f"  초기 스킬 머신 수: {initial_count}")
+    print(f"  Initial skill machine count: {initial_count}")
 
     if initial_count == 0:
-        print("  ⚠️ 스킬 머신이 없음 (스킬 비활성 상태) — 스킵")
+        print("  ⚠️ No skill machines (skills inactive) — skipping")
         return True
 
-    screenshot(page, "guard_01_before_deco", "DECO OFF — 초기 상태")
+    screenshot(page, "guard_01_before_deco", "DECO OFF — initial state")
 
     # DECO ON
     page.click("#btnDeco")
     page.wait_for_timeout(1000)
 
     deco_count = page.locator(".skill-machine").count()
-    print(f"  DECO ON 직후 스킬 머신 수: {deco_count}")
-    screenshot(page, "guard_02_deco_on", "DECO ON 직후")
+    print(f"  Skill machine count right after DECO ON: {deco_count}")
+    screenshot(page, "guard_02_deco_on", "Right after DECO ON")
 
-    # 폴링 사이클 대기 (3초 × 2 = 6초)
-    print("  ⏳ 7초 대기 (폴링 사이클 2회)...")
+    # Wait for polling cycles (3s x 2 = 6s)
+    print("  ⏳ Waiting 7s (2 polling cycles)...")
     page.wait_for_timeout(7000)
 
     after_count = page.locator(".skill-machine").count()
-    print(f"  폴링 후 스킬 머신 수: {after_count}")
-    screenshot(page, "guard_03_after_polling", "폴링 2회 후")
+    print(f"  Skill machine count after polling: {after_count}")
+    screenshot(page, "guard_03_after_polling", "After 2 polling cycles")
 
     if after_count >= initial_count:
-        print(f"  ✅ 스킬 머신 유지됨 ({after_count}개)")
+        print(f"  ✅ Skill machines preserved ({after_count})")
         # DECO OFF
         page.click("#btnDeco")
         page.wait_for_timeout(500)
         return True
     else:
-        print(f"  ❌ 스킬 머신 사라짐! {initial_count} → {after_count}")
+        print(f"  ❌ Skill machines disappeared! {initial_count} → {after_count}")
         page.click("#btnDeco")
         page.wait_for_timeout(500)
         return False
 
 
 def test_deco_agent_draggable(page):
-    """DECO ON 상태에서 에이전트를 드래그로 이동할 수 있는지."""
-    print("\n🧪 Test 2: DECO ON — 에이전트 드래그 이동")
+    """Agents should be draggable with DECO ON."""
+    print("\n🧪 Test 2: DECO ON — agent drag movement")
 
     page.goto(f"{BASE_URL}/dashboard.html", wait_until="networkidle")
     page.wait_for_timeout(2000)
@@ -84,7 +84,7 @@ def test_deco_agent_draggable(page):
     page.click("#btnDeco")
     page.wait_for_timeout(1000)
 
-    # JS dispatchEvent로 드래그 (Playwright headless 마우스는 decoMakeDraggable과 호환 이슈)
+    # Drag via JS dispatchEvent (Playwright headless mouse has compatibility issues with decoMakeDraggable)
     drag_result = page.evaluate("""() => {
         var agent = document.getElementById('pool-researcher');
         if (!agent) return { error: 'no agent' };
@@ -112,32 +112,32 @@ def test_deco_agent_draggable(page):
         return { before: before, after: after, moved: before.left !== after.left || before.top !== after.top };
     }""")
 
-    print(f"  드래그 결과: {drag_result}")
-    screenshot(page, "guard_04_agent_drag", "에이전트 드래그 후")
+    print(f"  Drag result: {drag_result}")
+    screenshot(page, "guard_04_agent_drag", "After agent drag")
     moved = drag_result.get("moved", False)
 
     if moved:
-        print(f"  ✅ 에이전트 이동 성공!")
+        print(f"  ✅ Agent move succeeded!")
     else:
-        print(f"  ❌ 에이전트 이동 실패")
+        print(f"  ❌ Agent move failed")
 
-    # 폴링 후에도 위치 유지?
+    # Position preserved after polling?
     after_left = drag_result.get("after", {}).get("left", "")
     after_top = drag_result.get("after", {}).get("top", "")
-    print(f"  ⏳ 4초 대기 (폴링 1회)...")
+    print(f"  ⏳ Waiting 4s (1 polling cycle)...")
     page.wait_for_timeout(4000)
 
     poll_pos = page.evaluate("""() => {
         var a = document.getElementById('pool-researcher');
         return { left: a.style.left, top: a.style.top };
     }""")
-    print(f"  폴링 후: left={poll_pos['left']}, top={poll_pos['top']}")
+    print(f"  After polling: left={poll_pos['left']}, top={poll_pos['top']}")
 
     position_kept = (after_left == poll_pos["left"]) and (after_top == poll_pos["top"])
     if position_kept:
-        print(f"  ✅ 폴링 후에도 에이전트 위치 유지됨")
+        print(f"  ✅ Agent position preserved after polling")
     else:
-        print(f"  ❌ 폴링 후 에이전트 위치 변경됨!")
+        print(f"  ❌ Agent position changed after polling!")
 
     # DECO OFF
     page.click("#btnDeco")
@@ -147,70 +147,70 @@ def test_deco_agent_draggable(page):
 
 
 def test_deco_off_full_rerender(page):
-    """DECO OFF 후 스킬/워크스페이스가 정상 렌더되는지."""
-    print("\n🧪 Test 3: DECO OFF — 전체 재렌더")
+    """Skills/workspaces should render correctly after DECO OFF."""
+    print("\n🧪 Test 3: DECO OFF — full re-render")
 
     page.goto(f"{BASE_URL}/dashboard.html", wait_until="networkidle")
     page.wait_for_timeout(2000)
 
-    # 초기 상태
+    # Initial state
     initial_skills = page.locator(".skill-machine").count()
     initial_zones = page.locator(".workspace-zone").count()
-    print(f"  초기: 스킬 {initial_skills}개, 워크스페이스 {initial_zones}개")
+    print(f"  Initial: {initial_skills} skills, {initial_zones} workspaces")
 
     # DECO ON
     page.click("#btnDeco")
     page.wait_for_timeout(1000)
 
-    # 폴링 1회 대기
+    # Wait for 1 polling cycle
     page.wait_for_timeout(4000)
-    screenshot(page, "guard_06_deco_before_off", "DECO ON + 폴링 후")
+    screenshot(page, "guard_06_deco_before_off", "DECO ON + after polling")
 
     # DECO OFF
     page.click("#btnDeco")
     page.wait_for_timeout(2000)
 
-    # 다음 폴링까지 대기 (cache가 null이므로 재렌더 트리거)
+    # Wait until next polling (cache is null, triggering re-render)
     page.wait_for_timeout(4000)
 
     after_skills = page.locator(".skill-machine").count()
     after_zones = page.locator(".workspace-zone").count()
-    print(f"  DECO OFF 후: 스킬 {after_skills}개, 워크스페이스 {after_zones}개")
-    screenshot(page, "guard_07_deco_off_rerendered", "DECO OFF + 폴링 후")
+    print(f"  After DECO OFF: {after_skills} skills, {after_zones} workspaces")
+    screenshot(page, "guard_07_deco_off_rerendered", "DECO OFF + after polling")
 
     skills_ok = after_skills >= initial_skills
     zones_ok = after_zones >= initial_zones
 
     if skills_ok:
-        print(f"  ✅ 스킬 정상 ({after_skills}개)")
+        print(f"  ✅ Skills OK ({after_skills})")
     else:
-        print(f"  ❌ 스킬 감소 {initial_skills} → {after_skills}")
+        print(f"  ❌ Skills decreased {initial_skills} → {after_skills}")
 
     if zones_ok:
-        print(f"  ✅ 워크스페이스 정상 ({after_zones}개)")
+        print(f"  ✅ Workspaces OK ({after_zones})")
     else:
-        print(f"  ❌ 워크스페이스 감소 {initial_zones} → {after_zones}")
+        print(f"  ❌ Workspaces decreased {initial_zones} → {after_zones}")
 
     return skills_ok and zones_ok
 
 
 def test_deco_skill_drag(page):
-    """DECO ON 상태에서 스킬 머신을 드래그로 이동할 수 있는지."""
-    print("\n🧪 Test 4: DECO ON — 스킬 머신 드래그 이동")
+    """Skill machines should be draggable with DECO ON."""
+    print("\n🧪 Test 4: DECO ON — skill machine drag movement")
 
     page.goto(f"{BASE_URL}/dashboard.html", wait_until="networkidle")
     page.wait_for_timeout(2000)
 
     initial_skills = page.locator(".skill-machine").count()
     if initial_skills == 0:
-        print("  ⚠️ 스킬 머신 없음 — 스킵")
+        print("  ⚠️ No skill machines — skipping")
         return True
 
     # DECO ON
     page.click("#btnDeco")
     page.wait_for_timeout(1000)
 
-    # JS dispatchEvent로 스킬 드래그
+    # Drag skill via JS dispatchEvent
     drag_result = page.evaluate("""() => {
         var skill = document.querySelector('.skill-machine');
         if (!skill) return { error: 'no skill' };
@@ -239,35 +239,35 @@ def test_deco_skill_drag(page):
         return { name: name, before: before, after: after, moved: before.left !== after.left || before.top !== after.top };
     }""")
 
-    print(f"  드래그 결과: {drag_result}")
+    print(f"  Drag result: {drag_result}")
     moved = drag_result.get("moved", False)
     skill_name = drag_result.get("name", "?")
 
     if moved:
-        print(f"  ✅ 스킬 [{skill_name}] 드래그 이동 성공")
+        print(f"  ✅ Skill [{skill_name}] drag move succeeded")
     else:
-        print(f"  ❌ 스킬 [{skill_name}] 드래그 이동 실패")
+        print(f"  ❌ Skill [{skill_name}] drag move failed")
 
-    # 폴링 후에도 위치 유지?
+    # Position preserved after polling?
     after_left = drag_result.get("after", {}).get("left", "")
     after_top = drag_result.get("after", {}).get("top", "")
-    print(f"  ⏳ 4초 대기 (폴링 1회)...")
+    print(f"  ⏳ Waiting 4s (1 polling cycle)...")
     page.wait_for_timeout(4000)
 
     poll_info = page.evaluate("""(name) => {
         var el = document.querySelector('.skill-machine[data-skill="' + name + '"]');
         return el ? { exists: true, left: el.style.left, top: el.style.top } : { exists: false };
     }""", skill_name)
-    print(f"  폴링 후: {poll_info}")
+    print(f"  After polling: {poll_info}")
 
-    screenshot(page, "guard_08_skill_after_poll", f"스킬 드래그 + 폴링 후 ({skill_name})")
+    screenshot(page, "guard_08_skill_after_poll", f"Skill drag + after polling ({skill_name})")
 
     position_kept = poll_info.get("exists", False) and (after_left == poll_info.get("left")) and (after_top == poll_info.get("top"))
 
     if position_kept:
-        print(f"  ✅ 폴링 후에도 스킬 위치 유지")
+        print(f"  ✅ Skill position preserved after polling")
     else:
-        print(f"  ❌ 폴링 후 스킬 위치/존재 변경됨")
+        print(f"  ❌ Skill position/existence changed after polling")
 
     # DECO OFF
     page.click("#btnDeco")
@@ -277,37 +277,37 @@ def test_deco_skill_drag(page):
 
 
 def test_skill_reconcile_add_remove(page):
-    """스킬 추가/제거 시 reconcile이 정확히 동작하는지."""
-    print("\n🧪 Test 5: Reconcile — 스킬 추가/제거")
+    """Reconcile should work correctly when skills are added/removed."""
+    print("\n🧪 Test 5: Reconcile — skill add/remove")
 
     page.goto(f"{BASE_URL}/dashboard.html", wait_until="networkidle")
     page.wait_for_timeout(2000)
 
     initial_count = page.locator(".skill-machine").count()
-    print(f"  초기 스킬 수: {initial_count}")
+    print(f"  Initial skill count: {initial_count}")
 
     if initial_count == 0:
-        print("  ⚠️ 스킬 없음 — 스킵")
+        print("  ⚠️ No skills — skipping")
         return True
 
-    # 현재 스킬 데이터에 새 스킬 추가 + 기존 하나 제거 후 renderSkillMachines 호출
+    # Add a new skill + remove an existing one, then call renderSkillMachines
     result = page.evaluate("""() => {
         var raw = window._lastSkillsRaw;
         if (!raw) return { error: 'no _lastSkillsRaw' };
         var names = Object.keys(raw);
         var removedName = names[0];
 
-        // 새 스킬 추가
+        // Add new skill
         var fakeSkills = JSON.parse(JSON.stringify(raw));
         fakeSkills['test_reconcile_skill'] = { name: 'TestReconcile', trigger: 'manual', status: 'idle' };
-        // 기존 하나 제거
+        // Remove existing one
         delete fakeSkills[removedName];
 
-        // 캐시 초기화 + 렌더
+        // Clear cache + render
         lastSkillsData = null;
         renderSkillMachines(fakeSkills);
 
-        // 검증
+        // Verify
         var newEl = document.querySelector('.skill-machine[data-skill="test_reconcile_skill"]');
         var removedEl = document.querySelector('.skill-machine[data-skill="' + removedName + '"]');
         var totalCount = document.querySelectorAll('.skill-machine').length;
@@ -321,10 +321,10 @@ def test_skill_reconcile_add_remove(page):
         };
     }""")
 
-    print(f"  결과: {result}")
+    print(f"  Result: {result}")
 
     if result.get("error"):
-        print(f"  ❌ 에러: {result['error']}")
+        print(f"  ❌ Error: {result['error']}")
         return False
 
     new_ok = result.get("newExists", False)
@@ -332,21 +332,21 @@ def test_skill_reconcile_add_remove(page):
     count_ok = result.get("totalCount") == result.get("expectedCount")
 
     if new_ok:
-        print(f"  ✅ 새 스킬 DOM 생성됨")
+        print(f"  ✅ New skill DOM created")
     else:
-        print(f"  ❌ 새 스킬 DOM 미생성")
+        print(f"  ❌ New skill DOM not created")
 
     if removed_ok:
-        print(f"  ✅ 삭제된 스킬 [{result.get('removedName')}] DOM 제거됨")
+        print(f"  ✅ Removed skill [{result.get('removedName')}] DOM deleted")
     else:
-        print(f"  ❌ 삭제된 스킬 DOM 잔존")
+        print(f"  ❌ Removed skill DOM still exists")
 
     if count_ok:
-        print(f"  ✅ 총 스킬 수 일치 ({result.get('totalCount')})")
+        print(f"  ✅ Total skill count matches ({result.get('totalCount')})")
     else:
-        print(f"  ❌ 스킬 수 불일치: {result.get('totalCount')} vs expected {result.get('expectedCount')}")
+        print(f"  ❌ Skill count mismatch: {result.get('totalCount')} vs expected {result.get('expectedCount')}")
 
-    # 복원: 원래 데이터로 다시 렌더
+    # Restore: re-render with original data
     page.evaluate("""() => {
         lastSkillsData = null;
         renderSkillMachines(window._lastSkillsRaw);
@@ -356,15 +356,15 @@ def test_skill_reconcile_add_remove(page):
 
 
 def test_skill_status_update_inplace(page):
-    """스킬 status 변경 시 DOM 재생성 없이 CSS class만 반영되는지."""
-    print("\n🧪 Test 6: Reconcile — 스킬 status in-place 업데이트")
+    """Skill status change should update CSS class in-place without DOM recreation."""
+    print("\n🧪 Test 6: Reconcile — skill status in-place update")
 
     page.goto(f"{BASE_URL}/dashboard.html", wait_until="networkidle")
     page.wait_for_timeout(2000)
 
     initial_count = page.locator(".skill-machine").count()
     if initial_count == 0:
-        print("  ⚠️ 스킬 없음 — 스킵")
+        print("  ⚠️ No skills — skipping")
         return True
 
     result = page.evaluate("""() => {
@@ -375,17 +375,17 @@ def test_skill_status_update_inplace(page):
         var el = document.querySelector('.skill-machine[data-skill="' + targetName + '"]');
         if (!el) return { error: 'no element' };
 
-        // DOM identity 기록 (같은 객체인지 확인용)
+        // Record DOM identity (to verify same object)
         el._testMarker = 'reconcile_test_marker';
         var beforeStatus = el.dataset.status;
 
-        // status를 'running'으로 변경
+        // Change status to 'running'
         var modified = JSON.parse(JSON.stringify(raw));
         modified[targetName].status = 'running';
         lastSkillsData = null;
         renderSkillMachines(modified);
 
-        // 같은 DOM 요소인지 확인 (reconcile = 같은 요소)
+        // Verify same DOM element (reconcile = same element)
         var afterEl = document.querySelector('.skill-machine[data-skill="' + targetName + '"]');
         var sameElement = afterEl && afterEl._testMarker === 'reconcile_test_marker';
         var afterStatus = afterEl ? afterEl.dataset.status : 'missing';
@@ -401,10 +401,10 @@ def test_skill_status_update_inplace(page):
         };
     }""")
 
-    print(f"  결과: {result}")
+    print(f"  Result: {result}")
 
     if result.get("error"):
-        print(f"  ❌ 에러: {result['error']}")
+        print(f"  ❌ Error: {result['error']}")
         return False
 
     same = result.get("sameElement", False)
@@ -412,21 +412,21 @@ def test_skill_status_update_inplace(page):
     class_ok = result.get("hasRunningClass", False)
 
     if same:
-        print(f"  ✅ 같은 DOM 요소 유지됨 (reconcile 작동)")
+        print(f"  ✅ Same DOM element preserved (reconcile working)")
     else:
-        print(f"  ❌ DOM 요소 재생성됨 (reconcile 실패)")
+        print(f"  ❌ DOM element recreated (reconcile failed)")
 
     if status_ok:
-        print(f"  ✅ status 업데이트: {result.get('beforeStatus')} → running")
+        print(f"  ✅ Status updated: {result.get('beforeStatus')} → running")
     else:
-        print(f"  ❌ status 미반영: {result.get('afterStatus')}")
+        print(f"  ❌ Status not applied: {result.get('afterStatus')}")
 
     if class_ok:
-        print(f"  ✅ machine-pixel CSS class 반영됨")
+        print(f"  ✅ machine-pixel CSS class applied")
     else:
-        print(f"  ❌ machine-pixel CSS class 미반영")
+        print(f"  ❌ machine-pixel CSS class not applied")
 
-    # 복원
+    # Restore
     page.evaluate("""() => {
         lastSkillsData = null;
         renderSkillMachines(window._lastSkillsRaw);
@@ -437,7 +437,7 @@ def test_skill_status_update_inplace(page):
 
 def main():
     print("=" * 60)
-    print("🦑 DECO 가드 — 스킬 사라짐 + 에이전트 위치 깨짐 수정 검증")
+    print("🦑 DECO Guard — skill disappearance + agent position fix verification")
     print("=" * 60)
 
     with sync_playwright() as p:
@@ -459,16 +459,16 @@ def main():
             try:
                 test_results[name] = fn(page)
             except Exception as e:
-                print(f"  ❌ {name} 에러: {e}")
+                print(f"  ❌ {name} error: {e}")
                 import traceback
                 traceback.print_exc()
                 test_results[name] = False
 
         browser.close()
 
-    # 결과 요약
+    # Results summary
     print("\n" + "=" * 60)
-    print("📊 테스트 결과 요약")
+    print("📊 Test Results Summary")
     print("=" * 60)
     all_pass = True
     for name, passed in test_results.items():
@@ -477,10 +477,10 @@ def main():
         if not passed:
             all_pass = False
 
-    print(f"\n{'🎉 전체 통과!' if all_pass else '⚠️ 일부 실패!'}")
-    print(f"📸 스크린샷: {SCREENSHOT_DIR}/")
+    print(f"\n{'🎉 All passed!' if all_pass else '⚠️ Some failed!'}")
+    print(f"📸 Screenshots: {SCREENSHOT_DIR}/")
 
-    # JSON 결과 저장
+    # Save JSON results
     result_json = {
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
         "tests": test_results,

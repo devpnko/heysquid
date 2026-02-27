@@ -1,4 +1,4 @@
-"""ChatInput — 채팅 입력 위젯 (TextArea 기반, 멀티라인, @멘션, 슬래시 커맨드)"""
+"""ChatInput -- Chat input widget (TextArea-based, multiline, @mention, slash commands)."""
 
 from textual.widgets import TextArea
 from textual.message import Message
@@ -8,12 +8,12 @@ from .command_input import COMMANDS
 
 
 class ChatInput(TextArea):
-    """Chat 모드 메시지 입력. TextArea 서브클래스.
+    """Chat mode message input. TextArea subclass.
 
-    - Enter → 전송
-    - Shift+Enter → 줄바꿈
-    - Escape → 입력 클리어
-    - Tab → /슬래시 커맨드 또는 @멘션 자동완성
+    - Enter -> send
+    - Shift+Enter -> newline
+    - Escape -> clear input
+    - Tab -> /slash command or @mention autocomplete
     """
 
     DEFAULT_CSS = """
@@ -24,7 +24,7 @@ class ChatInput(TextArea):
     """
 
     class ChatSubmitted(Message):
-        """채팅 메시지 제출 이벤트"""
+        """Chat message submitted event."""
         def __init__(self, value: str) -> None:
             super().__init__()
             self.value = value
@@ -40,21 +40,21 @@ class ChatInput(TextArea):
         self._tab_candidates: list[str] = []
 
     def try_tab_complete(self) -> bool:
-        """슬래시 커맨드 또는 @멘션 자동완성. 성공하면 True 반환."""
+        """Autocomplete slash command or @mention. Returns True on success."""
         text = self.text
 
-        # --- 슬래시 커맨드 자동완성 ---
+        # --- Slash command autocomplete ---
         if text.startswith("/"):
             partial = text.lstrip("/").rstrip(" ").lower()
 
-            # 이미 완성된 커맨드(trailing space) → 기존 candidates에서 cycling
+            # Already completed command (trailing space) -> cycle through candidates
             if text.endswith(" ") and partial in COMMANDS and self._tab_candidates:
                 selected = self._tab_candidates[self._tab_index % len(self._tab_candidates)]
                 self.text = "/" + selected + " "
                 self._tab_index += 1
                 return True
 
-            # "/" 만 입력 → 전체 목록
+            # Only "/" entered -> show full list
             if not partial:
                 self._tab_candidates = list(COMMANDS)
                 selected = self._tab_candidates[self._tab_index % len(self._tab_candidates)]
@@ -62,7 +62,7 @@ class ChatInput(TextArea):
                 self._tab_index += 1
                 return True
 
-            # partial 입력 → 필터링
+            # Partial input -> filter
             candidates = [c for c in COMMANDS if c.startswith(partial)]
             if candidates:
                 self._tab_candidates = candidates
@@ -73,7 +73,7 @@ class ChatInput(TextArea):
 
             return False
 
-        # --- @멘션 자동완성 ---
+        # --- @mention autocomplete ---
         at_ctx = get_at_context(text)
         if at_ctx:
             prefix, partial, candidates = at_ctx
@@ -85,9 +85,9 @@ class ChatInput(TextArea):
         return False
 
     def _on_key(self, event) -> None:
-        """키 이벤트 처리"""
+        """Handle key events."""
         if event.key == "enter":
-            # Enter → 전송
+            # Enter -> send
             event.stop()
             event.prevent_default()
             text = self.text.strip()
@@ -99,7 +99,7 @@ class ChatInput(TextArea):
             return
 
         if event.key == "shift+enter":
-            # Shift+Enter → 줄바꿈 (기본 동작)
+            # Shift+Enter -> newline (default behavior)
             self._tab_index = 0
             self._tab_candidates = []
             super()._on_key(event)

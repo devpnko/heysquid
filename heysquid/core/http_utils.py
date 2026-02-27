@@ -1,4 +1,4 @@
-"""HTTP 유틸리티 — 외부 API 플러그인용 공용 헬퍼."""
+"""HTTP utilities — shared helpers for external API plugins."""
 
 import os
 import logging
@@ -12,7 +12,7 @@ DEFAULT_TIMEOUT = 30
 
 
 def _is_retryable(exc: BaseException) -> bool:
-    """재시도 대상 예외 판별 (네트워크 + 5xx + 429)."""
+    """Determine if exception is retryable (network + 5xx + 429)."""
     if isinstance(exc, requests.ConnectionError | requests.Timeout):
         return True
     if isinstance(exc, requests.HTTPError) and exc.response is not None:
@@ -29,7 +29,7 @@ _retry_policy = retry(
 
 
 def get_secret(key: str, default: str = "") -> str:
-    """환경변수에서 시크릿 로드. .env 자동 로드."""
+    """Load secret from environment variables. Auto-loads .env."""
     from dotenv import load_dotenv
     from heysquid.core.config import get_env_path
 
@@ -44,7 +44,7 @@ def http_get_text(
     params: dict = None,
     timeout: int = DEFAULT_TIMEOUT,
 ) -> str:
-    """GET 요청. 텍스트(마크다운 등) 응답 반환. (3회 재시도, exponential backoff)"""
+    """GET request. Returns text (markdown, etc.) response. (3 retries, exponential backoff)"""
     h = {}
     if token:
         h["Authorization"] = f"Bearer {token}"
@@ -61,7 +61,7 @@ def http_get(
     headers: dict = None,
     timeout: int = DEFAULT_TIMEOUT,
 ) -> dict:
-    """GET 요청. JSON 응답 반환. (3회 재시도, exponential backoff)"""
+    """GET request. Returns JSON response. (3 retries, exponential backoff)"""
     h = headers.copy() if headers else {}
     if token:
         h["Authorization"] = f"Bearer {token}"
@@ -79,7 +79,7 @@ def http_post_json(
     headers: dict = None,
     timeout: int = DEFAULT_TIMEOUT,
 ) -> dict:
-    """POST JSON 요청. (3회 재시도, exponential backoff)"""
+    """POST JSON request. (3 retries, exponential backoff)"""
     h = {"Content-Type": "application/json"}
     if token:
         h["Authorization"] = f"{auth_scheme} {token}"
@@ -101,7 +101,7 @@ def http_put_json(
     headers: dict = None,
     timeout: int = DEFAULT_TIMEOUT,
 ) -> dict:
-    """PUT JSON 요청. (3회 재시도, exponential backoff)"""
+    """PUT JSON request. (3 retries, exponential backoff)"""
     h = {"Content-Type": "application/json"}
     if token:
         h["Authorization"] = f"Bearer {token}"
@@ -122,7 +122,7 @@ def http_post_form(
     token: str = None,
     timeout: int = DEFAULT_TIMEOUT,
 ) -> dict:
-    """POST form-encoded 요청 (Buffer 등 레거시 API용). (3회 재시도)"""
+    """POST form-encoded request (for legacy APIs like Buffer). (3 retries)"""
     h = {}
     if token:
         h["Authorization"] = f"Bearer {token}"

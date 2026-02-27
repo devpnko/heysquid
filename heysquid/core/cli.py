@@ -21,30 +21,30 @@ def cmd_init(args):
     print("=" * 40)
     print()
 
-    # Step 1: 환경 확인
-    print("[1/5] 환경 확인...")
+    # Step 1: Check environment
+    print("[1/5] Checking environment...")
     py_version = sys.version.split()[0]
     print(f"  Python: {py_version}")
     if sys.version_info < (3, 10):
-        print("  [ERROR] Python 3.10 이상이 필요합니다.")
+        print("  [ERROR] Python 3.10 or higher is required.")
         sys.exit(1)
 
     claude_found = shutil.which("claude")
     if claude_found:
         print(f"  Claude CLI: {claude_found}")
     else:
-        print("  [WARN] Claude CLI가 설치되지 않았습니다.")
-        print("         https://docs.anthropic.com/en/docs/claude-code 에서 설치하세요.")
+        print("  [WARN] Claude CLI is not installed.")
+        print("         Install from https://docs.anthropic.com/en/docs/claude-code")
     print()
 
-    # 디렉토리 생성
-    print(f"[2/5] 디렉토리 생성 ({target})...")
+    # Create directories
+    print(f"[2/5] Creating directories ({target})...")
     for d in [data_dir, os.path.join(target, "tasks"),
               os.path.join(target, "workspaces"), os.path.join(target, "logs")]:
         os.makedirs(d, exist_ok=True)
         print(f"  {os.path.basename(d)}/")
 
-    # 템플릿 복사
+    # Copy templates
     templates = {
         "env.example": os.path.join(data_dir, ".env"),
         "identity.json": os.path.join(data_dir, "identity.json"),
@@ -63,7 +63,7 @@ def cmd_init(args):
 
     # Step 3: Telegram bot token
     env_file = os.path.join(data_dir, ".env")
-    # dev mode: heysquid/.env 위치도 체크
+    # dev mode: also check heysquid/.env location
     dev_env = os.path.join(str(PACKAGE_DIR), ".env")
     existing_env = dev_env if os.path.exists(dev_env) else env_file
 
@@ -195,14 +195,14 @@ def _write_env_token(env_path: str, key: str, value: str) -> None:
 def cmd_start(args):
     """Start the heysquid daemon."""
     from .daemon import start
-    print("heysquid 데몬 시작...\n")
+    print("Starting heysquid daemon...\n")
     start()
 
 
 def cmd_stop(args):
     """Stop the heysquid daemon."""
     from .daemon import stop
-    print("heysquid 데몬 중지...\n")
+    print("Stopping heysquid daemon...\n")
     stop()
 
 
@@ -237,7 +237,7 @@ def cmd_tui(args):
             app = SquidApp()
             app.run()
         except ImportError:
-            print("[ERROR] TUI 앱을 찾을 수 없습니다.")
+            print("[ERROR] TUI app not found.")
             sys.exit(1)
 
 

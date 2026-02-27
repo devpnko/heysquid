@@ -27,7 +27,7 @@ VALID_STATUSES = ['idle', 'working', 'complete', 'error', 'chatting', 'thinking'
 
 
 def _load_dashboard_config():
-    """dashboard_config.json 로드. 없으면 빈 dict."""
+    """Load dashboard_config.json. Returns empty dict if not found."""
     try:
         with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
             return json.load(f)
@@ -36,7 +36,7 @@ def _load_dashboard_config():
 
 
 def _build_registry(config=None):
-    """AGENTS에서 _registry 생성 + config 오버라이드 머지."""
+    """Build _registry from AGENTS + merge config overrides."""
     if config is None:
         config = _load_dashboard_config()
     registry = {
@@ -58,7 +58,7 @@ def _build_registry(config=None):
 
 
 def _build_config_section(config=None):
-    """agent_status.json에 포함할 _config 섹션 생성."""
+    """Build the _config section to include in agent_status.json."""
     if config is None:
         config = _load_dashboard_config()
     return {
@@ -73,16 +73,16 @@ def _build_config_section(config=None):
 def _load_status(*, _raise_on_error=False):
     """Load current status JSON (core fields only — PM/agent state + mission_log).
 
-    분리된 섹션(kanban, automations, workspaces, squad_log)은 여기서 관리하지 않는다.
-    각각 store.load()/store.modify()를 통해 별도 파일로 관리된다.
+    Split sections (kanban, automations, workspaces, squad_log) are not managed here.
+    Each is managed in separate files via store.load()/store.modify().
 
     Args:
-        _raise_on_error: True면 파일 읽기/파싱 실패 시 예외를 올린다.
+        _raise_on_error: If True, raises exceptions on file read/parse failures.
     """
     try:
         with open(STATUS_FILE, 'r', encoding='utf-8') as f:
             data = json.load(f)
-        # 분리 완료된 섹션은 agent_status.json에서 제거 (stale 방지)
+        # Remove already-split sections from agent_status.json (prevent stale data)
         for key in _SPLIT_KEYS:
             data.pop(key, None)
         return data
@@ -98,8 +98,8 @@ _SPLIT_KEYS = {"kanban", "automations", "workspaces", "squad_log", "skills"}
 def _save_status(data):
     """Save status JSON with atomic write (tempfile + fsync + rename).
 
-    분리된 섹션 키는 저장 직전에 제거한다 — agent_status.json에는
-    PM/agent 상태 + mission_log + _registry + _config만 남긴다.
+    Split section keys are removed just before saving — agent_status.json only
+    retains PM/agent state + mission_log + _registry + _config.
     """
     for key in _SPLIT_KEYS:
         data.pop(key, None)
@@ -130,7 +130,7 @@ def _default_status():
         "last_updated": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         "current_task": "",
         "mission_log": [
-            {"time": datetime.now().strftime('%H:%M:%S'), "agent": "system", "message": "시스템 대기중..."}
+            {"time": datetime.now().strftime('%H:%M:%S'), "agent": "system", "message": "System standing by..."}
         ],
     }
     for name, info in AGENTS.items():
@@ -169,33 +169,33 @@ migrate_section_from_status("squad_log", _sq_cfg.file_path,
 
 
 def load_and_modify_status(modifier_fn):
-    """agent_status.json을 잠금 하에 읽기-수정-쓰기 (fcntl.flock)
+    """Read-modify-write agent_status.json under lock (fcntl.flock).
 
-    modifier_fn(data) → data (수정된 dict) 또는 False (저장 생략)
+    modifier_fn(data) -> data (modified dict) or False (skip save)
 
-    Safety: 파일이 존재하는데 읽기/파싱 실패 시 → 빈 default로 덮어쓰지 않고
-    재시도 1회 후에도 실패하면 저장을 건너뛴다.
+    Safety: If the file exists but read/parse fails, does not overwrite with
+    empty default. Retries once, then skips save on second failure.
     """
     import time as _time
     os.makedirs(DATA_DIR, exist_ok=True)
     with open(_STATUS_LOCK, 'w') as lock_fd:
         fcntl.flock(lock_fd, fcntl.LOCK_EX)
         try:
-            # 파일이 있으면 _raise_on_error=True로 읽기 시도
+            # If file exists, attempt to read with _raise_on_error=True
             if os.path.exists(STATUS_FILE):
                 try:
                     data = _load_status(_raise_on_error=True)
                 except (json.JSONDecodeError, FileNotFoundError):
-                    # rename 도중 일시적 부재 또는 깨진 JSON → 50ms 후 재시도
+                    # Temporary absence during rename or corrupt JSON -> retry after 50ms
                     _time.sleep(0.05)
                     try:
                         data = _load_status(_raise_on_error=True)
                     except (json.JSONDecodeError, FileNotFoundError):
-                        # 재시도도 실패 → 기존 데이터 보호를 위해 저장 건너뜀
-                        print(f"[WARN] agent_status.json 읽기 실패 — 저장 건너뜀 (데이터 보호)")
+                        # Retry also failed -> skip save to protect existing data
+                        print(f"[WARN] Failed to read agent_status.json — skipping save (data protection)")
                         return _default_status()
             else:
-                # 파일 자체가 없으면 새로 생성 (정상)
+                # File doesn't exist at all — create new (normal)
                 data = _default_status()
 
             result = modifier_fn(data)
@@ -317,7 +317,7 @@ def reset_all():
         try:
             data = _default_status()
             now = datetime.now().strftime('%H:%M:%S')
-            data['mission_log'] = [{"time": now, "agent": "system", "message": "시스템 초기화 완료."}]
+            data['mission_log'] = [{"time": now, "agent": "system", "message": "System reset complete."}]
             _save_status(data)
         finally:
             fcntl.flock(lock_fd, fcntl.LOCK_UN)
@@ -468,7 +468,7 @@ print("OK")
 
 
 def init_squad(topic, participants, mode="squid", virtual_experts=None):
-    """squad_log 초기화. mode: 'squid' or 'kraken'."""
+    """Initialize squad_log. mode: 'squid' or 'kraken'."""
     squad_log = {
         "topic": topic,
         "mode": mode,
@@ -484,12 +484,12 @@ def init_squad(topic, participants, mode="squid", virtual_experts=None):
 
 
 def add_squad_entry(agent, entry_type, message):
-    """squad_log.entries에 토론 엔트리 추가.
+    """Add a discussion entry to squad_log.entries.
 
     Args:
-        agent: 기존 에이전트명 or 'kraken:name' 형태
+        agent: existing agent name or 'kraken:name' format
         entry_type: opinion | agree | disagree | risk | proposal | conclusion
-        message: 발언 내용
+        message: the statement content
     """
     result_entry = [None]
 
@@ -510,7 +510,7 @@ def add_squad_entry(agent, entry_type, message):
 
 
 def conclude_squad(conclusion):
-    """squad_log.status = 'concluded', 결론 메시지 추가."""
+    """Set squad_log.status = 'concluded' and add conclusion message."""
     def _modify(data):
         if not data:
             return False  # skip save
@@ -526,13 +526,13 @@ def conclude_squad(conclusion):
 
 
 def get_squad_log():
-    """현재 squad_log dict 반환. 없으면 None."""
+    """Return the current squad_log dict. Returns None if empty."""
     data = store.load("squad_log")
     return data if data else None
 
 
 def _load_history():
-    """squad_history.json 로드"""
+    """Load squad_history.json."""
     try:
         with open(SQUAD_HISTORY_FILE, 'r', encoding='utf-8') as f:
             return json.load(f)
@@ -541,13 +541,13 @@ def _load_history():
 
 
 def _save_history(history):
-    """squad_history.json 저장"""
+    """Save squad_history.json."""
     with open(SQUAD_HISTORY_FILE, 'w', encoding='utf-8') as f:
         json.dump(history, f, ensure_ascii=False, indent=2)
 
 
 def archive_squad():
-    """현재 squad_log를 squad_history.json에 아카이브."""
+    """Archive the current squad_log to squad_history.json."""
     squad = store.load("squad_log")
     if not squad:
         return None
@@ -560,13 +560,13 @@ def archive_squad():
 
 
 def get_squad_history():
-    """히스토리 목록 반환 (최신순)."""
+    """Return history list (newest first)."""
     history = _load_history()
     return list(reversed(history))
 
 
 def clear_squad():
-    """squad_log 아카이브 후 제거."""
+    """Archive and then remove squad_log."""
     archive_squad()
     store.modify("squad_log", lambda data: {})
 
@@ -613,7 +613,7 @@ def sync_workspaces():
 
 
 def _compute_next_run(meta):
-    """schedule 스킬의 다음 실행 시각 계산 (HH:MM → 내일 ISO 8601)."""
+    """Calculate the next run time for a scheduled skill (HH:MM -> next day ISO 8601)."""
     schedule = meta.get("schedule", "")
     if not schedule:
         return None
@@ -630,22 +630,22 @@ def _compute_next_run(meta):
 
 
 def sync_automations():
-    """discover_automations() → automations.json 동기화.
+    """Sync discover_automations() -> automations.json.
 
-    - 새 automation: 메타 + 초기 런타임 상태로 추가
-    - 기존 automation: 메타 업데이트 + 런타임 상태(status, last_run 등) 보존
-    - 삭제된 automation: automations 섹션에서 제거
+    - New automations: add with metadata + initial runtime state
+    - Existing automations: update metadata + preserve runtime state (status, last_run, etc.)
+    - Removed automations: delete from automations section
     """
     from ..automations import discover_automations
     registry = discover_automations()
 
     def _modify(data):
-        # 삭제된 automation 제거
+        # Remove deleted automations
         removed = [k for k in data if k not in registry]
         for k in removed:
             del data[k]
 
-        # 추가/업데이트
+        # Add/update
         for name, meta in registry.items():
             runtime = data.get(name, {})
             data[name] = {
@@ -655,7 +655,7 @@ def sync_automations():
                 "schedule": meta.get("schedule", ""),
                 "enabled": meta.get("enabled", True),
                 "workspace": meta.get("workspace", ""),
-                # 런타임 상태 보존
+                # Preserve runtime state
                 "status": runtime.get("status", "idle"),
                 "last_run": runtime.get("last_run", ""),
                 "last_result": runtime.get("last_result", None),
@@ -672,7 +672,7 @@ sync_skills = sync_automations
 
 
 def update_skill_status(skill_name, status, last_result=None, last_error=None):
-    """automation/skill 런타임 상태 업데이트 (running/idle/error)."""
+    """Update automation/skill runtime status (running/idle/error)."""
     def _modify(data):
         entry = data.get(skill_name)
         if not entry:
@@ -726,7 +726,7 @@ def send_dashboard_photo(chat_id):
             ['curl', '-s', '-X', 'POST', url,
              '-F', f'chat_id={chat_id}',
              '-F', f'photo=@{screenshot}',
-             '-F', 'caption=heysquid 해저기지 현황'],
+             '-F', 'caption=heysquid HQ status'],
             capture_output=True, text=True, timeout=30
         )
         return '"ok":true' in result.stdout

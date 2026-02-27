@@ -15,7 +15,7 @@ from ..config import TASKS_DIR_STR
 
 
 def load_index():
-    """인덱스 파일 로드"""
+    """Load the index file."""
     if not os.path.exists(INDEX_FILE):
         return {"tasks": [], "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 
@@ -23,12 +23,12 @@ def load_index():
         with open(INDEX_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception as e:
-        print(f"[WARN] index.json 읽기 오류: {e}")
+        print(f"[WARN] Error reading index.json: {e}")
         return {"tasks": [], "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 
 
 def save_index(index_data):
-    """인덱스 파일 저장"""
+    """Save the index file."""
     os.makedirs(TASKS_DIR_STR, exist_ok=True)
     index_data["last_updated"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with open(INDEX_FILE, "w", encoding="utf-8") as f:
@@ -36,7 +36,7 @@ def save_index(index_data):
 
 
 def update_index(message_id, instruction, result_summary="", files=None, chat_id=None, timestamp=None):
-    """인덱스 업데이트"""
+    """Update the index."""
     index = load_index()
 
     keywords = []
@@ -69,11 +69,11 @@ def update_index(message_id, instruction, result_summary="", files=None, chat_id
 
     index["tasks"].sort(key=lambda x: x["message_id"], reverse=True)
     save_index(index)
-    print(f"[INDEX] 인덱스 업데이트: message_id={message_id}")
+    print(f"[INDEX] Index updated: message_id={message_id}")
 
 
 def search_memory(keyword=None, message_id=None):
-    """인덱스에서 작업 검색"""
+    """Search tasks in the index."""
     index = load_index()
 
     if message_id is not None:
@@ -95,16 +95,16 @@ def search_memory(keyword=None, message_id=None):
 
 
 def get_task_dir(message_id):
-    """메시지 ID 기반 작업 폴더 경로 반환"""
+    """Return the task directory path based on message ID."""
     task_dir = os.path.join(TASKS_DIR_STR, f"msg_{message_id}")
     if not os.path.exists(task_dir):
         os.makedirs(task_dir)
-        print(f"[DIR] 작업 폴더 생성: {task_dir}")
+        print(f"[DIR] Task directory created: {task_dir}")
     return task_dir
 
 
 def load_memory():
-    """기존 메모리 파일 전부 읽기 (tasks/*/task_info.txt)"""
+    """Read all existing memory files (tasks/*/task_info.txt)."""
     if not os.path.exists(TASKS_DIR_STR):
         return []
 
@@ -126,7 +126,7 @@ def load_memory():
                             "content": content
                         })
                 except Exception as e:
-                    print(f"[WARN] {task_folder}/task_info.txt 읽기 오류: {e}")
+                    print(f"[WARN] Error reading {task_folder}/task_info.txt: {e}")
 
     memories.sort(key=lambda x: x["message_id"], reverse=True)
     return memories

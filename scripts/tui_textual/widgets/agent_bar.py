@@ -1,4 +1,4 @@
-"""AgentCompactBar — Chat 모드 상단 1줄 에이전트 상태"""
+"""AgentCompactBar -- Single-line compact agent status bar for Chat mode."""
 
 from textual.widget import Widget
 from textual.app import ComposeResult
@@ -10,7 +10,7 @@ from ..colors import AGENT_COLORS
 
 
 class AgentCompactBar(Widget):
-    """에이전트 상태를 1줄로 표시하는 compact 바"""
+    """Compact single-line bar displaying agent statuses."""
 
     DEFAULT_CSS = """
     AgentCompactBar {
@@ -23,7 +23,7 @@ class AgentCompactBar(Widget):
         yield Static("", id="agent-bar-content")
 
     def update_status(self, status: dict) -> None:
-        """에이전트 상태 데이터로 바 업데이트"""
+        """Update bar with agent status data."""
         parts = []
         for name in AGENT_ORDER:
             if name == "pm":

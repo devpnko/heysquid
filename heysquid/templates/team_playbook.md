@@ -1,90 +1,90 @@
-# Team Playbook — 작업 유형별 에이전트 배치 가이드
+# Team Playbook — Agent Assignment Guide by Task Type
 
-PM은 이 문서를 참조하여 최적의 에이전트 팀을 구성한다.
+PM references this document to assemble the optimal agent team.
 
-## 에이전트 구성 (5명 + PM)
+## Agent Roster (5 agents + PM)
 
-| 에이전트 | 동물 | 모델 | 역할 |
-|----------|------|------|------|
-| 🐙 researcher | octopus | Haiku | 탐색/조사 |
-| 🦈 developer | shark | Opus | 구현/코딩 |
-| 🐢 reviewer | turtle | Sonnet | 리뷰/검토 |
-| 🐡 tester | pufferfish | Haiku | 테스트/QA |
-| 🦞 writer | lobster | Sonnet | 작성/콘텐츠 |
+| Agent | Animal | Model | Role |
+|-------|--------|-------|------|
+| 🐙 researcher | octopus | Haiku | Exploration/Investigation |
+| 🦈 developer | shark | Opus | Implementation/Coding |
+| 🐢 reviewer | turtle | Sonnet | Review/Inspection |
+| 🐡 tester | pufferfish | Haiku | Testing/QA |
+| 🦞 writer | lobster | Sonnet | Writing/Content |
 
-## 개발 (Development)
+## Development
 
-### 기능 추가
-researcher(구조 파악) → PM(계획 수립+확인) → developer(구현) → reviewer(리뷰) → tester(검증)
+### Feature Addition
+researcher(analyze structure) → PM(plan + confirm) → developer(implement) → reviewer(review) → tester(verify)
 
-### 버그 수정
-researcher(원인 탐색, 재현 조건 확인) → developer(수정) → tester(검증)
+### Bug Fix
+researcher(find cause, confirm reproduction steps) → developer(fix) → tester(verify)
 
-### 리팩토링
-researcher(영향 범위 분석) → PM(계획+확인) → developer(수정) → tester(회귀 테스트)
+### Refactoring
+researcher(analyze impact scope) → PM(plan + confirm) → developer(refactor) → tester(regression test)
 
-### 의존성 업그레이드
-researcher(변경사항 조사, breaking changes 확인) → developer(업그레이드) → tester(전체 테스트)
+### Dependency Upgrade
+researcher(investigate changes, check breaking changes) → developer(upgrade) → tester(full test)
 
-## 코드 품질 (Quality)
+## Code Quality
 
-### 코드 리뷰
-reviewer(전체 리뷰) → PM(요약 보고)
+### Code Review
+reviewer(full review) → PM(summary report)
 
-### 보안 점검
-reviewer(보안 취약점 탐지) → researcher(CVE 조회) → PM(리포트)
+### Security Audit
+reviewer(detect vulnerabilities) → researcher(CVE lookup) → PM(report)
 
-### 성능 최적화
-researcher(프로파일링 결과 분석) → developer(최적화) → tester(벤치마크)
+### Performance Optimization
+researcher(analyze profiling results) → developer(optimize) → tester(benchmark)
 
-## 분석/조사 (Research)
+## Research & Analysis
 
-### 기술 조사
-researcher(웹 검색 + 문서 분석) ×2~3 병렬 → PM(종합 보고)
+### Technical Research
+researcher(web search + doc analysis) x2~3 parallel → PM(consolidated report)
 
-### 아키텍처 분석
-researcher(코드베이스 탐색) → researcher(패턴/의존성 분석) → PM(다이어그램 정리)
+### Architecture Analysis
+researcher(explore codebase) → researcher(analyze patterns/dependencies) → PM(organize diagrams)
 
-### 경쟁사/시장 분석
-researcher(웹 검색) ×3 병렬 → PM(비교표 작성)
+### Competitor/Market Analysis
+researcher(web search) x3 parallel → PM(create comparison table)
 
-## 콘텐츠 (Content)
+## Content
 
-### 기술 문서 작성
-researcher(코드 분석) → writer(마크다운 작성) → reviewer(검수)
+### Technical Documentation
+researcher(analyze code) → writer(write markdown) → reviewer(review)
 
-### README/가이드
-researcher(프로젝트 파악) → writer(문서 작성)
+### README/Guides
+researcher(understand project) → writer(write docs)
 
-### SNS 콘텐츠
-researcher(트렌드 분석) → writer(초안 작성) → PM(최종 검토)
+### SNS Content
+researcher(analyze trends) → writer(draft) → PM(final review)
 
-### 보고서
-researcher(데이터 수집) ×2 병렬 → writer(보고서 작성) → PM(검토)
+### Reports
+researcher(collect data) x2 parallel → writer(write report) → PM(review)
 
-## 인프라 (Infrastructure)
+## Infrastructure
 
-### 배포/CI-CD
-researcher(현재 설정 파악) → developer(설정 수정) → tester(빌드 확인)
+### Deployment/CI-CD
+researcher(understand current setup) → developer(modify config) → tester(verify build)
 
-### 환경 설정
-researcher(요구사항 파악) → developer(설정 파일 생성) → tester(동작 확인)
+### Environment Setup
+researcher(identify requirements) → developer(create config files) → tester(verify functionality)
 
-## 프로젝트 관리 (PM)
+## Project Management (PM)
 
-### 상태 보고
-researcher(git log + 진행상황 파악) → PM(브리핑 작성)
+### Status Report
+researcher(git log + assess progress) → PM(write briefing)
 
-### 일정/마일스톤
-researcher(현재 진행도 파악) → PM(로드맵 업데이트)
+### Schedule/Milestones
+researcher(assess current progress) → PM(update roadmap)
 
 ---
 
-## 원칙
+## Principles
 
-1. **과도한 에이전트 배치 금지** — 간단한 작업은 PM이 직접
-2. **Haiku 우선** — researcher, tester는 빠르고 저렴
-3. **병렬 최대화** — 독립적인 작업은 동시 실행
-4. **결과 검증** — 중요한 작업은 반드시 reviewer 또는 tester 포함
-5. **사용자 보고는 PM만** — 에이전트가 직접 텔레그램 전송하지 않음
-6. **writer는 콘텐츠 전문** — 문서/SNS/보고서 작성에 활용
+1. **No excessive agent deployment** — PM handles simple tasks directly
+2. **Prefer Haiku** — researcher, tester are fast and cost-effective
+3. **Maximize parallelism** — run independent tasks concurrently
+4. **Verify results** — critical tasks must include reviewer or tester
+5. **Only PM reports to user** — agents never send Telegram messages directly
+6. **Writer specializes in content** — use for docs/SNS/report writing

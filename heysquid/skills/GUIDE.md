@@ -1,117 +1,117 @@
-# 스킬 & Automation 작성 가이드
+# Skill & Automation Writing Guide
 
 ## Automation vs Skill
 
 | | Automation | Skill |
 |--|-----------|-------|
-| **위치** | `heysquid/automations/` | `heysquid/skills/` |
-| **성격** | 자동 반복 (schedule/interval) | 수동 호출 역량 |
-| **트리거** | `schedule`, `interval` | `manual`, `webhook` |
-| **예시** | briefing, threads_post | deep_work, marketing, saju_fortune |
-| **대시보드** | Kanban Automation 컬럼 | - |
+| **Location** | `heysquid/automations/` | `heysquid/skills/` |
+| **Nature** | Automatic recurring (schedule/interval) | Manually invoked capability |
+| **Trigger** | `schedule`, `interval` | `manual`, `webhook` |
+| **Examples** | briefing, threads_post | deep_work, marketing, saju_fortune |
+| **Dashboard** | Kanban Automation column | - |
 
-## 구조
+## Structure
 
 ```
 heysquid/
 ├── core/
-│   ├── plugin_loader.py  # 공유 discovery + runner 엔진
-│   └── http_utils.py     # HTTP 유틸리티 (get_secret, http_get, ...)
-├── automations/           # 자동 반복 (schedule/interval)
+│   ├── plugin_loader.py  # Shared discovery + runner engine
+│   └── http_utils.py     # HTTP utilities (get_secret, http_get, ...)
+├── automations/           # Automatic recurring (schedule/interval)
 │   ├── __init__.py
 │   ├── briefing/
 │   └── threads_post/
-├── skills/                # 수동 호출 역량
+├── skills/                # Manually invoked capabilities
 │   ├── __init__.py
-│   ├── _base.py           # core/plugin_loader 위임
-│   ├── _http.py           # core/http_utils 위임 (backward compat)
-│   ├── GUIDE.md           # 이 파일
-│   └── hello_world/       # 예시 스킬 (새 스킬 작성 참고용)
+│   ├── _base.py           # Delegates to core/plugin_loader
+│   ├── _http.py           # Delegates to core/http_utils (backward compat)
+│   ├── GUIDE.md           # This file
+│   └── hello_world/       # Example skill (reference for writing new skills)
 ```
 
-## 새 Automation 만들기
+## Creating a New Automation
 
 ```python
 # heysquid/automations/my_automation/__init__.py
 
 SKILL_META = {
     "name": "my_automation",
-    "description": "매일 9시에 실행되는 자동 작업",
+    "description": "Automated task that runs daily at 9 AM",
     "trigger": "schedule",      # "schedule" | "interval"
-    "schedule": "09:00",        # trigger=schedule일 때 HH:MM
+    "schedule": "09:00",        # HH:MM when trigger=schedule
     "enabled": True,
     "icon": "⏰",
 }
 
 def execute(**kwargs):
-    # 여기에 로직
+    # Put your logic here
     return {"done": True}
 ```
 
-## 새 Skill 만들기
+## Creating a New Skill
 
 ```python
 # heysquid/skills/my_skill/__init__.py
 
 SKILL_META = {
     "name": "my_skill",
-    "description": "이 스킬이 뭘 하는지",
+    "description": "What this skill does",
     "trigger": "manual",       # "manual" | "webhook"
     "enabled": True,
     "icon": "🔧",
 }
 
 def execute(**kwargs):
-    # 여기에 로직
+    # Put your logic here
     return {"done": True}
 ```
 
-## SKILL_META 필드
+## SKILL_META Fields
 
-| 필드 | 필수 | 설명 |
-|------|------|------|
-| `name` | O | 식별자 (폴더명과 동일) |
-| `description` | O | 설명 |
-| `trigger` | O | `"manual"`, `"schedule"`, `"interval"`, `"webhook"` |
-| `schedule` | trigger=schedule일 때 | `"HH:MM"` 형식 (예: `"09:00"`) |
-| `enabled` | - | 기본 `True`. `False`면 비활성화 |
-| `icon` | - | 대시보드 Machine Room 아이콘 |
-| `workspace` | - | 연결 워크스페이스 이름 |
+| Field | Required | Description |
+|-------|----------|-------------|
+| `name` | Y | Identifier (must match folder name) |
+| `description` | Y | Description |
+| `trigger` | Y | `"manual"`, `"schedule"`, `"interval"`, `"webhook"` |
+| `schedule` | When trigger=schedule | `"HH:MM"` format (e.g., `"09:00"`) |
+| `enabled` | - | Defaults to `True`. Set `False` to disable |
+| `icon` | - | Dashboard Machine Room icon |
+| `workspace` | - | Linked workspace name |
 
 ---
 
-## execute() 함수
+## execute() Function
 
 ```python
 def execute(triggered_by="scheduler", chat_id=0, args="",
             payload=None, callback_url="", **kwargs):
     """
     Args:
-        triggered_by: 누가 실행했는지 ("scheduler" | "manual" | "pm" | "webhook")
-        chat_id: 텔레그램 chat_id (알림 보낼 때 사용)
-        args: 문자열 인자 (TUI에서 `/skill my_skill 인자`)
-        payload: dict (webhook에서 받은 JSON body)
-        callback_url: 완료 후 POST할 URL (n8n 등)
-        **kwargs: 미래 확장용 — 반드시 받아야 함
+        triggered_by: Who triggered execution ("scheduler" | "manual" | "pm" | "webhook")
+        chat_id: Telegram chat_id (used for sending notifications)
+        args: String arguments (from TUI: `/skill my_skill args`)
+        payload: dict (JSON body received from webhook)
+        callback_url: URL to POST to upon completion (e.g., n8n)
+        **kwargs: For future extensions — must always be included
 
     Returns:
-        dict 또는 아무 값. run_skill()/run_automation()이 {"ok": True, "result": 반환값}으로 감싸줌.
-        예외 발생 시 {"ok": False, "error": 메시지}로 자동 처리.
+        dict or any value. run_skill()/run_automation() wraps it as {"ok": True, "result": return_value}.
+        On exception, automatically handled as {"ok": False, "error": message}.
     """
 ```
 
-`**kwargs`를 반드시 넣어야 PluginContext에 필드가 추가돼도 기존 플러그인이 안 깨집니다.
+You must always include `**kwargs` so that existing plugins won't break when new fields are added to PluginContext.
 
 ---
 
-## HTTP 유틸리티
+## HTTP Utilities
 
-외부 API 호출 시 직접 `requests` 쓰지 말고 이걸 사용:
+Use these instead of calling `requests` directly for external API calls:
 
 ```python
 from heysquid.core.http_utils import get_secret, http_get, http_post_json, http_post_form
 
-# 환경변수에서 시크릿 로드
+# Load secret from environment variables
 token = get_secret("MY_API_TOKEN")
 
 # GET
@@ -121,27 +121,27 @@ data = http_get("https://api.example.com/data", token=token)
 result = http_post_json("https://api.example.com/create",
                         payload={"key": "value"}, token=token)
 
-# POST form-encoded (레거시 API용)
+# POST form-encoded (for legacy APIs)
 result = http_post_form("https://api.example.com/submit",
                         data={"field": "value"}, token=token)
 ```
 
-기존 `from heysquid.skills._http import ...` 도 여전히 동작합니다 (backward compat).
+The old import `from heysquid.skills._http import ...` still works (backward compat).
 
 ---
 
-## 실행 방법
+## How to Run
 
-### 1. 스케줄러 (Automation 자동)
-`trigger: "schedule"`, `schedule: "09:00"` → 매일 9시 자동 실행
+### 1. Scheduler (Automation, automatic)
+`trigger: "schedule"`, `schedule: "09:00"` → runs automatically every day at 9 AM
 
-### 2. TUI 수동
+### 2. TUI (manual)
 ```
 /skill my_skill
-/skill my_skill 인자
+/skill my_skill args
 ```
 
-### 3. PM이 직접
+### 3. Directly from PM
 ```python
 # Automation
 from heysquid.automations import run_automation
@@ -151,25 +151,25 @@ result = run_automation("briefing", ctx)
 
 # Skill
 from heysquid.skills import run_skill, SkillContext
-ctx = SkillContext(triggered_by="pm", chat_id=12345, args="인자")
+ctx = SkillContext(triggered_by="pm", chat_id=12345, args="args")
 result = run_skill("my_skill", ctx)
 ```
 
-### 4. Webhook (외부 트리거)
+### 4. Webhook (external trigger)
 ```bash
 curl -X POST http://localhost:8585/webhook/briefing \
-  -H "X-Webhook-Secret: 시크릿" \
+  -H "X-Webhook-Secret: secret" \
   -H "Content-Type: application/json" \
-  -d '{"args": "인자", "chat_id": 12345}'
+  -d '{"args": "args", "chat_id": 12345}'
 ```
 
-Webhook은 automations 먼저 찾고, 없으면 skills에서 찾습니다.
+Webhook looks for automations first, then falls back to skills.
 
 ---
 
-## config 오버라이드
+## Config Override
 
-`data/skills_config.json`으로 코드 수정 없이 설정 변경:
+Use `data/skills_config.json` to change settings without modifying code:
 
 ```json
 {
@@ -180,4 +180,4 @@ Webhook은 automations 먼저 찾고, 없으면 skills에서 찾습니다.
 }
 ```
 
-automations와 skills 모두 동일한 config 파일 사용.
+Both automations and skills share the same config file.

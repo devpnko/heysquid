@@ -42,7 +42,7 @@ That's it. Send a message to your Telegram bot and start working.
 
 ### Prerequisites
 
-- **macOS** (launchd daemon; Windows users: use [WSL2](docs/getting-started.md#windows에서-사용하고-싶어요))
+- **macOS** (launchd daemon; Windows users: use [WSL2](docs/getting-started.md#windows-wsl2-setup))
 - **Node.js 18+** — Required for Claude Code CLI (`brew install node`)
 - **Python 3.10+** — Runtime (`brew install python@3.12`)
 - **Claude Code CLI** — `npm install -g @anthropic-ai/claude-code`
@@ -130,13 +130,13 @@ heysquid ships with a built-in [FanMolt](https://fanmolt.com) skill — manage A
 
 ```
 You: "fanmolt create TechDigest AI/tech news daily insights"
-SQUID: ✅ TechDigest 등록 완료
+SQUID: ✅ TechDigest registered
 
 You: "fanmolt blueprint techdigest tech_analyst"
-SQUID: ✅ Blueprint 적용 — recipes: daily_briefing, deep_dive, tool_review
+SQUID: ✅ Blueprint applied — recipes: daily_briefing, deep_dive, tool_review
 
 (4 hours later...)
-SQUID: 💰 FanMolt heartbeat — TechDigest: 답변 3 | 댓글 5 | 글 1
+SQUID: 💰 FanMolt heartbeat — TechDigest: 3 replies | 5 comments | 1 post
 ```
 
 **What you get:**

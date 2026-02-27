@@ -1,13 +1,13 @@
 """
-X (Twitter) 채널 어댑터 — heysquid
+X (Twitter) channel adapter — heysquid
 
-X API v2를 사용하여 트윗을 게시합니다.
-무료 티어: write-only (포스팅만 가능).
+Posts tweets using the X API v2.
+Free tier: write-only (posting only).
 
-필요 환경변수:
+Required environment variables:
     X_API_KEY, X_API_SECRET, X_ACCESS_TOKEN, X_ACCESS_SECRET
 
-X Developer Portal에서 앱 생성 후 키 발급 필요:
+Create an app and get keys from the X Developer Portal:
     https://developer.x.com/en/portal/dashboard
 """
 
@@ -40,7 +40,7 @@ def _is_configured() -> bool:
 
 
 def _oauth1_header(method: str, url: str, body_params: dict | None = None) -> str:
-    """OAuth 1.0a 인증 헤더 생성."""
+    """Generate OAuth 1.0a authorization header."""
     oauth_params = {
         "oauth_consumer_key": X_API_KEY,
         "oauth_nonce": hashlib.md5(str(time.time()).encode()).hexdigest(),
@@ -50,7 +50,7 @@ def _oauth1_header(method: str, url: str, body_params: dict | None = None) -> st
         "oauth_version": "1.0",
     }
 
-    # 서명 베이스 문자열
+    # Signature base string
     all_params = {**oauth_params}
     if body_params:
         all_params.update(body_params)
@@ -78,25 +78,25 @@ def _oauth1_header(method: str, url: str, body_params: dict | None = None) -> st
 
 
 class XChannel(ChannelAdapter):
-    """X (Twitter) API v2 채널 어댑터."""
+    """X (Twitter) API v2 channel adapter."""
 
     def send_message(self, chat_id, text, **kwargs):
-        """트윗 게시.
+        """Post a tweet.
 
         Args:
-            chat_id: 무시됨 (X는 자기 계정에 게시)
-            text: 트윗 내용 (280자 제한)
+            chat_id: Ignored (X posts to own account)
+            text: Tweet content (280 char limit)
 
         Returns:
             dict: {"ok": bool, "tweet_id": str | None, "error": str | None}
         """
         if not _is_configured():
-            logger.warning("X API 키 미설정. .env 파일을 확인하세요.")
-            return {"ok": False, "error": "X API 키 미설정"}
+            logger.warning("X API keys not configured. Check your .env file.")
+            return {"ok": False, "error": "X API keys not configured"}
 
-        # 280자 제한
+        # 280 char limit
         if len(text) > 280:
-            logger.warning(f"트윗 길이 초과: {len(text)}자 → 280자로 잘림")
+            logger.warning(f"Tweet length exceeded: {len(text)} chars → truncated to 280")
             text = text[:277] + "..."
 
         try:
@@ -117,21 +117,21 @@ class XChannel(ChannelAdapter):
             if resp.status_code in (200, 201):
                 data = resp.json().get("data", {})
                 tweet_id = data.get("id", "")
-                logger.info(f"[X] 트윗 게시 완료: {tweet_id}")
+                logger.info(f"[X] Tweet posted: {tweet_id}")
                 return {"ok": True, "tweet_id": tweet_id}
             else:
                 error = resp.text[:200]
-                logger.error(f"[X] 트윗 실패 ({resp.status_code}): {error}")
+                logger.error(f"[X] Tweet failed ({resp.status_code}): {error}")
                 return {"ok": False, "error": f"{resp.status_code}: {error}"}
 
         except Exception as e:
-            logger.error(f"[X] 트윗 게시 오류: {e}")
+            logger.error(f"[X] Tweet post error: {e}")
             return {"ok": False, "error": str(e)}
 
     def send_file(self, chat_id, file_path, **kwargs):
-        """X 미디어 업로드는 별도 API 필요 (v1.1 media/upload).
+        """X media upload requires a separate API (v1.1 media/upload).
 
-        현재는 미지원 — 텍스트 전용.
+        Currently unsupported — text only.
         """
-        logger.warning("[X] 파일 첨부는 현재 미지원 (텍스트 전용)")
-        return {"ok": False, "error": "X 파일 첨부 미지원"}
+        logger.warning("[X] File attachments not currently supported (text only)")
+        return {"ok": False, "error": "X file attachment not supported"}

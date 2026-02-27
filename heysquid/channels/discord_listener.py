@@ -1,14 +1,14 @@
 """
 heysquid.channels.discord_listener — Discord Gateway listener.
 
-역할:
-- Discord 메시지 수신 (Gateway Bot — MESSAGE_CONTENT Intent 필수!)
-- 첨부파일 다운로드
-- messages.json에 통합 스키마로 저장
-- 다른 채널로 브로드캐스트 (전체 동기화)
-- trigger_executor() 호출
+Responsibilities:
+- Receive Discord messages (Gateway Bot — MESSAGE_CONTENT Intent required!)
+- Download attachments
+- Save to messages.json in unified schema
+- Broadcast to other channels (full sync)
+- Call trigger_executor()
 
-사용법:
+Usage:
     python -m heysquid.channels.discord_listener
 """
 
@@ -29,16 +29,16 @@ BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 ALLOWED_USERS = [u.strip() for u in os.getenv("DISCORD_ALLOWED_USERS", "").split(",") if u.strip()]
 ALLOWED_CHANNELS = [c.strip() for c in os.getenv("DISCORD_ALLOWED_CHANNELS", "").split(",") if c.strip()]
 
-# 중단 키워드
+# Stop keywords
 STOP_KEYWORDS = {"멈춰", "스탑", "중단", "/stop", "잠깐만", "그만", "취소", "stop"}
 
-# 파일 다운로드 경로
+# File download path
 DATA_DIR = DATA_DIR_STR
 DOWNLOAD_DIR = os.path.join(DATA_DIR, "downloads")
 
 
 def _download_discord_attachment_sync(url, filename):
-    """Discord 첨부파일 다운로드 (동기 — thread에서 실행)"""
+    """Download Discord attachment (synchronous — runs in thread)"""
     import requests
 
     os.makedirs(DOWNLOAD_DIR, exist_ok=True)
@@ -47,7 +47,7 @@ def _download_discord_attachment_sync(url, filename):
     local_path = os.path.join(DOWNLOAD_DIR, f"discord_{ts}_{safe_name}")
 
     try:
-        # H-8 스타일: 스트리밍 다운로드
+        # H-8 style: Streaming download
         resp = requests.get(url, timeout=30, stream=True)
         resp.raise_for_status()
         with open(local_path, "wb") as f:
@@ -55,72 +55,72 @@ def _download_discord_attachment_sync(url, filename):
                 f.write(chunk)
         return local_path
     except Exception as e:
-        print(f"[DISCORD] 파일 다운로드 실패: {e}")
+        print(f"[DISCORD] File download failed: {e}")
         return None
 
 
 async def _download_discord_attachment(attachment):
-    """Discord 첨부파일 다운로드 (H-3: 비동기 래퍼 — 이벤트 루프 블로킹 방지)"""
+    """Download Discord attachment (H-3: async wrapper — prevent event loop blocking)"""
     return await asyncio.to_thread(
         _download_discord_attachment_sync, attachment.url, attachment.filename
     )
 
 
 def main():
-    """Discord listener 메인 — Gateway Bot"""
+    """Discord listener main — Gateway Bot"""
     if not BOT_TOKEN:
-        print("[DISCORD] DISCORD_BOT_TOKEN 미설정")
-        print("   .env에 DISCORD_BOT_TOKEN을 설정하세요.")
+        print("[DISCORD] DISCORD_BOT_TOKEN not set")
+        print("   Set DISCORD_BOT_TOKEN in .env.")
         sys.exit(1)
 
-    # discord.py를 discord_lib로 import (D4 — 이름 충돌 방지)
+    # Import discord.py as discord_lib (D4 — avoid name collision)
     import discord as discord_lib
 
     intents = discord_lib.Intents.default()
-    intents.message_content = True  # 필수! (D3)
+    intents.message_content = True  # Required! (D3)
     client = discord_lib.Client(intents=intents)
 
     @client.event
     async def on_ready():
-        print(f"[DISCORD] {client.user} 연결됨 (Gateway)")
-        print(f"[DISCORD] 허용 사용자: {ALLOWED_USERS or '전체'}")
+        print(f"[DISCORD] {client.user} connected (Gateway)")
+        print(f"[DISCORD] Allowed users: {ALLOWED_USERS or 'all'}")
         if ALLOWED_CHANNELS:
-            print(f"[DISCORD] 허용 채널: {ALLOWED_CHANNELS}")
+            print(f"[DISCORD] Allowed channels: {ALLOWED_CHANNELS}")
 
     @client.event
     async def on_message(message):
-        # 1. 봇 자기 메시지 무시 (에코 루프 방지)
+        # 1. Ignore bot's own messages (echo loop prevention)
         if message.author.bot:
             return
 
         user_id = str(message.author.id)
         channel_id = str(message.channel.id)
 
-        # 2. 허용 사용자 체크
+        # 2. Allowed user check
         if ALLOWED_USERS and user_id not in ALLOWED_USERS:
             return
 
-        # 3. 허용 채널 체크 (설정된 경우)
+        # 3. Allowed channel check (if configured)
         if ALLOWED_CHANNELS and channel_id not in ALLOWED_CHANNELS:
             return
 
         text = message.content or ""
 
-        # D3: MESSAGE_CONTENT Intent 경고
+        # D3: MESSAGE_CONTENT Intent warning
         if not text and not message.attachments:
-            print("[DISCORD] 빈 메시지 — MESSAGE_CONTENT Intent 비활성화 의심!")
+            print("[DISCORD] Empty message — MESSAGE_CONTENT Intent may be disabled!")
             return
 
-        # message_id: 채널 prefix 부착 (P1)
+        # message_id: Attach channel prefix (P1)
         msg_id = f"discord_{message.id}"
 
-        # 4. 중단 명령어 체크
+        # 4. Stop command check
         text_lower = text.lower().strip()
         if text_lower in STOP_KEYWORDS:
             await _handle_stop(message, msg_id)
             return
 
-        # 5. 첨부파일 다운로드 (H-3: await로 이벤트 루프 비블로킹)
+        # 5. Download attachments (H-3: await for non-blocking event loop)
         files = []
         for attachment in message.attachments:
             local_path = await _download_discord_attachment(attachment)
@@ -133,10 +133,10 @@ def main():
                     "type": file_type,
                 })
 
-        # 6. 사용자 이름
+        # 6. User name
         user_name = message.author.display_name or str(message.author)
 
-        # 7. 통합 스키마 변환
+        # 7. Convert to unified schema
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         message_data = {
             "message_id": msg_id,
@@ -150,7 +150,7 @@ def main():
             "files": files if files else [],
         }
 
-        # 8. messages.json에 저장 (flock atomic, H-3: to_thread로 비블로킹)
+        # 8. Save to messages.json (flock atomic, H-3: to_thread for non-blocking)
         from heysquid.channels._msg_store import load_and_modify
 
         def _append_msg(data):
@@ -160,15 +160,15 @@ def main():
             return data
         await asyncio.to_thread(load_and_modify, _append_msg)
 
-        print(f"[DISCORD] 메시지 저장: {user_name}: {text[:50]}...")
+        print(f"[DISCORD] Message saved: {user_name}: {text[:50]}...")
 
-        # 9. ✅ 리액션 수신 확인 (T1)
+        # 9. Acknowledgment reaction (T1)
         try:
             await message.add_reaction("✅")
         except Exception:
             pass
 
-        # 10. 다른 채널에 브로드캐스트 (전체 동기화, H-3: to_thread)
+        # 10. Broadcast to other channels (full sync, H-3: to_thread)
         try:
             from heysquid.channels._router import broadcast_user_message, broadcast_files
             if text:
@@ -184,22 +184,22 @@ def main():
                         exclude_channels={"discord"},
                     )
         except Exception as e:
-            print(f"[DISCORD] 브로드캐스트 실패 (Discord 처리에는 영향 없음): {e}")
+            print(f"[DISCORD] Broadcast failed (does not affect Discord processing): {e}")
 
         # 11. trigger_executor() (H-3: to_thread)
         try:
             from heysquid.channels._base import trigger_executor
             await asyncio.to_thread(trigger_executor)
         except Exception as e:
-            print(f"[DISCORD] trigger_executor 실패: {e}")
+            print(f"[DISCORD] trigger_executor failed: {e}")
 
     async def _handle_stop(message, msg_id):
-        """중단 명령어 처리"""
+        """Handle stop command"""
         import subprocess
 
-        print(f"[DISCORD] 중단 명령 수신: {message.content}")
+        print(f"[DISCORD] Stop command received: {message.content}")
 
-        # 메시지 저장
+        # Save message
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         message_data = {
             "message_id": msg_id,
@@ -220,7 +220,7 @@ def main():
             return data
         await asyncio.to_thread(load_and_modify, _append_msg)
 
-        # Claude 프로세스 kill (H-3: subprocess는 to_thread 불필요 — 빠름)
+        # Kill Claude process (H-3: subprocess doesn't need to_thread — fast enough)
         try:
             result = subprocess.run(
                 ["pgrep", "-f", "claude.*append-system-prompt-file"],
@@ -231,9 +231,9 @@ def main():
                 for pid in pids:
                     if pid.strip():
                         subprocess.run(["kill", "-TERM", pid.strip()])
-                print(f"[DISCORD] Claude 프로세스 중단: {pids}")
+                print(f"[DISCORD] Claude process stopped: {pids}")
 
-                # interrupted 파일 생성
+                # Create interrupted file
                 from heysquid.core._working_lock import check_working_lock
                 lock_info = check_working_lock()
                 if lock_info:
@@ -246,7 +246,7 @@ def main():
                         "channel": "discord",
                         "previous_work": lock_info,
                     }
-                    # C-6: 원자적 쓰기 (tmp + fsync + rename)
+                    # C-6: Atomic write (tmp + fsync + rename)
                     fd, tmp = tempfile.mkstemp(
                         dir=os.path.dirname(INTERRUPTED_FILE), suffix=".tmp"
                     )
@@ -256,22 +256,22 @@ def main():
                         os.fsync(f.fileno())
                     os.rename(tmp, INTERRUPTED_FILE)
 
-                await message.channel.send("작업을 중단했습니다.")
+                await message.channel.send("Task stopped.")
             else:
-                await message.channel.send("진행 중인 작업이 없습니다.")
+                await message.channel.send("No task is currently running.")
         except Exception as e:
-            print(f"[DISCORD] 중단 처리 실패: {e}")
+            print(f"[DISCORD] Stop handling failed: {e}")
 
-    # M-8: SIGTERM 핸들러 — discord.py의 close()를 통해 정상 종료
+    # M-8: SIGTERM handler — graceful shutdown via discord.py close()
     def shutdown(signum, frame):
-        print(f"\n[DISCORD] 시그널 {signum} 수신 — 정상 종료 시작")
+        print(f"\n[DISCORD] Signal {signum} received — initiating graceful shutdown")
         asyncio.ensure_future(client.close())
 
     signal.signal(signal.SIGTERM, shutdown)
     signal.signal(signal.SIGINT, shutdown)
 
-    print("[DISCORD] Gateway listener 시작...")
-    client.run(BOT_TOKEN)  # 블로킹
+    print("[DISCORD] Gateway listener starting...")
+    client.run(BOT_TOKEN)  # Blocking
 
 
 if __name__ == "__main__":

@@ -1,15 +1,15 @@
 """
-텔레그램 메시지 수집기 (Listener) — heysquid Mac 포팅
+Telegram message collector (Listener) — heysquid Mac port
 
-역할:
-- 텔레그램 봇 API를 통해 새로운 메시지 수신
-- messages.json에 메시지 저장
-- 허용된 사용자만 처리
-- 중복 메시지 방지
+Responsibilities:
+- Receive new messages via Telegram Bot API
+- Save messages to messages.json
+- Process only allowed users
+- Prevent duplicate messages
 
-사용법:
+Usage:
     python telegram_listener.py
-    (Ctrl+C로 종료)
+    (Ctrl+C to stop)
 """
 
 import os
@@ -24,10 +24,10 @@ from telegram import Bot
 from telegram.request import HTTPXRequest
 import asyncio
 
-# 경로 설정 (Mac)
+# Path setup (Mac)
 from ..config import DATA_DIR_STR as DATA_DIR, TASKS_DIR_STR as TASKS_DIR, PROJECT_ROOT_STR as PROJECT_ROOT, get_env_path
 
-# .env 파일 로드
+# Load .env file
 load_dotenv(get_env_path())
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -35,7 +35,7 @@ ALLOWED_USERS = [int(uid.strip()) for uid in os.getenv("TELEGRAM_ALLOWED_USERS",
 POLLING_INTERVAL = int(os.getenv("TELEGRAM_POLLING_INTERVAL", "3"))
 
 from ..paths import MESSAGES_FILE, INTERRUPTED_FILE, WORKING_LOCK_FILE, EXECUTOR_LOCK_FILE
-# 중단 명령어 — 이 중 하나가 메시지 전체와 일치하면 중단
+# Stop keywords — if any of these match the full message text, trigger stop
 STOP_KEYWORDS = ["멈춰", "스탑", "중단", "/stop", "잠깐만", "스톱", "그만", "취소"]
 
 from ._msg_store import load_telegram_messages as load_messages, save_telegram_messages as save_messages, load_and_modify, get_cursor, _migrate_cursors
@@ -43,16 +43,16 @@ from ._base import trigger_executor as _trigger_executor
 
 
 def _is_stop_command(text):
-    """메시지가 중단 명령어인지 확인"""
+    """Check if a message is a stop command"""
     return text.strip().lower() in [kw.lower() for kw in STOP_KEYWORDS]
 
 
 def _kill_executor():
-    """실행 중인 executor Claude 프로세스를 종료 — executor.sh kill_all_pm과 동일 로직"""
+    """Kill the running executor Claude process — same logic as executor.sh kill_all_pm"""
     killed = False
     pidfile = os.path.join(PROJECT_ROOT, "data", "claude.pid")
 
-    # 1차: PID 파일 (가장 확실 — orphan claude도 잡음)
+    # Primary: PID file (most reliable — catches orphan claude too)
     if os.path.exists(pidfile):
         try:
             with open(pidfile, "r") as f:
@@ -60,12 +60,12 @@ def _kill_executor():
                     pid = line.strip()
                     if pid:
                         subprocess.run(["kill", pid], capture_output=True)
-                        print(f"[STOP] PID 파일에서 프로세스 종료: PID {pid}")
+                        print(f"[STOP] Killed process from PID file: PID {pid}")
                         killed = True
         except Exception as e:
-            print(f"[WARN] PID 파일 읽기 실패: {e}")
+            print(f"[WARN] Failed to read PID file: {e}")
 
-    # 2차: caffeinate 패턴 → 부모(claude) kill
+    # Secondary: caffeinate pattern → kill parent (claude)
     try:
         result = subprocess.run(
             ["pgrep", "-f", "caffeinate.*append-system-prompt-file"],
@@ -82,17 +82,17 @@ def _kill_executor():
                     parent = ppid_result.stdout.strip()
                     if parent:
                         subprocess.run(["kill", parent], capture_output=True)
-                        print(f"[STOP] claude 프로세스 종료: PID {parent} (caffeinate={cafe_pid}의 부모)")
+                        print(f"[STOP] Killed claude process: PID {parent} (parent of caffeinate={cafe_pid})")
                         killed = True
                     subprocess.run(["kill", cafe_pid], capture_output=True)
                     killed = True
     except Exception as e:
-        print(f"[WARN] caffeinate 패턴 kill 실패: {e}")
+        print(f"[WARN] caffeinate pattern kill failed: {e}")
 
-    # 3차: pkill fallback
+    # Tertiary: pkill fallback
     subprocess.run(["pkill", "-f", "append-system-prompt-file"], capture_output=True)
 
-    # force kill — 2초 후 생존자 kill -9
+    # force kill — kill -9 survivors after 2 seconds
     if killed:
         import time
         time.sleep(2)
@@ -107,29 +107,29 @@ def _kill_executor():
                 pass
         subprocess.run(["pkill", "-9", "-f", "append-system-prompt-file"], capture_output=True)
 
-    # PID 파일 삭제
+    # Delete PID file
     try:
         if os.path.exists(pidfile):
             os.remove(pidfile)
     except OSError:
         pass
 
-    # 2. executor.lock 삭제
+    # 2. Delete executor.lock
     if os.path.exists(EXECUTOR_LOCK_FILE):
         try:
             os.remove(EXECUTOR_LOCK_FILE)
-            print("[STOP] executor.lock 삭제")
+            print("[STOP] executor.lock deleted")
         except OSError:
             pass
 
-    # 3. working.json 읽고 삭제
+    # 3. Read and delete working.json
     working_info = None
     if os.path.exists(WORKING_LOCK_FILE):
         try:
             with open(WORKING_LOCK_FILE, "r", encoding="utf-8") as f:
                 working_info = json.load(f)
             os.remove(WORKING_LOCK_FILE)
-            print("[STOP] working.json 삭제")
+            print("[STOP] working.json deleted")
         except Exception:
             pass
 
@@ -138,19 +138,19 @@ def _kill_executor():
 
 async def _handle_stop_command(msg_data):
     """
-    중단 명령어 처리 (async — fetch_new_messages 안에서 호출):
-    0. 세션 메모리 강제 갱신 (kill 전에!)
-    1. executor kill
-    2. interrupted.json 저장
-    3. 사용자에게 알림
-    4. 중단 명령 메시지를 processed로 표시
+    Handle stop command (async — called within fetch_new_messages):
+    0. Force-flush session memory (before kill!)
+    1. Kill executor
+    2. Save interrupted.json
+    3. Notify user
+    4. Mark stop command message as processed
     """
     chat_id = msg_data["chat_id"]
     message_id = msg_data["message_id"]
 
-    print(f"[STOP] 중단 명령 감지: '{msg_data['text']}' from {msg_data['first_name']}")
+    print(f"[STOP] Stop command detected: '{msg_data['text']}' from {msg_data['first_name']}")
 
-    # 0. 세션 메모리 강제 갱신 (kill 전에!)
+    # 0. Force-flush session memory (before kill!)
     try:
         from heysquid.memory.session import compact_session_memory, save_session_summary
         compact_session_memory()
@@ -160,7 +160,7 @@ async def _handle_stop_command(msg_data):
 
     killed, working_info = _kill_executor()
 
-    # interrupted.json 저장
+    # Save interrupted.json
     interrupted_data = {
         "interrupted_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "reason": msg_data["text"],
@@ -179,10 +179,10 @@ async def _handle_stop_command(msg_data):
     os.makedirs(DATA_DIR, exist_ok=True)
     with open(INTERRUPTED_FILE, "w", encoding="utf-8") as f:
         json.dump(interrupted_data, f, ensure_ascii=False, indent=2)
-    print(f"[STOP] interrupted.json 저장")
+    print(f"[STOP] interrupted.json saved")
 
-    # 모든 미처리 메시지 processed 처리 (이전 메시지가 다시 실행되지 않도록)
-    # 이전 작업 맥락은 interrupted.json에 보존됨 — flock 사용
+    # Mark all unprocessed messages as processed (prevent re-execution of previous messages)
+    # Previous work context is preserved in interrupted.json — uses flock
     cleared = 0
     def _clear_unprocessed(data):
         nonlocal cleared
@@ -193,50 +193,50 @@ async def _handle_stop_command(msg_data):
         return data
     load_and_modify(_clear_unprocessed)
     if cleared:
-        print(f"[STOP] 미처리 메시지 {cleared}개 정리 완료")
+        print(f"[STOP] Cleared {cleared} unprocessed messages")
 
-    # 사용자에게 알림 (async — event loop 충돌 방지)
+    # Notify user (async — prevent event loop conflicts)
     from .telegram import send_message
 
     if working_info:
-        task_name = working_info.get("instruction_summary", "알 수 없음")
-        reply = f"작업 중단했어요.\n\n중단된 작업: {task_name}\n\n새로운 지시를 보내주세요."
+        task_name = working_info.get("instruction_summary", "unknown")
+        reply = f"Task stopped.\n\nStopped task: {task_name}\n\nPlease send a new instruction."
     elif killed:
-        reply = "작업 중단했어요. 새로운 지시를 보내주세요."
+        reply = "Task stopped. Please send a new instruction."
     else:
-        reply = "현재 실행 중인 작업이 없어요."
+        reply = "No task is currently running."
 
     await send_message(chat_id, reply)
-    print(f"[STOP] 중단 알림 전송 완료")
+    print(f"[STOP] Stop notification sent")
 
 
 def setup_bot_token():
-    """토큰이 .env에 없으면 사용자에게 입력받아 저장"""
+    """Prompt user to enter and save the token if not in .env"""
     global BOT_TOKEN
 
     if BOT_TOKEN and BOT_TOKEN not in ("", "YOUR_BOT_TOKEN", "your_bot_token_here"):
         return True
 
     print("\n" + "=" * 60)
-    print("TELEGRAM_BOT_TOKEN이 .env에 설정되지 않았습니다.")
+    print("TELEGRAM_BOT_TOKEN is not set in .env.")
     print("=" * 60)
     print()
-    print("설정 방법:")
-    print("   1. 텔레그램에서 @BotFather를 검색하여 시작")
-    print("   2. /newbot 명령으로 새 봇 생성")
-    print("   3. @BotFather가 주어준 토큰을 아래에 붙여넣기")
+    print("Setup instructions:")
+    print("   1. Search for @BotFather on Telegram and start it")
+    print("   2. Create a new bot with the /newbot command")
+    print("   3. Paste the token provided by @BotFather below")
     print()
-    print("   예시: 1234567890:ABCdefGHIjklMNOpqrSTUvwxYZ")
+    print("   Example: 1234567890:ABCdefGHIjklMNOpqrSTUvwxYZ")
     print()
 
     if not sys.stdin.isatty():
-        print("[ERROR] 대화형 환경이 아닙니다. .env 파일에 TELEGRAM_BOT_TOKEN을 직접 설정해주세요.")
+        print("[ERROR] Not an interactive environment. Please set TELEGRAM_BOT_TOKEN directly in the .env file.")
         return False
 
-    token = input("봇 토큰 입력: ").strip()
+    token = input("Enter bot token: ").strip()
 
     if not token:
-        print("토큰이 비어있습니다. 프로그램을 종료합니다.")
+        print("Token is empty. Exiting.")
         return False
 
     from dotenv import set_key
@@ -250,34 +250,34 @@ def setup_bot_token():
     BOT_TOKEN = token
     os.environ["TELEGRAM_BOT_TOKEN"] = token
 
-    print(f"[OK] .env에 TELEGRAM_BOT_TOKEN 저장 완료!")
+    print(f"[OK] TELEGRAM_BOT_TOKEN saved to .env!")
     print()
     return True
 
 
 async def download_file(bot, file_id, message_id, file_type, file_name=None):
     """
-    텔레그램 파일 다운로드
+    Download a Telegram file
 
     Args:
-        bot: Telegram Bot 인스턴스
-        file_id: 텔레그램 파일 ID
-        message_id: 메시지 ID
-        file_type: 파일 타입 (photo, document, video, audio, voice)
-        file_name: 파일명 (document의 경우)
+        bot: Telegram Bot instance
+        file_id: Telegram file ID
+        message_id: Message ID
+        file_type: File type (photo, document, video, audio, voice)
+        file_name: Filename (for documents)
 
     Returns:
-        str: 다운로드된 파일 경로 (실패 시 None)
+        str: Downloaded file path (None on failure)
     """
     try:
-        # tasks/msg_{message_id} 폴더 생성
+        # Create tasks/msg_{message_id} directory
         task_dir = os.path.join(TASKS_DIR, f"msg_{message_id}")
         os.makedirs(task_dir, exist_ok=True)
 
-        # 파일 정보 가져오기
+        # Get file info
         file = await bot.get_file(file_id)
 
-        # 파일 확장자 결정
+        # Determine file extension
         if file_name:
             filename = file_name
         else:
@@ -293,27 +293,27 @@ async def download_file(bot, file_id, message_id, file_type, file_name=None):
             prefix = type_prefix.get(file_type, 'file')
             filename = f"{prefix}_{message_id}{ext}"
 
-        # 파일 다운로드
+        # Download file
         local_path = os.path.join(task_dir, filename)
         await file.download_to_drive(local_path)
 
-        print(f"[FILE] 파일 다운로드: {filename} ({file.file_size} bytes)")
+        print(f"[FILE] File downloaded: {filename} ({file.file_size} bytes)")
         return local_path
 
     except Exception as e:
-        print(f"[ERROR] 파일 다운로드 실패: {e}")
+        print(f"[ERROR] File download failed: {e}")
         return None
 
 
 async def fetch_new_messages():
-    """새로운 메시지 가져오기 (텍스트 + 이미지 + 파일 지원)"""
+    """Fetch new messages (text + image + file support)"""
     if not BOT_TOKEN or BOT_TOKEN in ("your_bot_token_here", "YOUR_BOT_TOKEN"):
-        print("[ERROR] TELEGRAM_BOT_TOKEN 미설정. 프로그램을 종료합니다.")
+        print("[ERROR] TELEGRAM_BOT_TOKEN not set. Exiting.")
         return None
 
     request = HTTPXRequest(
         connect_timeout=10.0,
-        read_timeout=15.0,   # long-polling 5초 + 여유 10초
+        read_timeout=15.0,   # long-polling 5s + 10s buffer
         write_timeout=10.0,
         pool_timeout=5.0
     )
@@ -331,23 +331,23 @@ async def fetch_new_messages():
         max_update_id = last_update_id
 
         for update in updates:
-            # 인라인 버튼 콜백 처리 (중단 버튼)
+            # Handle inline button callback (stop button)
             if update.callback_query:
                 cq = update.callback_query
                 if cq.data == "stop":
                     user = cq.from_user
                     if ALLOWED_USERS and user.id not in ALLOWED_USERS:
                         continue
-                    # 콜백 응답 (버튼 로딩 해제)
+                    # Callback response (dismiss button loading)
                     try:
-                        await bot.answer_callback_query(cq.id, text="중단 처리 중...")
+                        await bot.answer_callback_query(cq.id, text="Processing stop...")
                     except Exception:
                         pass
-                    # 중단 처리
+                    # Handle stop
                     stop_data = {
                         "chat_id": cq.message.chat_id,
                         "message_id": cq.message.message_id,
-                        "text": "중단",
+                        "text": "stop",
                         "first_name": user.first_name or "",
                     }
                     await _handle_stop_command(stop_data)
@@ -363,18 +363,18 @@ async def fetch_new_messages():
             msg = update.message
             user = msg.from_user
 
-            # 허용된 사용자 체크
+            # Allowed user check
             if ALLOWED_USERS and user.id not in ALLOWED_USERS:
-                print(f"[WARN] 차단: 허용되지 않은 사용자 {user.id} ({user.first_name})")
+                print(f"[WARN] Blocked: unauthorized user {user.id} ({user.first_name})")
                 continue
 
-            # 텍스트 추출 (caption 또는 text)
+            # Extract text (caption or text)
             text = msg.caption or msg.text or ""
 
-            # 파일 다운로드
+            # Download files
             files = []
 
-            # 사진
+            # Photos
             if msg.photo:
                 largest_photo = msg.photo[-1]
                 file_path = await download_file(
@@ -387,7 +387,7 @@ async def fetch_new_messages():
                         "size": largest_photo.file_size
                     })
 
-            # 문서
+            # Documents
             if msg.document:
                 file_path = await download_file(
                     bot, msg.document.file_id, msg.message_id,
@@ -402,7 +402,7 @@ async def fetch_new_messages():
                         "size": msg.document.file_size
                     })
 
-            # 비디오
+            # Video
             if msg.video:
                 file_path = await download_file(
                     bot, msg.video.file_id, msg.message_id, 'video'
@@ -415,7 +415,7 @@ async def fetch_new_messages():
                         "size": msg.video.file_size
                     })
 
-            # 오디오
+            # Audio
             if msg.audio:
                 file_path = await download_file(
                     bot, msg.audio.file_id, msg.message_id,
@@ -429,7 +429,7 @@ async def fetch_new_messages():
                         "size": msg.audio.file_size
                     })
 
-            # 음성 메시지
+            # Voice messages
             if msg.voice:
                 file_path = await download_file(
                     bot, msg.voice.file_id, msg.message_id, 'voice'
@@ -442,7 +442,7 @@ async def fetch_new_messages():
                         "size": msg.voice.file_size
                     })
 
-            # 위치 정보
+            # Location info
             location_info = None
             if msg.location:
                 location_info = {
@@ -451,13 +451,13 @@ async def fetch_new_messages():
                 }
                 if hasattr(msg.location, 'horizontal_accuracy') and msg.location.horizontal_accuracy:
                     location_info["accuracy"] = msg.location.horizontal_accuracy
-                print(f"[LOC] 위치 수신: 위도 {msg.location.latitude}, 경도 {msg.location.longitude}")
+                print(f"[LOC] Location received: lat {msg.location.latitude}, lng {msg.location.longitude}")
 
-            # 텍스트나 파일이나 위치가 하나라도 있어야 처리
+            # Must have at least one of: text, files, or location
             if not text and not files and not location_info:
                 continue
 
-            # 메시지 데이터 구성
+            # Compose message data
             message_data = {
                 "message_id": msg.message_id,
                 "update_id": update.update_id,
@@ -482,37 +482,37 @@ async def fetch_new_messages():
                 max_update_id = update.update_id
 
         if new_messages:
-            # flock 기반 원자적 병합 (lost update 방지)
+            # flock-based atomic merge (prevent lost updates)
             def _merge_new(data):
                 data = _migrate_cursors(data)
                 existing_ids = {m["message_id"] for m in data.get("messages", [])}
                 for msg_data in new_messages:
                     if msg_data["message_id"] not in existing_ids:
                         data["messages"].append(msg_data)
-                # cursor 업데이트
+                # Update cursor
                 if "cursors" not in data:
                     data["cursors"] = {}
                 if "telegram" not in data["cursors"]:
                     data["cursors"]["telegram"] = {}
                 data["cursors"]["telegram"]["last_update_id"] = max_update_id
-                data["last_update_id"] = max_update_id  # 하위 호환
+                data["last_update_id"] = max_update_id  # Backward compat
                 return data
             load_and_modify(_merge_new)
 
             for msg in new_messages:
-                text_preview = msg['text'][:50] if msg['text'] else "(파일만)" if msg['files'] else "(위치)" if msg.get('location') else ""
-                file_info = f" + {len(msg['files'])}개 파일" if msg['files'] else ""
-                location_info = f" + 위치 정보" if msg.get('location') else ""
-                print(f"[MSG] 새 메시지: [{msg['timestamp']}] {msg['first_name']}: {text_preview}...{file_info}{location_info}")
+                text_preview = msg['text'][:50] if msg['text'] else "(files only)" if msg['files'] else "(location)" if msg.get('location') else ""
+                file_info = f" + {len(msg['files'])} file(s)" if msg['files'] else ""
+                location_info = f" + location" if msg.get('location') else ""
+                print(f"[MSG] New message: [{msg['timestamp']}] {msg['first_name']}: {text_preview}...{file_info}{location_info}")
 
-            # 중단 명령어 감지 — 일반 메시지보다 먼저 처리
+            # Detect stop commands — process before regular messages
             stop_messages = [m for m in new_messages if m['text'] and _is_stop_command(m['text'])]
             if stop_messages:
                 await _handle_stop_command(stop_messages[0])
-                # 중단 명령은 executor 트리거 안 함 — 0 반환
+                # Stop commands do not trigger executor — return 0
                 return 0
 
-            # 수신 확인 리액션 (messages.json에는 저장하지 않음 — 노이즈 방지)
+            # Acknowledgment reaction (not saved to messages.json — reduce noise)
             from telegram import ReactionTypeEmoji
             for msg in new_messages:
                 try:
@@ -522,9 +522,9 @@ async def fetch_new_messages():
                         reaction=[ReactionTypeEmoji(emoji="👀")]
                     )
                 except Exception:
-                    pass  # 리액션 실패해도 무시
+                    pass  # Ignore reaction failures
 
-            # 다른 채널에 릴레이 (전체 동기화 — best-effort)
+            # Relay to other channels (full sync — best-effort)
             try:
                 from ._router import broadcast_user_message, broadcast_files
                 for msg in new_messages:
@@ -535,14 +535,14 @@ async def fetch_new_messages():
                         if local_paths:
                             broadcast_files(local_paths, exclude_channels={"telegram"})
             except Exception as e:
-                print(f"[WARN] 브로드캐스트 실패 (TG 처리에는 영향 없음): {e}")
+                print(f"[WARN] Broadcast failed (does not affect TG processing): {e}")
 
             return len(new_messages)
 
         return 0
 
     except Exception as e:
-        print(f"[ERROR] 오류: {e}")
+        print(f"[ERROR] Error: {e}")
         return None
 
 
@@ -550,43 +550,43 @@ RETRY_MAX = 3
 
 
 def _cleanup_zombie_pm():
-    """좀비 PM 세션 감지 + 정리 — 다중 PM이 동시 실행되면 전부 kill"""
+    """Detect + clean up zombie PM sessions — kill all if multiple PMs running simultaneously"""
     try:
         result = subprocess.run(
             ["pgrep", "-f", "claude.*append-system-prompt-file"],
             capture_output=True, text=True
         )
         if result.returncode != 0:
-            return  # PM 프로세스 없음
+            return  # No PM processes
 
         pids = [p.strip() for p in result.stdout.strip().split("\n") if p.strip()]
         if len(pids) <= 1:
-            return  # 단일 세션 — 정상
+            return  # Single session — normal
 
-        # 다중 PM 세션 감지 → 전부 kill
-        print(f"[ZOMBIE] 다중 PM 세션 감지: {len(pids)}개 (PIDs: {', '.join(pids)})")
+        # Multiple PM sessions detected — kill all
+        print(f"[ZOMBIE] Multiple PM sessions detected: {len(pids)} (PIDs: {', '.join(pids)})")
         subprocess.run(
             ["pkill", "-f", "claude.*append-system-prompt-file"],
             capture_output=True
         )
         time.sleep(2)
 
-        # lock 파일 정리
+        # Clean up lock files
         if os.path.exists(EXECUTOR_LOCK_FILE):
             try:
                 os.remove(EXECUTOR_LOCK_FILE)
             except OSError:
                 pass
 
-        print(f"[ZOMBIE] {len(pids)}개 좀비 PM 세션 정리 완료. 다음 메시지에서 새 세션 시작됨.")
+        print(f"[ZOMBIE] {len(pids)} zombie PM sessions cleaned up. New session will start on next message.")
 
     except Exception as e:
-        print(f"[WARN] 좀비 PM 스캔 실패: {e}")
+        print(f"[WARN] Zombie PM scan failed: {e}")
 
 
 def _retry_unprocessed():
-    """미처리 메시지 확인 + retry_count < 3이면 executor 재트리거 — flock 사용"""
-    # PM/executor 실행 중이면 retry 불필요
+    """Check unprocessed messages + re-trigger executor if retry_count < 3 — uses flock"""
+    # No retry needed if PM/executor is running
     if os.path.exists(EXECUTOR_LOCK_FILE):
         return
     if os.path.exists(WORKING_LOCK_FILE):
@@ -603,7 +603,7 @@ def _retry_unprocessed():
             msg for msg in data.get("messages", [])
             if msg.get("type") == "user"
             and not msg.get("processed", False)
-            and not msg.get("seen", False)  # seen 메시지는 PM이 처리 중
+            and not msg.get("seen", False)  # seen messages are being processed by PM
             and msg.get("retry_count", 0) < RETRY_MAX
         ]
         if not retryable:
@@ -611,7 +611,7 @@ def _retry_unprocessed():
         for msg in retryable:
             msg["retry_count"] = msg.get("retry_count", 0) + 1
         retry_counts = [msg["retry_count"] for msg in retryable]
-        retry_info = f"미처리 메시지 {len(retryable)}개 재시도 (retry #{max(retry_counts)})"
+        retry_info = f"Retrying {len(retryable)} unprocessed message(s) (retry #{max(retry_counts)})"
         should_trigger = True
         return data
 
@@ -622,26 +622,26 @@ def _retry_unprocessed():
         _trigger_executor()
 
 
-# _trigger_executor는 _base.trigger_executor에서 import됨 (상단 참조)
+# _trigger_executor is imported from _base.trigger_executor (see top)
 
 
 async def listen_loop():
-    """메시지 수신 루프 — 새 메시지 감지 시 executor.sh 즉시 트리거"""
+    """Message receive loop — immediately trigger executor.sh when new messages detected"""
     print("=" * 60)
-    print("heysquid - 텔레그램 메시지 수집기 시작")
+    print("heysquid - Telegram message collector started")
     print("=" * 60)
 
     if not setup_bot_token():
         return
 
-    # 봇 커맨드 메뉴 등록 (/stop)
+    # Register bot command menu (/stop)
     from .telegram import register_bot_commands_sync
     register_bot_commands_sync()
 
-    print(f"폴링 간격: {POLLING_INTERVAL}초")
-    print(f"허용된 사용자: {ALLOWED_USERS}")
-    print(f"메시지 저장 파일: {MESSAGES_FILE}")
-    print("\n대기 중... (Ctrl+C로 종료)\n")
+    print(f"Polling interval: {POLLING_INTERVAL}s")
+    print(f"Allowed users: {ALLOWED_USERS}")
+    print(f"Message storage file: {MESSAGES_FILE}")
+    print("\nWaiting... (Ctrl+C to stop)\n")
 
     cycle_count = 0
 
@@ -653,15 +653,15 @@ async def listen_loop():
             result = await fetch_new_messages()
 
             if result is None:
-                print(f"[{now}] #{cycle_count} - 오류 발생, 재시도 대기...")
+                print(f"[{now}] #{cycle_count} - Error occurred, waiting to retry...")
             elif result > 0:
-                print(f"[{now}] #{cycle_count} - {result}개 메시지 수집")
+                print(f"[{now}] #{cycle_count} - {result} message(s) collected")
                 _trigger_executor()
             else:
                 if cycle_count % 30 == 0:
-                    print(f"[{now}] #{cycle_count} - 대기 중...")
+                    print(f"[{now}] #{cycle_count} - Waiting...")
 
-            # 60사이클(~10분)마다 미처리 메시지 재트리거 + 좀비 PM 스캔
+            # Every 60 cycles (~10 min): re-trigger unprocessed messages + zombie PM scan
             if cycle_count % 60 == 0:
                 _cleanup_zombie_pm()
                 _retry_unprocessed()
@@ -669,7 +669,7 @@ async def listen_loop():
             await asyncio.sleep(POLLING_INTERVAL)
 
     except KeyboardInterrupt:
-        print("\n\n종료 신호 감지. 프로그램을 종료합니다.")
+        print("\n\nShutdown signal received. Exiting.")
         print("=" * 60)
 
 

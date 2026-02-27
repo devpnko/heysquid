@@ -1,4 +1,4 @@
-"""Heartbeat 러너 — 에이전트 활동 1사이클."""
+"""Heartbeat runner — one activity cycle per agent."""
 
 import logging
 import random
@@ -11,7 +11,7 @@ from .content_gen import generate_post, generate_post_from_recipe, generate_repl
 
 logger = logging.getLogger(__name__)
 
-MAX_COMMENTED_POSTS_CACHE = 100  # ring buffer 최대 크기
+MAX_COMMENTED_POSTS_CACHE = 100  # ring buffer max size
 
 
 def _now() -> str:
@@ -28,16 +28,16 @@ def _hours_since(iso_str: str | None) -> float:
         return 999
 
 
-# 트리거별 최소 간격 (시간)
+# Minimum interval per trigger type (hours)
 _TRIGGER_INTERVALS = {
-    "daily": 20,       # ~1일 (여유분)
-    "weekly": 160,     # ~7일 (여유분)
+    "daily": 20,       # ~1 day (with buffer)
+    "weekly": 160,     # ~7 days (with buffer)
     "every_4h": 4,
 }
 
 
 def _get_due_recipes(agent: dict) -> list[dict]:
-    """blueprint.recipes 중 실행할 시간이 된 레시피 목록 반환."""
+    """Return list of blueprint recipes that are due for execution."""
     blueprint = agent.get("blueprint")
     if not blueprint:
         return []
@@ -63,14 +63,14 @@ def _get_due_recipes(agent: dict) -> list[dict]:
 
 
 def run_heartbeat(handle: str) -> dict:
-    """에이전트 1명의 heartbeat 1사이클.
+    """One heartbeat cycle for a single agent.
 
-    우선순위: 댓글 답변 > 피드 참여 > 글 작성
-    activity 설정은 에이전트별 JSON에서 읽음.
+    Priority: reply to comments > engage in feed > write post
+    Activity settings are read from per-agent JSON config.
     """
     agent = load_agent(handle)
     if not agent:
-        return {"ok": False, "error": f"에이전트 없음: {handle}", "handle": handle}
+        return {"ok": False, "error": f"Agent not found: {handle}", "handle": handle}
 
     act = get_activity(agent)
     client = FanMoltClient(agent["api_key"])
@@ -81,7 +81,7 @@ def run_heartbeat(handle: str) -> dict:
 
     llm_failed = False
 
-    # 1. 알림 확인 → 댓글 답변 (최우선)
+    # 1. Check notifications -> reply to comments (highest priority)
     reply_style = engagement.get("reply_style")
     try:
         last_noti_id = agent.get("last_notification_id")
@@ -105,18 +105,18 @@ def run_heartbeat(handle: str) -> dict:
                         time.sleep(act["min_comment_interval_sec"])
                 except RuntimeError:
                     llm_failed = True
-                    logger.warning("%s: LLM 불가 — 답변 스킵", handle)
+                    logger.warning("%s: LLM unavailable — skipping replies", handle)
                     break
                 except Exception as e:
-                    logger.warning("답변 실패: %s", e)
-            # cursor 갱신 (처리 여부와 무관하게)
+                    logger.warning("Reply failed: %s", e)
+            # Update cursor (regardless of processing result)
             if n.get("id"):
                 agent["last_notification_id"] = n["id"]
         result["replies"] = replied
     except Exception as e:
-        logger.warning("알림 조회 실패: %s", e)
+        logger.warning("Notification fetch failed: %s", e)
 
-    # 2. 피드 탐색 → 댓글 달기 (이미 댓글 단 포스트 스킵)
+    # 2. Browse feed -> leave comments (skip already commented posts)
     engage_topics = engagement.get("engage_topics")
     if not llm_failed:
         try:
@@ -127,7 +127,7 @@ def run_heartbeat(handle: str) -> dict:
                 if commented >= act["max_comments_per_beat"]:
                     break
                 post_id = post.get("id", "")
-                # 내 글 또는 이미 댓글 단 포스트 스킵
+                # Skip own posts or already commented posts
                 creator = post.get("creator", {})
                 if creator.get("handle") == handle:
                     continue
@@ -143,17 +143,17 @@ def run_heartbeat(handle: str) -> dict:
                             time.sleep(act["min_comment_interval_sec"])
                 except RuntimeError:
                     llm_failed = True
-                    logger.warning("%s: LLM 불가 — 댓글 스킵", handle)
+                    logger.warning("%s: LLM unavailable — skipping comments", handle)
                     break
                 except Exception as e:
-                    logger.warning("댓글 실패: %s", e)
+                    logger.warning("Comment failed: %s", e)
             result["comments"] = commented
-            # ring buffer: 최근 100개만 유지
+            # ring buffer: keep only the last 100
             agent["commented_posts"] = list(commented_posts)[-MAX_COMMENTED_POSTS_CACHE:]
         except Exception as e:
-            logger.warning("피드 조회 실패: %s", e)
+            logger.warning("Feed fetch failed: %s", e)
 
-    # 3. 글 작성 (쿨다운 체크, LLM 실패 시 스킵)
+    # 3. Write post (cooldown check, skip if LLM failed)
     post_interval = act["min_post_interval_hours"]
     can_post = post_interval <= 0 or _hours_since(agent.get("last_post_at")) >= post_interval
     if not llm_failed and can_post:
@@ -162,7 +162,7 @@ def run_heartbeat(handle: str) -> dict:
             due_recipes = _get_due_recipes(agent)
 
             if due_recipes:
-                # Blueprint 모드: due 레시피 순차 실행
+                # Blueprint mode: run due recipes sequentially
                 rules = blueprint.get("rules") if blueprint else None
                 recipe_states = agent.get("recipe_states", {})
                 for recipe in due_recipes:
@@ -177,13 +177,13 @@ def run_heartbeat(handle: str) -> dict:
                         prev_titles.append(post_data.get("title", ""))
                     except RuntimeError:
                         llm_failed = True
-                        logger.warning("%s: LLM 불가 — 레시피 %s 스킵", handle, recipe["name"])
+                        logger.warning("%s: LLM unavailable — skipping recipe %s", handle, recipe["name"])
                         break
                     except Exception as e:
-                        logger.warning("레시피 %s 실행 실패: %s", recipe["name"], e)
+                        logger.warning("Recipe %s execution failed: %s", recipe["name"], e)
                 agent["recipe_states"] = recipe_states
             else:
-                # 기존 모드: blueprint 없거나 due 레시피 없음
+                # Legacy mode: no blueprint or no due recipes
                 post_data = generate_post(persona, agent.get("category", "build"), prev_titles)
                 ratio = act["post_ratio_free"]
                 post_data["is_free"] = random.random() * 100 < ratio
@@ -192,14 +192,14 @@ def run_heartbeat(handle: str) -> dict:
                 agent["last_post_at"] = _now()
         except RuntimeError:
             llm_failed = True
-            logger.warning("%s: LLM 불가 — 글 작성 스킵", handle)
+            logger.warning("%s: LLM unavailable — skipping post", handle)
         except Exception as e:
-            logger.warning("글 작성 실패: %s", e)
+            logger.warning("Post creation failed: %s", e)
 
     if llm_failed:
         result["llm_unavailable"] = True
 
-    # 4. 상태 저장
+    # 4. Save state
     agent["last_heartbeat_at"] = _now()
     stats = agent.get("stats", {})
     stats["replies"] = stats.get("replies", 0) + result["replies"]
@@ -214,7 +214,7 @@ def run_heartbeat(handle: str) -> dict:
 
 
 def run_all() -> list[dict]:
-    """모든 에이전트 순회 heartbeat (스케줄 무시, 전부 실행)."""
+    """Run heartbeat for all agents (ignore schedule, run all)."""
     agents = list_agents()
     results = []
     for agent in agents:
@@ -227,9 +227,9 @@ def run_all() -> list[dict]:
 
 
 def run_due_agents() -> list[dict]:
-    """schedule_hours 기반으로 시간이 된 에이전트만 heartbeat.
+    """Run heartbeat only for agents whose schedule_hours have elapsed.
 
-    에이전트별 activity.schedule_hours 경과 시에만 실행.
+    Each agent's activity.schedule_hours is checked individually.
     """
     agents = list_agents()
     results = []
@@ -249,10 +249,10 @@ def run_due_agents() -> list[dict]:
 
 
 def force_post(handle: str, recipe_name: str = None) -> dict:
-    """쿨다운 무시, 즉시 글 1개 작성. recipe_name 지정 시 해당 레시피로 생성."""
+    """Force write 1 post immediately, ignoring cooldown. If recipe_name is given, use that recipe."""
     agent = load_agent(handle)
     if not agent:
-        return {"ok": False, "error": f"에이전트 없음: {handle}"}
+        return {"ok": False, "error": f"Agent not found: {handle}"}
 
     client = FanMoltClient(agent["api_key"])
     persona = agent.get("persona", "")
@@ -262,15 +262,15 @@ def force_post(handle: str, recipe_name: str = None) -> dict:
         prev_titles = _get_prev_titles(client)
 
         if recipe_name and blueprint:
-            # 특정 레시피로 생성
+            # Generate using specific recipe
             recipes = {r["name"]: r for r in blueprint.get("recipes", [])}
             recipe = recipes.get(recipe_name)
             if not recipe:
-                available = ", ".join(recipes.keys()) or "없음"
-                return {"ok": False, "error": f"레시피 '{recipe_name}' 없음. 사용 가능: {available}"}
+                available = ", ".join(recipes.keys()) or "none"
+                return {"ok": False, "error": f"Recipe '{recipe_name}' not found. Available: {available}"}
             rules = blueprint.get("rules")
             post_data = generate_post_from_recipe(persona, recipe, rules=rules, prev_titles=prev_titles)
-            # recipe_states 업데이트
+            # Update recipe_states
             recipe_states = agent.get("recipe_states", {})
             recipe_states.setdefault(recipe_name, {})["last_run"] = _now()
             agent["recipe_states"] = recipe_states
@@ -289,7 +289,7 @@ def force_post(handle: str, recipe_name: str = None) -> dict:
 
 
 def _get_prev_titles(client: FanMoltClient) -> list[str]:
-    """이전 글 제목 조회 (중복 방지용)."""
+    """Fetch previous post titles (for deduplication)."""
     try:
         posts = client.list_posts(limit=10)
         return [p.get("title", "") for p in posts]

@@ -1,4 +1,4 @@
-"""SkillScreen — Automation 상태 뷰"""
+"""SkillScreen -- Automation status view."""
 
 from textual.screen import Screen
 from textual.app import ComposeResult
@@ -12,7 +12,7 @@ from ..data_poller import load_agent_status, is_executor_live, get_executor_proc
 from ..colors import AGENT_COLORS
 
 
-# 스킬 상태 아이콘
+# Skill status icons
 _STATUS_ICON = {
     "idle": "[dim]✓ idle[/dim]",
     "running": "[bold yellow]⏳ run[/bold yellow]",
@@ -22,7 +22,7 @@ _STATUS_ICON = {
 
 
 class SkillScreen(Screen):
-    """Skill 모드 — 등록된 스킬 목록 + 상태"""
+    """Skill mode -- registered skill list + status."""
 
     DEFAULT_CSS = """
     SkillScreen {
@@ -55,7 +55,7 @@ class SkillScreen(Screen):
         yield VerticalScroll(Static("", id="skill-content"), id="skill-table")
         yield CommandInput(id="skill-cmd")
         yield Static(
-            "[dim] q:quit  Ctrl+1~5:mode  Ctrl+\u2190\u2192  /cmd  drag+Ctrl+C:복사[/dim]",
+            "[dim] q:quit  Ctrl+1~5:mode  Ctrl+\u2190\u2192  /cmd  drag+Ctrl+C:copy[/dim]",
             id="skill-status-bar",
         )
 
@@ -70,7 +70,7 @@ class SkillScreen(Screen):
         return f"[bold]\U0001f991 SQUID[/bold]  [bold {pm_color}]\\[AUTOMATION][/bold {pm_color}]  {indicator}"
 
     def refresh_data(self, flash: str = "") -> None:
-        """폴링 데이터로 화면 갱신 — 각 섹션 독립적으로 보호"""
+        """Refresh screen with polled data -- each section protected independently."""
         status = load_agent_status()
 
         try:
@@ -100,11 +100,11 @@ class SkillScreen(Screen):
                 pass
 
     def _render_skills(self, skills: dict) -> str:
-        """스킬 데이터를 Rich 텍스트로 렌더링"""
+        """Render skill data as Rich text."""
         if not skills:
-            return "[dim]등록된 스킬이 없습니다.[/dim]"
+            return "[dim]No registered skills.[/dim]"
 
-        # 헤더
+        # Header
         lines = []
         hdr = (
             f"  {'Name':<16} {'Status':<14} {'Trigger':<10} "
@@ -128,7 +128,7 @@ class SkillScreen(Screen):
             workspace = skill.get("workspace", "-") or "-"
             desc = skill.get("description", "")
 
-            # next_run 포맷 정리 (ISO → 간결)
+            # Format next_run (ISO -> compact)
             if next_run != "-" and "T" in next_run:
                 next_run = next_run.replace("T", " ")[:16]
             if last_run != "-" and "T" in last_run:
@@ -141,7 +141,7 @@ class SkillScreen(Screen):
             )
             lines.append(line)
 
-        # 요약
+        # Summary
         total = len(skills)
         enabled_count = sum(1 for s in skills.values() if s.get("enabled", True))
         lines.append("")

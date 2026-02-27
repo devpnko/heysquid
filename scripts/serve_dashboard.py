@@ -43,7 +43,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 return
             from heysquid.dashboard.kanban import add_kanban_activity
             add_kanban_activity(task_id, 'pm', message)
-            # messages.json 주입 → PM 세션 트리거
+            # Inject into messages.json to trigger PM session
             from heysquid.channels.dashboard import inject_feedback
             inject_feedback(message, task_title=title, task_id=task_id)
             self._respond(200, {'ok': True})

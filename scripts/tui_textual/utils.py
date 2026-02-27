@@ -1,9 +1,9 @@
-"""유틸리티 — 한글 폭 계산, 줄바꿈, 텍스트 자르기"""
+"""Utilities -- CJK character width calculation, line wrapping, text truncation."""
 
 import re
 import unicodedata
 
-# tui_monitor.py에서 사용하는 에이전트 순서
+# Agent order used by tui_monitor.py
 AGENT_ORDER = ["pm", "researcher", "developer", "reviewer", "tester", "writer"]
 AGENT_SHORT = {
     "pm": "PM", "researcher": "researcher", "developer": "developer",
@@ -12,7 +12,7 @@ AGENT_SHORT = {
 
 
 def display_width(text: str) -> int:
-    """문자열의 터미널 표시 폭 계산 (한글=2칸, ASCII=1칸)"""
+    """Calculate terminal display width of string (CJK=2 cells, ASCII=1 cell)."""
     w = 0
     for ch in text:
         eaw = unicodedata.east_asian_width(ch)
@@ -24,7 +24,7 @@ def display_width(text: str) -> int:
 
 
 def wrap_text(text: str, max_width: int) -> list[str]:
-    """텍스트를 max_width에 맞춰 줄바꿈. 한글 2칸 폭 처리."""
+    """Wrap text to max_width. Handles CJK 2-cell width."""
     lines = []
     for raw_line in text.split("\n"):
         if not raw_line:
@@ -48,13 +48,13 @@ def wrap_text(text: str, max_width: int) -> list[str]:
 
 
 def trunc(text: str, maxlen: int = 120) -> str:
-    """텍스트를 maxlen으로 자르기 (줄바꿈 제거)"""
+    """Truncate text to maxlen (newlines removed)."""
     text = text.replace("\n", " ").strip()
     return text[:maxlen] + "..." if len(text) > maxlen else text
 
 
 def get_at_context(cmd_buf: str):
-    """현재 @멘션 입력 컨텍스트. (prefix, partial, candidates) or None."""
+    """Current @mention input context. Returns (prefix, partial, candidates) or None."""
     at_pos = cmd_buf.rfind("@")
     if at_pos == -1:
         return None
@@ -67,6 +67,6 @@ def get_at_context(cmd_buf: str):
 
 
 def parse_mentions(text: str) -> list[str]:
-    """텍스트에서 @agent 멘션 추출"""
+    """Extract @agent mentions from text."""
     pattern = r"@(" + "|".join(AGENT_ORDER) + r")\b"
     return re.findall(pattern, text, re.IGNORECASE)

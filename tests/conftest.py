@@ -1,4 +1,4 @@
-"""M0.5 구조적 안전장치 테스트 — 공통 fixture"""
+"""M0.5 structural safeguard tests — common fixtures"""
 
 import json
 import os
@@ -10,19 +10,19 @@ import pytest
 
 @pytest.fixture
 def tmp_data_dir(tmp_path):
-    """격리된 임시 data 디렉토리"""
+    """Isolated temporary data directory"""
     return tmp_path
 
 
 @pytest.fixture
 def messages_file(tmp_data_dir):
-    """빈 messages.json 경로"""
+    """Empty messages.json path"""
     return str(tmp_data_dir / "telegram_messages.json")
 
 
 @pytest.fixture
 def sample_messages():
-    """테스트용 메시지 데이터"""
+    """Sample message data for testing"""
     return {
         "messages": [
             {

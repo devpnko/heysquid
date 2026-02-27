@@ -1,4 +1,4 @@
-"""IU-019a 테스트 — TUI /stop이 미처리 메시지를 정리하는지"""
+"""IU-019a test — verify TUI /stop clears unprocessed messages"""
 
 import json
 import os
@@ -9,7 +9,7 @@ import pytest
 
 
 def _setup_store(tmp_data_dir, initial_data):
-    """격리된 _msg_store를 셋업"""
+    """Set up isolated _msg_store"""
     import heysquid.channels._msg_store as store
 
     msg_file = str(tmp_data_dir / "telegram_messages.json")
@@ -34,10 +34,10 @@ def _setup_store(tmp_data_dir, initial_data):
 
 
 class TestTuiStopClearsUnprocessed:
-    """TUI /stop 실행 시 미처리 메시지가 모두 processed=True가 되는지"""
+    """All unprocessed messages should become processed=True when TUI /stop is executed"""
 
     def test_kill_executor_clears_messages(self, tmp_path):
-        """_kill_executor가 미처리 메시지를 정리하는지"""
+        """_kill_executor should clear unprocessed messages"""
         initial = {
             "messages": [
                 {"message_id": 600, "type": "user", "processed": False},
@@ -48,7 +48,7 @@ class TestTuiStopClearsUnprocessed:
         }
         store, msg_file, restore = _setup_store(tmp_path, initial)
 
-        # TUI commands가 사용하는 경로들을 패치
+        # Patch paths used by TUI commands
         executor_lock = str(tmp_path / "executor.lock")
         working_lock = str(tmp_path / "working.json")
         interrupted_file = str(tmp_path / "interrupted.json")
@@ -58,7 +58,7 @@ class TestTuiStopClearsUnprocessed:
                  patch("scripts.tui_textual.commands.WORKING_LOCK_FILE", working_lock), \
                  patch("scripts.tui_textual.commands.INTERRUPTED_FILE", interrupted_file), \
                  patch("subprocess.run") as mock_run:
-                # pgrep이 프로세스 없음을 반환
+                # pgrep returns no process found
                 mock_run.return_value = MagicMock(returncode=1, stdout="")
 
                 from scripts.tui_textual.commands import _kill_executor
@@ -67,17 +67,17 @@ class TestTuiStopClearsUnprocessed:
             data = store.load_telegram_messages()
             unprocessed = [m for m in data["messages"] if not m.get("processed", False)]
             assert len(unprocessed) == 0, (
-                f"미처리 메시지 {len(unprocessed)}개 남아있음 — TUI /stop이 정리하지 않음"
+                f"{len(unprocessed)} unprocessed messages remain — TUI /stop did not clean up"
             )
         finally:
             restore()
 
 
 class TestListenerStopClearsUnprocessed:
-    """Listener의 _handle_stop_command도 동일하게 정리하는지 (대조군)"""
+    """Verify listener's _handle_stop_command also clears messages (control group)"""
 
     def test_listener_stop_clears_all(self, tmp_path):
-        """listener _handle_stop_command가 미처리 메시지를 정리하는지"""
+        """listener _handle_stop_command should clear all unprocessed messages"""
         initial = {
             "messages": [
                 {"message_id": 700, "type": "user", "processed": False},

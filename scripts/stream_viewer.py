@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-🦑 squid agent box — 실시간 스트림 뷰어 + Telegram 브로드캐스트 + Dashboard 동기화
+squid agent box -- Real-time stream viewer + Telegram broadcast + Dashboard sync.
 
-사용법:
+Usage:
     tail -f logs/executor.stream.jsonl | python3 scripts/stream_viewer.py
 
-    또는:
+    or:
     bash scripts/monitor.sh
 
-TUI에 기존처럼 출력하면서 핵심 이벤트만 Telegram 채널로 동시 전송.
-TELEGRAM_BOT_TOKEN + TELEGRAM_AGENTBOX_CHANNEL_ID가 .env에 없으면 자동 비활성화.
+Outputs to TUI as before while simultaneously sending key events to Telegram channel.
+Auto-disabled if TELEGRAM_BOT_TOKEN + TELEGRAM_AGENTBOX_CHANNEL_ID are not set in .env.
 """
 
 import sys
@@ -20,10 +20,10 @@ import threading
 import queue
 from datetime import datetime
 
-# heysquid 패키지 import (pip install -e 또는 venv에서 실행)
-# sys.path.insert 불필요 — 패키지 설치 상태에서 import
+# heysquid package import (run with pip install -e or venv)
+# sys.path.insert not needed -- package is installed
 
-# .env 로드 (config 기반)
+# Load .env (config-based)
 from heysquid.core.config import get_env_path as _get_env_path
 _env_path = _get_env_path()
 if os.path.exists(_env_path):
@@ -37,7 +37,7 @@ if os.path.exists(_env_path):
 # agents.py — Single Source of Truth
 from heysquid.agents import AGENTS, SUBAGENT_MAP, TOOL_EMOJI, get_emoji, get_role_emoji
 
-# Dashboard 연동 (graceful fallback)
+# Dashboard integration (graceful fallback)
 try:
     from heysquid.agent_dashboard import (
         add_mission_log, dispatch_agent, recall_agent,
@@ -47,38 +47,38 @@ try:
 except ImportError:
     DASHBOARD_ENABLED = False
 
-# 모델 별명
+# Model aliases
 MODEL_NAMES = {
     "haiku": "Haiku",
     "sonnet": "Sonnet",
     "opus": "Opus",
 }
 
-# 활성 에이전트 추적 (tool_use id → info)
+# Active agent tracking (tool_use id -> info)
 active_agents = {}
 
-# desk 추론 키워드
+# Desk inference keywords
 DESK_KEYWORDS = {
-    "thread": ["thread", "스레드", "threads"],
-    "news": ["news", "뉴스", "briefing", "브리핑"],
-    "trading": ["trading", "트레이딩", "trade"],
-    "marketing": ["marketing", "마케팅"],
-    "shorts": ["shorts", "숏츠", "short"],
+    "thread": ["thread", "threads"],
+    "news": ["news", "briefing"],
+    "trading": ["trading", "trade"],
+    "marketing": ["marketing"],
+    "shorts": ["shorts", "short"],
 }
 
 
 def infer_desk(prompt):
-    """prompt 키워드 → desk 자동 매핑"""
+    """Auto-map prompt keywords to desk."""
     prompt_lower = prompt.lower()
     for desk, keywords in DESK_KEYWORDS.items():
         for kw in keywords:
             if kw in prompt_lower:
                 return desk
-    return "thread"  # 기본값
+    return "thread"  # default
 
 
 def dashboard_log(agent, message):
-    """대시보드 mission_log에 기록 (비활성이면 무시)"""
+    """Log to dashboard mission_log (ignored if disabled)."""
     if DASHBOARD_ENABLED:
         try:
             add_mission_log(agent, message)
@@ -87,7 +87,7 @@ def dashboard_log(agent, message):
 
 
 def dashboard_dispatch(agent_name, desk, task):
-    """대시보드에 에이전트 배치 반영"""
+    """Reflect agent dispatch to dashboard."""
     if DASHBOARD_ENABLED:
         try:
             dispatch_agent(agent_name, desk, task)
@@ -96,7 +96,7 @@ def dashboard_dispatch(agent_name, desk, task):
 
 
 def dashboard_recall(agent_name, message='Task complete'):
-    """대시보드에 에이전트 복귀 반영"""
+    """Reflect agent recall to dashboard."""
     if DASHBOARD_ENABLED:
         try:
             recall_agent(agent_name, message)
@@ -112,7 +112,7 @@ _thinking_shown = False
 
 
 def _set_pm_state(new_state):
-    """PM 상태 전이 + 대시보드 업데이트"""
+    """PM state transition + dashboard update."""
     global pm_state, _thinking_timer, _thinking_shown
     if _thinking_timer:
         _thinking_timer.cancel()
@@ -123,7 +123,7 @@ def _set_pm_state(new_state):
 
 
 def _schedule_thinking():
-    """2초 후 thinking 표시 예약 (tool result 후 다음 응답 생성 중)"""
+    """Schedule thinking display after 2s (generating next response after tool result)."""
     global _thinking_timer
     if _thinking_timer:
         _thinking_timer.cancel()
@@ -133,7 +133,7 @@ def _schedule_thinking():
 
 
 def _show_thinking():
-    """2초 이상 이벤트 없으면 TUI에 thinking 표시"""
+    """Display thinking in TUI if no events for 2+ seconds."""
     global _thinking_shown
     if pm_state == "thinking":
         _thinking_shown = True
@@ -142,7 +142,7 @@ def _show_thinking():
 
 
 def dashboard_update_pm(status, speech=""):
-    """PM 상태를 agent_status.json에 반영"""
+    """Reflect PM state to agent_status.json."""
     if DASHBOARD_ENABLED:
         try:
             update_agent_status("pm", status, speech)
@@ -155,7 +155,7 @@ def dashboard_update_pm(status, speech=""):
 # ─── Telegram Broadcaster ────────────────────────────────
 
 class TelegramBroadcaster:
-    """핵심 이벤트를 Telegram 채널로 비동기 전송. 터미널 출력 블로킹 없음."""
+    """Async broadcast key events to Telegram channel. Non-blocking for terminal output."""
 
     def __init__(self, bot_token, channel_id):
         self.bot_token = bot_token
@@ -173,7 +173,7 @@ class TelegramBroadcaster:
         return self._bot
 
     def send(self, text):
-        """Non-blocking. 큐에 넣고 즉시 리턴."""
+        """Non-blocking. Enqueue and return immediately."""
         if not self.enabled:
             return
         try:
@@ -182,7 +182,7 @@ class TelegramBroadcaster:
             pass
 
     def _worker(self):
-        """백그라운드 스레드에서 큐 소비 → Telegram API 호출"""
+        """Consume queue in background thread -> Telegram API calls."""
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         while True:
@@ -196,7 +196,7 @@ class TelegramBroadcaster:
                     parse_mode="Markdown"
                 ))
             except Exception as e:
-                # Markdown 파싱 실패 → plain text 재시도
+                # Markdown parse failure -> retry as plain text
                 if "parse" in str(e).lower():
                     try:
                         bot = self._get_bot()
@@ -211,7 +211,7 @@ class TelegramBroadcaster:
         loop.close()
 
 
-# broadcaster 인스턴스 (토큰/채널ID 없으면 자동 비활성화)
+# Broadcaster instance (auto-disabled if no token/channel ID)
 broadcaster = TelegramBroadcaster(
     bot_token=os.environ.get("TELEGRAM_BOT_TOKEN", ""),
     channel_id=os.environ.get("TELEGRAM_AGENTBOX_CHANNEL_ID", ""),
@@ -232,8 +232,8 @@ def truncate(text, maxlen=120):
 
 
 def is_standby(text):
-    """대기 루프 메시지 판별"""
-    return "[STANDBY]" in text or ("대기" in text and "루프" in text)
+    """Detect standby loop messages."""
+    return "[STANDBY]" in text
 
 
 # ─── Main ─────────────────────────────────────────────────
@@ -246,7 +246,7 @@ def main():
     else:
         print("  📡 Telegram broadcast: OFF")
     print(f"  🖥️  Dashboard sync: {'ON' if DASHBOARD_ENABLED else 'OFF'}")
-    print("  Ctrl+C로 종료")
+    print("  Ctrl+C to exit")
     print("=" * 55)
     print()
 
@@ -267,7 +267,7 @@ def main():
                 continue
 
     except KeyboardInterrupt:
-        print("\n\n종료.")
+        print("\n\nExiting.")
     except BrokenPipeError:
         pass
     except Exception as e:
@@ -275,7 +275,7 @@ def main():
 
 
 def _process_event(d):
-    """단일 stream-json 이벤트 처리 (예외 시 caller가 catch)"""
+    """Process a single stream-json event (exceptions caught by caller)."""
     t = d.get("type", "")
 
     if t == "system":
@@ -320,7 +320,7 @@ def _process_event(d):
 
                     model_label = MODEL_NAMES.get(model, model) if model else ""
 
-                    # agents.py 기반 이모지 매핑
+                    # Emoji mapping based on agents.py
                     dashboard_agent = SUBAGENT_MAP.get(agent_type)
                     if dashboard_agent:
                         emoji = get_emoji(dashboard_agent)
@@ -330,7 +330,7 @@ def _process_event(d):
                         role_emoji = ""
                     role_label = agent_type if agent_type else "agent"
 
-                    # 에이전트 추적
+                    # Agent tracking
                     active_agents[tool_id] = {
                         "type": role_label,
                         "dashboard_agent": dashboard_agent,
@@ -345,21 +345,21 @@ def _process_event(d):
                     if model_label:
                         print(f" ({model_label})", end="")
                     print(f"\033[0m")
-                    print(f"\033[34m│\033[0m  임무: {desc}")
+                    print(f"\033[34m│\033[0m  Mission: {desc}")
                     if prompt:
                         lines = prompt.strip().split("\n")
                         preview = lines[:3]
                         for pl in preview:
                             print(f"\033[34m│\033[0m  \033[90m> {truncate(pl, 80)}\033[0m")
                         if len(lines) > 3:
-                            print(f"\033[34m│\033[0m  \033[90m  ... (+{len(lines)-3}줄)\033[0m")
+                            print(f"\033[34m│\033[0m  \033[90m  ... (+{len(lines)-3} lines)\033[0m")
                     print(f"\033[34m│\033[0m")
 
-                    # broadcast: 에이전트 위임
+                    # Broadcast: agent delegation
                     model_str = f" ({model_label})" if model_label else ""
                     broadcaster.send(f"{emoji} *{role_label}*{model_str} {desc}")
 
-                    # dashboard: 에이전트 배치
+                    # Dashboard: agent dispatch
                     if dashboard_agent:
                         desk = infer_desk(prompt or desc)
                         log_msg = f"{emoji}{role_emoji} {truncate(desc, 35)}"
@@ -426,7 +426,7 @@ def _process_event(d):
                 tool_id = c.get("tool_use_id", "")
                 text = c.get("content", "")
 
-                # 에이전트 완료 매칭
+                # Agent completion matching
                 if tool_id in active_agents:
                     agent = active_agents.pop(tool_id)
                     elapsed = (datetime.now() - agent["start"]).total_seconds()
@@ -438,7 +438,7 @@ def _process_event(d):
                         result_preview = truncate(text, 150)
 
                     print(f"\033[34m│\033[0m")
-                    print(f"\033[34m└─ {emoji} [{agent['type']}] ✅ 완료\033[0m ({elapsed:.1f}초)", end="")
+                    print(f"\033[34m└─ {emoji} [{agent['type']}] ✅ Done\033[0m ({elapsed:.1f}s)", end="")
                     if agent.get("model"):
                         print(f" [{agent['model']}]", end="")
                     print()
@@ -449,18 +449,18 @@ def _process_event(d):
                                 print(f"   \033[90m→ {rl.strip()}\033[0m")
                     print()
 
-                    # broadcast: 에이전트 완료
+                    # Broadcast: agent completion
                     model_str = f" [{agent['model']}]" if agent.get("model") else ""
-                    broadcaster.send(f"✅ *{agent['type']}* 완료 {elapsed:.1f}s{model_str}")
+                    broadcaster.send(f"✅ *{agent['type']}* Done {elapsed:.1f}s{model_str}")
 
-                    # dashboard: 에이전트 복귀
+                    # Dashboard: agent recall
                     if da:
                         dashboard_recall(da, f'✅ Complete ({elapsed:.1f}s)')
 
                 elif isinstance(text, str) and len(text) > 0:
                     summary = truncate(text, 100)
                     if len(text) > 200:
-                        print(f"\033[90m[{fmt_time()}] [결과] {summary}\033[0m")
+                        print(f"\033[90m[{fmt_time()}] [Result] {summary}\033[0m")
                     broadcaster.send(f"→ {truncate(text, 150)}")
 
     elif t == "result":
@@ -474,16 +474,16 @@ def _process_event(d):
 
         print()
         print("\033[32m" + "━" * 55 + "\033[0m")
-        print(f"\033[32m[{fmt_time()}] [SESSION END]\033[0m 💰 ${cost:.4f} | ⏱ {dur:.1f}초 | 🔄 {turns}턴")
+        print(f"\033[32m[{fmt_time()}] [SESSION END]\033[0m 💰 ${cost:.4f} | ⏱ {dur:.1f}s | 🔄 {turns} turns")
         if result_text:
-            print(f"\033[32m[결과]\033[0m {result_text}")
+            print(f"\033[32m[Result]\033[0m {result_text}")
         print("\033[32m" + "━" * 55 + "\033[0m")
         print()
 
-        broadcaster.send(f"✨ *Session Complete* ${cost:.4f} {dur:.0f}s {turns}턴")
+        broadcaster.send(f"✨ *Session Complete* ${cost:.4f} {dur:.0f}s {turns} turns")
         dashboard_log('system', f'✨ Session complete (${cost:.4f})')
 
-        # 모든 에이전트 복귀
+        # Recall all agents
         for agent_name in active_agents.values():
             da = agent_name.get("dashboard_agent")
             if da:

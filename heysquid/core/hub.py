@@ -1,21 +1,21 @@
 """
-heysquid.core.hub — PM 허브.
+heysquid.core.hub — PM hub.
 
 Facade module: re-exports all public API from domain sub-modules.
-PM의 중앙 허브 — 메시지 수신, 조합, 컨텍스트 빌드, 채널 브로드캐스트가
-모두 여기를 거쳐간다. (check_telegram, combine_tasks, poll_new_messages,
-reply_telegram, reply_broadcast, report_broadcast, get_24h_context,
-_detect_workspace)
+Central hub for the PM — message reception, aggregation, context building,
+and channel broadcasting all go through here. (check_telegram, combine_tasks,
+poll_new_messages, reply_telegram, reply_broadcast, report_broadcast,
+get_24h_context, _detect_workspace)
 
-주요 기능:
-- check_telegram() - 새로운 명령 확인 (최근 48시간 대화 내역 포함)
-- reply_broadcast() / reply_telegram() - PM 응답 브로드캐스트
-- report_broadcast() - 작업 완료 리포트 브로드캐스트
-- report_telegram() - 결과 전송 및 메모리 저장
-- mark_done_telegram() - 처리 완료 표시
-- load_memory() - 기존 메모리 로드
-- reserve_memory_telegram() - 작업 시작 시 메모리 예약
-+ workspace 연동 (switch_workspace on project mention)
+Key features:
+- check_telegram() - Check for new commands (includes last 48h conversation history)
+- reply_broadcast() / reply_telegram() - PM response broadcast
+- report_broadcast() - Task completion report broadcast
+- report_telegram() - Send results and save to memory
+- mark_done_telegram() - Mark as processed
+- load_memory() - Load existing memory
+- reserve_memory_telegram() - Reserve memory at task start
++ workspace integration (switch_workspace on project mention)
 """
 
 import os
@@ -102,25 +102,25 @@ from .paths import (                                  # noqa: F401
 # ============================================================
 
 def reply_broadcast(chat_id, message_id, text):
-    """PM 응답 — 전체 채널 브로드캐스트.
+    """PM response — broadcast to all channels.
 
-    하나라도 채널 전송 성공이면 processed 마킹.
+    Marks as processed if at least one channel send succeeds.
 
     Args:
-        chat_id: 원본 채팅 ID
-        message_id: 응답 대상 메시지 ID (int 또는 list)
-        text: 응답 텍스트
+        chat_id: Original chat ID
+        message_id: Target message ID (int or list)
+        text: Response text
     Returns:
-        bool: 하나라도 전송 성공이면 True
+        bool: True if at least one send succeeded
     """
     ids = message_id if isinstance(message_id, list) else [message_id]
     ids_set = set(ids)
 
-    # 1. 전체 채널에 전송
+    # 1. Send to all channels
     results = broadcast_all(text)
     success = any(results.values()) if results else False
 
-    # 채널이 하나도 등록 안 되어있으면 (테스트 등) 텔레그램 직접 전송 시도
+    # If no channels are registered (e.g., testing), try direct Telegram send
     if not results:
         try:
             from ..channels.telegram import send_message_sync
@@ -128,7 +128,7 @@ def reply_broadcast(chat_id, message_id, text):
         except Exception:
             success = False
 
-    # 2. 전송 성공 시에만 processed 마킹 + 봇 응답 기록
+    # 2. Mark as processed + save bot response only on successful send
     if success:
         def _mark_processed(data):
             for msg in data.get("messages", []):
@@ -150,7 +150,7 @@ def reply_broadcast(chat_id, message_id, text):
 
 
 def report_broadcast(instruction, result_text, chat_id, timestamp, message_id, files=None):
-    """작업 완료 리포트 — 전체 채널에 브로드캐스트."""
+    """Task completion report — broadcast to all channels."""
     if isinstance(message_id, list):
         message_ids = message_id
     else:
@@ -162,16 +162,16 @@ def report_broadcast(instruction, result_text, chat_id, timestamp, message_id, f
         message += f"\n\n[FILE] {', '.join(file_names)}"
 
     if len(message_ids) > 1:
-        message += f"\n\n_{len(message_ids)}개 메시지 합산 처리_"
+        message += f"\n\n_{len(message_ids)} messages processed together_"
 
-    print(f"\n[SEND] 전체 채널로 결과 전송 중...")
+    print(f"\n[SEND] Broadcasting results to all channels...")
     _dashboard_log('pm', 'Mission complete — broadcasting report')
 
-    # 텍스트 리포트 → 전체 채널
+    # Text report -> all channels
     results = broadcast_all(message)
     success = any(results.values()) if results else False
 
-    # 채널 미등록 시 텔레그램 직접 전송
+    # Direct Telegram send if no channels registered
     if not results:
         try:
             from ..channels.telegram import send_files_sync
@@ -179,12 +179,12 @@ def report_broadcast(instruction, result_text, chat_id, timestamp, message_id, f
         except Exception:
             success = False
     else:
-        # 파일 있으면 → 전체 채널
+        # If files exist -> broadcast to all channels
         if files and success:
             broadcast_files(files)
 
     if success:
-        print("[OK] 결과 전송 완료!")
+        print("[OK] Results sent successfully!")
         save_bot_response(
             chat_id=chat_id,
             text=message,
@@ -193,13 +193,13 @@ def report_broadcast(instruction, result_text, chat_id, timestamp, message_id, f
             channel="broadcast"
         )
     else:
-        print("[ERROR] 결과 전송 실패!")
+        print("[ERROR] Failed to send results!")
 
     return success
 
 
 def reply_telegram(chat_id, message_id, text):
-    """자연스러운 대화 응답 — reply_broadcast()의 하위 호환 래퍼."""
+    """Natural conversation response — backward-compatible wrapper for reply_broadcast()."""
     return reply_broadcast(chat_id, message_id, text)
 
 
@@ -209,17 +209,17 @@ def reply_telegram(chat_id, message_id, text):
 
 
 def get_24h_context(messages, current_message_id):
-    """최근 48시간 대화 내역 생성"""
+    """Generate last 48 hours of conversation history"""
     now = datetime.now()
     cutoff_time = now - timedelta(hours=48)
 
-    context_lines = ["=== 최근 48시간 대화 내역 ===\n"]
+    context_lines = ["=== Last 48 Hours Conversation History ===\n"]
 
     for msg in messages:
         if msg.get("type") == "user" and msg["message_id"] == current_message_id:
             break
 
-        # 릴레이/브로드캐스트 메시지는 컨텍스트에서 제외 (중복 방지)
+        # Exclude relay/broadcast messages from context (prevent duplicates)
         if msg.get("channel") == "broadcast":
             continue
 
@@ -230,12 +230,12 @@ def get_24h_context(messages, current_message_id):
         msg_type = msg.get("type", "user")
 
         if msg_type == "user":
-            user_name = msg.get("first_name", "사용자")
+            user_name = msg.get("first_name", "User")
             text = msg.get("text", "")
             files = msg.get("files", [])
-            file_info = f" [첨부: {len(files)}개 파일]" if files else ""
+            file_info = f" [Attached: {len(files)} file(s)]" if files else ""
             location = msg.get("location")
-            location_info = f" [위치: {location['latitude']}, {location['longitude']}]" if location else ""
+            location_info = f" [Location: {location['latitude']}, {location['longitude']}]" if location else ""
             context_lines.append(f"[{msg['timestamp']}] {user_name}: {text}{file_info}{location_info}")
 
         elif msg_type == "bot":
@@ -243,21 +243,21 @@ def get_24h_context(messages, current_message_id):
             text_preview = text[:150] + "..." if len(text) > 150 else text
             files = msg.get("files", [])
             file_names = [f.get("name", str(f)) if isinstance(f, dict) else str(f) for f in files]
-            file_info = f" [전송: {', '.join(file_names)}]" if files else ""
+            file_info = f" [Sent: {', '.join(file_names)}]" if files else ""
             context_lines.append(f"[{msg['timestamp']}] heysquid: {text_preview}{file_info}")
 
     if len(context_lines) == 1:
-        return "최근 48시간 이내 대화 내역이 없습니다."
+        return "No conversation history within the last 48 hours."
 
     return "\n".join(context_lines)
 
 
 def _detect_workspace(instruction):
     """
-    지시사항에서 워크스페이스 프로젝트명 감지
+    Detect workspace project name from instruction text.
 
     Returns:
-        str or None: 감지된 워크스페이스 이름
+        str or None: Detected workspace name
     """
     try:
         from .workspace import list_workspaces
@@ -275,16 +275,16 @@ def _detect_workspace(instruction):
 
 def check_telegram():
     """
-    새로운 텔레그램 명령 확인
+    Check for new Telegram commands.
 
     Returns:
-        list: 대기 중인 지시사항 리스트
+        list: List of pending instructions
     """
     lock_info = check_working_lock()
 
     if lock_info:
         if lock_info.get("stale"):
-            print("[RESTART] 스탈 작업 재시작")
+            print("[RESTART] Resuming stale task")
 
             from ..channels.telegram import send_message_sync
             message_ids = lock_info.get("message_id")
@@ -301,18 +301,18 @@ def check_telegram():
 
             if chat_id:
                 alert_msg = (
-                    "**이전 작업이 중단되었습니다**\n\n"
-                    f"지시사항: {lock_info.get('instruction_summary')}...\n"
-                    f"시작 시각: {lock_info.get('started_at')}\n"
-                    f"마지막 활동: {lock_info.get('last_activity')}\n\n"
-                    "처음부터 다시 시작합니다."
+                    "**Previous task was interrupted**\n\n"
+                    f"Instruction: {lock_info.get('instruction_summary')}...\n"
+                    f"Started at: {lock_info.get('started_at')}\n"
+                    f"Last activity: {lock_info.get('last_activity')}\n\n"
+                    "Restarting from the beginning."
                 )
                 send_message_sync(chat_id, alert_msg, _save=False)
                 save_bot_response(chat_id, alert_msg, message_ids, channel="system")
 
             try:
                 os.remove(WORKING_LOCK_FILE)
-                print("[UNLOCK] 스탈 잠금 삭제 완료")
+                print("[UNLOCK] Stale lock removed")
             except OSError:
                 pass
 
@@ -342,7 +342,7 @@ def check_telegram():
 
             return pending
 
-        print(f"[WARN] 다른 작업이 진행 중입니다: message_id={lock_info.get('message_id')}")
+        print(f"[WARN] Another task is in progress: message_id={lock_info.get('message_id')}")
         return []
 
     _cleanup_old_messages()
@@ -366,7 +366,7 @@ def check_telegram():
 
         context_24h = get_24h_context(messages, message_id)
 
-        # 워크스페이스 감지
+        # Workspace detection
         workspace_name = _detect_workspace(instruction)
 
         pending.append({
@@ -383,8 +383,8 @@ def check_telegram():
         })
 
     if pending:
-        # 반환하는 메시지를 즉시 "seen" 마킹 — 중복 처리 구조적 방지
-        # PM AI가 어떤 함수를 쓰든, seen=True인 메시지는 poll_new_messages()에서 스킵됨
+        # Mark returned messages as "seen" immediately — structural duplicate prevention
+        # Regardless of which function PM AI uses, seen=True messages are skipped by poll_new_messages()
         seen_ids = {task['message_id'] for task in pending}
         def _mark_seen(data):
             for msg in data.get("messages", []):
@@ -420,7 +420,7 @@ def check_telegram():
 
 
 def combine_tasks(pending_tasks):
-    """여러 미처리 메시지를 하나의 통합 작업으로 합산"""
+    """Combine multiple unprocessed messages into a single unified task"""
     if not pending_tasks:
         return None
 
@@ -430,41 +430,41 @@ def combine_tasks(pending_tasks):
     combined_parts = []
 
     if is_stale_resume:
-        combined_parts.append("[중단된 작업 재시작]")
-        combined_parts.append("이전 작업의 진행 상태를 확인한 후, 합리적으로 진행할 것.")
-        combined_parts.append("tasks/ 폴더에서 이전 작업 결과물을 확인하고, 이어서 작업할 수 있는 경우 이어서 진행하되,")
-        combined_parts.append("처음부터 다시 시작하는 것이 더 안전하다면 처음부터 다시 시작할 것.")
+        combined_parts.append("[Resuming interrupted task]")
+        combined_parts.append("Check the progress of the previous task, then proceed rationally.")
+        combined_parts.append("Review previous work artifacts in the tasks/ folder and continue if possible,")
+        combined_parts.append("but restart from scratch if that would be safer.")
         combined_parts.append("")
         combined_parts.append("---")
         combined_parts.append("")
 
     all_files = []
 
-    # 워크스페이스 감지 (첫 번째 감지된 것 사용)
+    # Workspace detection (use first detected)
     detected_workspace = None
     for task in sorted_tasks:
         if task.get("workspace"):
             detected_workspace = task["workspace"]
             break
 
-    # 워크스페이스 정보 추가
+    # Add workspace info
     if detected_workspace:
         try:
             from .workspace import get_workspace, switch_workspace
             ws_info = get_workspace(detected_workspace)
             if ws_info:
                 context_md = switch_workspace(detected_workspace)
-                combined_parts.append(f"[활성 워크스페이스: {detected_workspace}]")
-                combined_parts.append(f"프로젝트 경로: {ws_info['path']}")
-                combined_parts.append(f"설명: {ws_info.get('description', '')}")
+                combined_parts.append(f"[Active workspace: {detected_workspace}]")
+                combined_parts.append(f"Project path: {ws_info['path']}")
+                combined_parts.append(f"Description: {ws_info.get('description', '')}")
                 if context_md:
-                    combined_parts.append(f"\n--- 프로젝트 컨텍스트 ---\n{context_md}\n---\n")
+                    combined_parts.append(f"\n--- Project Context ---\n{context_md}\n---\n")
                 combined_parts.append("")
         except Exception:
             pass
 
     for i, task in enumerate(sorted_tasks, 1):
-        combined_parts.append(f"[요청 {i}] ({task['timestamp']})")
+        combined_parts.append(f"[Request {i}] ({task['timestamp']})")
 
         if task['instruction']:
             combined_parts.append(task['instruction'])
@@ -472,7 +472,7 @@ def combine_tasks(pending_tasks):
         files = task.get('files', [])
         if files:
             combined_parts.append("")
-            combined_parts.append("첨부 파일:")
+            combined_parts.append("Attached files:")
             for file_info in files:
                 file_path = file_info['path']
                 file_name = os.path.basename(file_path)
@@ -489,18 +489,18 @@ def combine_tasks(pending_tasks):
                 emoji = type_emoji.get(file_type, '[FILE]')
 
                 combined_parts.append(f"  {emoji} {file_name} ({file_size})")
-                combined_parts.append(f"     경로: {file_path}")
+                combined_parts.append(f"     Path: {file_path}")
 
                 all_files.append(file_info)
 
         location = task.get('location')
         if location:
             combined_parts.append("")
-            combined_parts.append("위치 정보:")
-            combined_parts.append(f"  위도: {location['latitude']}")
-            combined_parts.append(f"  경도: {location['longitude']}")
+            combined_parts.append("Location info:")
+            combined_parts.append(f"  Latitude: {location['latitude']}")
+            combined_parts.append(f"  Longitude: {location['longitude']}")
             if 'accuracy' in location:
-                combined_parts.append(f"  정확도: +/-{location['accuracy']}m")
+                combined_parts.append(f"  Accuracy: +/-{location['accuracy']}m")
             maps_url = f"https://www.google.com/maps?q={location['latitude']},{location['longitude']}"
             combined_parts.append(f"  Google Maps: {maps_url}")
 
@@ -509,8 +509,8 @@ def combine_tasks(pending_tasks):
     combined_instruction = "\n".join(combined_parts).strip()
 
     context_24h = sorted_tasks[0]['context_24h']
-    if context_24h and context_24h != "최근 48시간 이내 대화 내역이 없습니다.":
-        combined_instruction = combined_instruction + "\n\n---\n\n[참고사항]\n" + context_24h
+    if context_24h and context_24h != "No conversation history within the last 48 hours.":
+        combined_instruction = combined_instruction + "\n\n---\n\n[Reference]\n" + context_24h
 
     return {
         "combined_instruction": combined_instruction,
@@ -527,7 +527,7 @@ def combine_tasks(pending_tasks):
 
 
 def pick_next_task(pending_tasks):
-    """1개 작업 선택. WAITING 카드에 대한 답장 우선, 그 다음 oldest TODO.
+    """Pick one task. Prioritize replies to WAITING cards, then oldest TODO.
 
     Returns:
         dict: {task, waiting_card, remaining} or None
@@ -535,7 +535,7 @@ def pick_next_task(pending_tasks):
     if not pending_tasks:
         return None
 
-    # Phase 1: WAITING 카드 reply 매칭
+    # Phase 1: WAITING card reply matching
     try:
         from ..dashboard._store import store as _dashboard_store
 
@@ -559,11 +559,11 @@ def pick_next_task(pending_tasks):
                     remaining = pending_tasks[:i] + pending_tasks[i+1:]
                     return {"task": task, "waiting_card": waiting_map[reply_to], "remaining": remaining}
 
-            # Fallback: 1개 WAITING + 1개 pending → auto-match (하나뿐이면 자명)
+            # Fallback: 1 WAITING + 1 pending -> auto-match (trivially obvious)
             if len(waiting_cards) == 1 and len(pending_tasks) == 1:
                 return {"task": pending_tasks[0], "waiting_card": waiting_cards[0], "remaining": []}
     except Exception as e:
-        print(f"[WARN] WAITING 매칭 실패: {e}")
+        print(f"[WARN] WAITING matching failed: {e}")
 
     # Phase 2: oldest TODO
     sorted_tasks = sorted(pending_tasks, key=lambda x: x['timestamp'])
@@ -571,14 +571,14 @@ def pick_next_task(pending_tasks):
 
 
 def suggest_card_merge(chat_id):
-    """같은 chat_id의 활성 카드가 여러 개면 병합 제안 텍스트 반환.
+    """Return merge suggestion text if there are multiple active cards for the same chat_id.
 
     Returns:
         dict or None: {
-            "text": 사용자에게 보낼 제안 메시지,
-            "cards": 카드 리스트,
-            "target_id": 가장 오래된 카드 ID,
-            "source_ids": 나머지 카드 ID 리스트,
+            "text": Suggestion message to send to the user,
+            "cards": Card list,
+            "target_id": Oldest card ID,
+            "source_ids": Remaining card IDs,
         }
     """
     from ..dashboard.kanban import get_mergeable_cards
@@ -589,14 +589,14 @@ def suggest_card_merge(chat_id):
     target = cards[0]  # oldest
     sources = cards[1:]
 
-    lines = [f"칸반에 활성 카드가 {len(cards)}개 있어. 하나로 합칠까?"]
+    lines = [f"There are {len(cards)} active cards on the kanban. Merge into one?"]
     for i, c in enumerate(cards):
         col = c["column"][:4].upper()
         title = c.get("title", "")[:40]
-        marker = " ← 여기에 합침" if i == 0 else ""
+        marker = " <- merge target" if i == 0 else ""
         lines.append(f"  {i+1}. [{col}] {title}{marker}")
     lines.append("")
-    lines.append('"응" → 전부 합침 / "아니" → 그냥 진행')
+    lines.append('"Yes" -> merge all / "No" -> proceed as is')
 
     return {
         "text": "\n".join(lines),
@@ -607,13 +607,13 @@ def suggest_card_merge(chat_id):
 
 
 def check_remaining_cards():
-    """Sleep 전 잔여 카드 확인. 활성 카드가 있으면 제안 텍스트 반환.
+    """Check remaining cards before sleep. Return suggestion text if active cards exist.
 
     Returns:
         dict or None: {
-            "text": 사용자에게 보낼 메시지,
+            "text": Message to send to the user,
             "cards": {"todo": [...], "in_progress": [...], "waiting": [...]},
-            "card_ids": [전체 카드 ID 리스트],
+            "card_ids": [Full card ID list],
         }
     """
     from ..dashboard.kanban import get_all_active_cards
@@ -623,16 +623,16 @@ def check_remaining_cards():
     if total == 0:
         return None
 
-    lines = [f"대기 모드 가기 전에 — 칸반에 카드 {total}개가 남아있어:"]
-    for col, label in [("in_progress", "⚡ 진행중"), ("todo", "📋 할일"), ("waiting", "⏳ 대기")]:
+    lines = [f"Before entering standby — {total} card(s) remaining on kanban:"]
+    for col, label in [("in_progress", "In Progress"), ("todo", "Todo"), ("waiting", "Waiting")]:
         for c in cards[col]:
             title = c.get("title", "")[:40]
             lines.append(f"  {label} | {title}")
     lines.append("")
-    lines.append("어떻게 할까?")
-    lines.append("1) 전부 정리 (Done 처리)")
-    lines.append("2) 바로 작업 시작")
-    lines.append("3) 그냥 대기 (나중에)")
+    lines.append("What should we do?")
+    lines.append("1) Clear all (mark as Done)")
+    lines.append("2) Start working now")
+    lines.append("3) Just standby (later)")
 
     all_ids = []
     for col_cards in cards.values():
@@ -646,13 +646,13 @@ def check_remaining_cards():
 
 
 def ask_and_wait(chat_id, message_id, text):
-    """PM이 질문 전송 + 칸반 IN_PROGRESS→WAITING + working lock 해제.
+    """PM sends a question + kanban IN_PROGRESS->WAITING + release working lock.
 
-    reply_broadcast와 달리 processed=True 안 함 (아직 작업 미완료).
+    Unlike reply_broadcast, does NOT set processed=True (task not yet complete).
     """
     ids = message_id if isinstance(message_id, list) else [message_id]
 
-    # 1. 전송 (sent_message_id 캡처)
+    # 1. Send (capture sent_message_id)
     from ..channels.telegram import send_message_sync
     result = send_message_sync(chat_id, text, _save=False)
     sent_message_id = result if isinstance(result, int) else None
@@ -660,11 +660,11 @@ def ask_and_wait(chat_id, message_id, text):
     if not result:
         return False
 
-    # 2. 봇 응답 저장
+    # 2. Save bot response
     save_bot_response(chat_id, text, ids, channel="broadcast",
                       sent_message_id=sent_message_id)
 
-    # 3. 칸반: WAITING 전환
+    # 3. Kanban: transition to WAITING
     try:
         from ..dashboard.kanban import set_task_waiting, get_active_kanban_task_id
         task_id = get_active_kanban_task_id()
@@ -674,34 +674,34 @@ def ask_and_wait(chat_id, message_id, text):
     except Exception:
         pass
 
-    # 4. working lock 해제 (다른 TODO 처리 가능하게)
+    # 4. Release working lock (allow processing other TODOs)
     remove_working_lock(transition_to_waiting=True)
     return True
 
 
 def poll_new_messages():
-    """대기 루프용 — 로컬 파일만 읽어 미처리 메시지 반환.
-    Telegram API 호출하지 않음 (listener가 담당).
-    working.json 체크 안 함 (대기 중이므로).
+    """For the standby loop — reads only local files to return unprocessed messages.
+    Does not call Telegram API (listener handles that).
+    Does not check working.json (since we're in standby).
     """
     data = load_telegram_messages()
     unprocessed = [
         msg for msg in data.get("messages", [])
         if msg.get("type") == "user"
         and not msg.get("processed", False)
-        and not msg.get("seen", False)  # seen 메시지 스킵 (중복 방지)
+        and not msg.get("seen", False)  # Skip seen messages (prevent duplicates)
     ]
     return unprocessed
 
 
 def check_due_posts():
-    """스레드 예약 게시 스케줄 확인.
+    """Check scheduled thread posts.
 
-    threads_schedule.json에서 scheduled_time이 지났고
-    status가 "scheduled"인 게시물을 반환한다.
+    Returns posts from threads_schedule.json where scheduled_time has passed
+    and status is "scheduled".
 
     Returns:
-        list[dict]: 게시해야 할 포스트 목록 (빈 리스트면 없음)
+        list[dict]: Posts due for publishing (empty list if none)
     """
     import json
 
@@ -732,7 +732,7 @@ def check_due_posts():
 
 
 def mark_post_done(post_id):
-    """스레드 예약 게시물 상태를 'posted'로 변경."""
+    """Change scheduled thread post status to 'posted'."""
     import json
 
     schedule_path = os.path.join(DATA_DIR, "threads_schedule.json")
@@ -755,27 +755,27 @@ def mark_post_done(post_id):
     return True
 
 
-# 테스트 코드
+# Test code
 if __name__ == "__main__":
     print("=" * 60)
-    print("heysquid - 대기 중인 명령 확인")
+    print("heysquid - Check pending commands")
     print("=" * 60)
 
     pending = check_telegram()
 
     if not pending:
-        print("\n[OK] 대기 중인 명령이 없습니다. 임무 완료!")
+        print("\n[OK] No pending commands. All done!")
     else:
-        print(f"\n[PENDING] 대기 중인 명령: {len(pending)}개\n")
+        print(f"\n[PENDING] Pending commands: {len(pending)}\n")
 
         for i, task in enumerate(pending, 1):
-            print(f"--- 명령 #{i} ---")
-            print(f"메시지 ID: {task['message_id']}")
-            print(f"사용자: {task['user_name']}")
-            print(f"시각: {task['timestamp']}")
-            print(f"명령: {task['instruction']}")
+            print(f"--- Command #{i} ---")
+            print(f"Message ID: {task['message_id']}")
+            print(f"User: {task['user_name']}")
+            print(f"Time: {task['timestamp']}")
+            print(f"Command: {task['instruction']}")
             if task.get('workspace'):
-                print(f"워크스페이스: {task['workspace']}")
-            print(f"\n[참고사항 - 최근 48시간 대화]")
+                print(f"Workspace: {task['workspace']}")
+            print(f"\n[Reference - Last 48h Conversation]")
             print(task['context_24h'])
             print()

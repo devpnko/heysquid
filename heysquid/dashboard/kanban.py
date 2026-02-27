@@ -39,7 +39,7 @@ migrate_section_from_status("kanban", _cfg.file_path, _cfg.lock_path, _cfg.bak_p
 
 
 def _migrate_short_ids():
-    """기존 카드에 short_id가 없으면 부여."""
+    """Assign short_id to existing cards that don't have one."""
     def _modify(data):
         counter = data.get("next_short_id", 1)
         changed = False
@@ -59,7 +59,7 @@ _migrate_short_ids()
 
 
 def resolve_card(identifier: str):
-    """K-ID(예: 'K3', 'k3')로 카드를 찾아 반환. 없으면 None."""
+    """Find and return a card by K-ID (e.g. 'K3', 'k3'). Returns None if not found."""
     sid = identifier.strip().upper()
     if not sid.startswith("K"):
         return None
@@ -138,10 +138,10 @@ def add_kanban_task(title, column=COL_TODO, source_message_ids=None,
 
 
 def append_message_to_active_card(chat_id, message_id, text):
-    """같은 chat_id의 non-done 카드에 메시지를 병합.
+    """Merge a message into a non-done card with the same chat_id.
 
     Returns:
-        bool: 병합 성공 여부 (기존 카드가 있으면 True)
+        bool: Whether the merge was successful (True if an existing card was found)
     """
     merged = [False]
 
@@ -171,10 +171,10 @@ def append_message_to_active_card(chat_id, message_id, text):
 
 
 def get_mergeable_cards(chat_id):
-    """같은 chat_id의 활성 카드(non-done, non-automation) 목록 반환.
+    """Return active cards (non-done, non-automation) with the same chat_id.
 
     Returns:
-        list[dict]: 카드 리스트 (created_at 오름차순). len < 2면 병합 불필요.
+        list[dict]: Card list (ascending by created_at). If len < 2, no merge needed.
     """
     data = store.load("kanban")
     cards = [
@@ -186,7 +186,7 @@ def get_mergeable_cards(chat_id):
 
 
 def get_all_active_cards():
-    """모든 활성 카드(non-done, non-automation) 목록을 컬럼별로 반환.
+    """Return all active cards (non-done, non-automation) grouped by column.
 
     Returns:
         dict: {"todo": [...], "in_progress": [...], "waiting": [...]}
@@ -201,13 +201,13 @@ def get_all_active_cards():
 
 
 def merge_kanban_tasks(source_id, target_id):
-    """source 카드를 target 카드에 병합 후 source 삭제.
+    """Merge the source card into the target card and delete the source.
 
-    source의 source_message_ids, activity_log를 target에 합치고,
-    source 카드는 삭제한다.
+    Combines source's source_message_ids and activity_log into the target,
+    then deletes the source card.
 
     Returns:
-        bool: 병합 성공 여부
+        bool: Whether the merge was successful
     """
     if source_id == target_id:
         return False
@@ -438,7 +438,7 @@ def set_active_waiting(reason="Waiting for response"):
 
 
 def set_task_waiting(task_id, sent_message_ids, reason="Waiting for response"):
-    """IN_PROGRESS → WAITING 전환 + sent_message_ids 저장 (reply 매칭용)."""
+    """Transition IN_PROGRESS -> WAITING + save sent_message_ids (for reply matching)."""
     moved = [False]
 
     def _modify(data):
@@ -461,7 +461,7 @@ def set_task_waiting(task_id, sent_message_ids, reason="Waiting for response"):
 
 
 def get_waiting_context(task_id):
-    """WAITING 카드의 전체 컨텍스트 반환 (activity_log, source_message_ids 등)."""
+    """Return the full context of a WAITING card (activity_log, source_message_ids, etc.)."""
     data = store.load("kanban")
     for task in data.get("tasks", []):
         if task["id"] == task_id:

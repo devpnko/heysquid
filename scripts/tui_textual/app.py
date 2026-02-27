@@ -1,4 +1,4 @@
-"""SquidApp — Textual TUI 메인 앱"""
+"""SquidApp -- Textual TUI main application."""
 
 import os
 from collections import deque
@@ -6,7 +6,7 @@ from collections import deque
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 
-# 프로젝트 루트 (config 기반)
+# Project root (config-based)
 from heysquid.core.config import PROJECT_ROOT_STR as ROOT
 
 from scripts.tui_textual.screens.chat import ChatScreen
@@ -33,7 +33,7 @@ CSS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "squid.tcss"
 
 
 class SquidApp(App):
-    """🦑 SQUID TUI — Textual 기반"""
+    """SQUID TUI -- Textual-based"""
 
     TITLE = "SQUID TUI"
     CSS_PATH = CSS_PATH
@@ -65,7 +65,7 @@ class SquidApp(App):
         yield from ()
 
     def on_mount(self) -> None:
-        """앱 시작 시 Chat 스크린 설치 + 폴링 타이머"""
+        """Install Chat screen on app start + set up polling timer."""
         chat = ChatScreen()
         kanban = KanbanScreen()
         squad = SquadScreen()
@@ -83,13 +83,13 @@ class SquidApp(App):
         self.push_screen("chat")
         self._mode = MODE_CHAT
 
-        # 데이터 폴링 타이머: 2초 간격
+        # Data polling timer: 2-second interval
         self.set_interval(2.0, self._poll_data)
-        # 초기 데이터 로드 (compose 완료 후)
+        # Initial data load (after compose completes)
         self.call_after_refresh(self._poll_data)
 
     def _poll_data(self) -> None:
-        """주기적 데이터 폴링 — 어떤 예외든 삼키고 다음 폴링 보장"""
+        """Periodic data polling -- swallow any exception to guarantee next poll."""
         try:
             self._stream_pos = load_stream_lines(self._stream_pos, self._stream_buffer)
         except Exception:
@@ -110,20 +110,20 @@ class SquidApp(App):
             elif isinstance(screen, SkillScreen):
                 screen.refresh_data(flash=flash)
         except Exception:
-            pass  # compose 완료 전이거나 데이터 오류 — 다음 폴링에서 재시도
+            pass  # Before compose completes or data error -- retry on next poll
 
     def _switch_mode(self, new_mode: int) -> None:
-        """모드 전환"""
+        """Switch mode."""
         mode_map = {MODE_CHAT: "chat", MODE_KANBAN: "kanban", MODE_SQUAD: "squad", MODE_LOG: "log", MODE_SKILL: "skill"}
         self._mode = new_mode
         self.switch_screen(mode_map[new_mode])
-        # TabBar 활성 탭 업데이트
+        # Update TabBar active tab
         try:
             tab_bar = self.screen.query_one(TabBar)
             tab_bar.set_active(new_mode)
         except Exception:
             pass
-        # Chat/Kanban 모드로 전환 시 입력창에 포커스
+        # Focus input when switching to Chat/Kanban mode
         if new_mode == MODE_CHAT:
             try:
                 self.screen.query_one(ChatInput).focus()
@@ -134,44 +134,44 @@ class SquidApp(App):
                 self.screen.query_one(KanbanInput).focus()
             except Exception:
                 pass
-        # 전환 후 즉시 데이터 로드
+        # Immediately load data after switch
         self.call_after_refresh(self._poll_data)
 
     def action_mode_chat(self) -> None:
-        """Ctrl+1 → Chat 모드"""
+        """Ctrl+1 -> Chat mode"""
         self._switch_mode(MODE_CHAT)
 
     def action_mode_kanban(self) -> None:
-        """Ctrl+2 → Kanban 모드"""
+        """Ctrl+2 -> Kanban mode"""
         self._switch_mode(MODE_KANBAN)
 
     def action_mode_squad(self) -> None:
-        """Ctrl+3 → Squad 모드"""
+        """Ctrl+3 -> Squad mode"""
         self._switch_mode(MODE_SQUAD)
 
     def action_mode_log(self) -> None:
-        """Ctrl+4 → Log 모드"""
+        """Ctrl+4 -> Log mode"""
         self._switch_mode(MODE_LOG)
 
     def action_mode_skill(self) -> None:
-        """Ctrl+5 → Skill 모드"""
+        """Ctrl+5 -> Skill mode"""
         self._switch_mode(MODE_SKILL)
 
     def action_mode_prev(self) -> None:
-        """Ctrl+← → 이전 모드"""
+        """Ctrl+Left -> previous mode"""
         self._switch_mode((self._mode - 1) % MODE_COUNT)
 
     def action_mode_next(self) -> None:
-        """Ctrl+→ → 다음 모드"""
+        """Ctrl+Right -> next mode"""
         self._switch_mode((self._mode + 1) % MODE_COUNT)
 
     def action_copy_selection(self) -> None:
-        """Ctrl+C → 선택된 텍스트 복사, 없으면 종료 안내"""
+        """Ctrl+C -> copy selected text, or show quit hint if none"""
         selected = self.screen.get_selected_text()
         if selected:
             self.copy_to_clipboard(selected)
             self.screen.clear_selection()
-            self._set_flash(f"✓ 복사됨 ({len(selected)}자)")
+            self._set_flash(f"✓ Copied ({len(selected)} chars)")
         else:
             for key, active_binding in self.active_bindings.items():
                 if active_binding.binding.action in ("quit", "quit_app", "app.quit"):
@@ -179,7 +179,7 @@ class SquidApp(App):
                     return
 
     def action_quit_app(self) -> None:
-        """q → 종료 (Chat/Kanban 입력 중이면 무시)"""
+        """q -> quit (ignored if typing in Chat/Kanban input)"""
         if isinstance(self.screen, ChatScreen):
             try:
                 input_widget = self.screen.query_one(ChatInput)
@@ -197,7 +197,7 @@ class SquidApp(App):
         self.exit()
 
     def action_command_mode(self) -> None:
-        """Squad/Log/Skill 모드에서 / 커맨드 모드 (칸반은 전용 입력 사용)"""
+        """/ command mode in Squad/Log/Skill modes (kanban uses dedicated input)"""
         if isinstance(self.screen, (SquadScreen, LogScreen, SkillScreen)):
             try:
                 cmd_input = self.screen.query_one(CommandInput)
@@ -206,7 +206,7 @@ class SquidApp(App):
                 pass
 
     def copy_to_clipboard(self, text: str) -> None:
-        """macOS pbcopy로 클립보드 복사 (OSC 52 대신)"""
+        """Copy to clipboard via macOS pbcopy (instead of OSC 52)."""
         import subprocess
         try:
             subprocess.run(
@@ -218,44 +218,44 @@ class SquidApp(App):
         super().copy_to_clipboard(text)
 
     def _set_flash(self, msg: str) -> None:
-        """flash 메시지 설정 (5초 후 자동 클리어)"""
+        """Set flash message (auto-clear after 5 seconds)."""
         self._flash_msg = msg
         if self._flash_timer:
             self._flash_timer.stop()
         self._flash_timer = self.set_timer(5.0, self._clear_flash)
 
     def _clear_flash(self) -> None:
-        """flash 메시지 클리어"""
+        """Clear flash message."""
         self._flash_msg = ""
         if isinstance(self.screen, ChatScreen):
             self.screen.clear_flash()
 
-    # --- 메시지 이벤트 핸들러 ---
+    # --- Message event handlers ---
 
     def on_chat_input_chat_submitted(self, event: ChatInput.ChatSubmitted) -> None:
-        """Chat 입력 제출"""
+        """Chat input submitted."""
         result = send_chat_message(event.value, self._stream_buffer)
         if result:
             self._set_flash(result)
         self._poll_data()
 
     def on_command_input_command_submitted(self, event: CommandInput.CommandSubmitted) -> None:
-        """커맨드 입력 제출 (Squad/Log/Skill)"""
+        """Command input submitted (Squad/Log/Skill)."""
         result = execute_command(event.value, self._stream_buffer)
         if result:
             self._set_flash(result)
         self._poll_data()
 
     def on_kanban_input_kanban_command_submitted(self, event: KanbanInput.KanbanCommandSubmitted) -> None:
-        """칸반 전용 커맨드 제출 — / 없이 바로 실행"""
+        """Kanban-specific command submitted -- executes without / prefix."""
         cmd_text = event.value.strip()
         is_info = cmd_text.lower().startswith("info")
         result = execute_command(cmd_text, self._stream_buffer)
         if result and is_info and isinstance(self.screen, KanbanScreen):
-            # info 결과는 info 패널에 표시
+            # Show info results in info panel
             self.screen.show_info(result)
         elif result:
-            # info 외 커맨드는 기존 flash 처리 + info 패널 숨기기
+            # Non-info commands use flash + hide info panel
             if isinstance(self.screen, KanbanScreen):
                 self.screen.hide_info()
             self._set_flash(result)
@@ -263,7 +263,7 @@ class SquidApp(App):
 
 
 def main():
-    """엔트리포인트"""
+    """Entry point."""
     app = SquidApp()
     app.run()
 

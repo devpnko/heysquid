@@ -1,4 +1,4 @@
-"""AgentPanel — Squad 모드 왼쪽 에이전트 상태 패널"""
+"""AgentPanel -- Left-side agent status panel for Squad mode."""
 
 from textual.containers import VerticalScroll
 from textual.widgets import Static
@@ -9,7 +9,7 @@ from ..colors import AGENT_COLORS
 
 
 class AgentPanel(VerticalScroll):
-    """에이전트 상태 패널 (Squad 좌측)"""
+    """Agent status panel (Squad mode, left side)."""
 
     DEFAULT_CSS = """
     AgentPanel {
@@ -25,7 +25,7 @@ class AgentPanel(VerticalScroll):
         yield Static("", id="agent-panel-content")
 
     def update_status(self, status: dict) -> None:
-        """에이전트 상태 업데이트"""
+        """Update agent statuses."""
         parts = []
         for name in AGENT_ORDER:
             info = AGENTS.get(name, {})
@@ -43,7 +43,7 @@ class AgentPanel(VerticalScroll):
             else:
                 task_str = trunc(task, 14) if task else agent_st
                 parts.append(f"  [green]▶ {task_str}[/green]")
-            parts.append("")  # 간격
+            parts.append("")  # spacing
 
         content = self.query_one("#agent-panel-content", Static)
         content.update("\n".join(parts))

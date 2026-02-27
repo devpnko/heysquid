@@ -1,6 +1,6 @@
 """heysquid.skills._base — skill auto-discovery + run_skill() interface.
 
-core.plugin_loader에 위임. 기존 API 유지.
+Delegates to core.plugin_loader. Preserves existing API.
 """
 
 from pathlib import Path
@@ -13,7 +13,7 @@ _DIR = Path(__file__).parent
 
 
 def discover_skills() -> dict[str, dict]:
-    """skills/ 하위 폴더 스캔 → SKILL_META가 있는 모듈 자동 수집."""
+    """Scan skills/ subfolders and auto-collect modules with SKILL_META."""
     return discover_plugins("heysquid.skills", _DIR)
 
 
@@ -21,7 +21,7 @@ _registry_cache = None
 
 
 def get_skill_registry() -> dict[str, dict]:
-    """캐시된 스킬 레지스트리 반환."""
+    """Return cached skill registry."""
     global _registry_cache
     if _registry_cache is None:
         _registry_cache = discover_skills()
@@ -29,13 +29,13 @@ def get_skill_registry() -> dict[str, dict]:
 
 
 def reload_skills():
-    """스킬 레지스트리 새로고침 (새 스킬 감지)."""
+    """Refresh skill registry (detect new skills)."""
     global _registry_cache
     _registry_cache = None
     return get_skill_registry()
 
 
 def run_skill(name: str, ctx: SkillContext | None = None) -> dict:
-    """스킬을 이름으로 실행. dashboard 상태 업데이트 포함."""
+    """Run a skill by name. Includes dashboard state updates."""
     registry = get_skill_registry()
     return run_plugin("heysquid.skills", name, ctx, registry=registry)

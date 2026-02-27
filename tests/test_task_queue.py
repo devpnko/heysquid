@@ -1,13 +1,13 @@
-"""Task Queue + WAITING State + Reply Matching 테스트
+"""Task Queue + WAITING State + Reply Matching Tests
 
-변경된 7개 파일 전체를 커버:
-1. telegram_listener.py — reply_to_message_id 캡처
-2. channels/telegram.py — sent_message_id 반환
-3. _msg_store.py — sent_message_id 저장
+Covers all 7 changed files:
+1. telegram_listener.py — reply_to_message_id capture
+2. channels/telegram.py — sent_message_id return
+3. _msg_store.py — sent_message_id storage
 4. dashboard/kanban.py — set_task_waiting + get_waiting_context
 5. core/_working_lock.py — transition_to_waiting
-6. core/hub.py — pick_next_task + ask_and_wait + 버그 수정
-7. pm-workflow.md — 문서 (테스트 대상 아님)
+6. core/hub.py — pick_next_task + ask_and_wait + bug fix
+7. pm-workflow.md — docs (not tested)
 """
 
 import json
@@ -20,10 +20,10 @@ from unittest.mock import patch, MagicMock
 import pytest
 
 
-# ── 헬퍼: 격리된 _msg_store ────────────────────────────────────
+# ── Helper: isolated _msg_store ────────────────────────────────────
 
 def _make_store(tmp_data_dir):
-    """격리된 환경에서 _msg_store 함수들을 반환"""
+    """Return _msg_store functions in an isolated environment"""
     msg_file = str(tmp_data_dir / "telegram_messages.json")
     data_dir = str(tmp_data_dir)
 
@@ -53,7 +53,7 @@ def _make_store(tmp_data_dir):
 
 
 def _make_kanban(tmp_data_dir):
-    """격리된 환경에서 kanban + dashboard 함수들을 반환"""
+    """Return kanban + dashboard functions in an isolated environment"""
     status_file = str(tmp_data_dir / "agent_status.json")
     lock_file = status_file + ".lock"
     data_dir = str(tmp_data_dir)
@@ -67,7 +67,7 @@ def _make_kanban(tmp_data_dir):
     dash._STATUS_LOCK = lock_file
     dash.DATA_DIR = data_dir
 
-    # kanban도 동일한 함수를 사용하므로 패치 불필요 (dashboard.__init__에서 import)
+    # kanban uses the same functions, no separate patch needed (imported via dashboard.__init__)
 
     class Ctx:
         # kanban functions
@@ -90,18 +90,18 @@ def _make_kanban(tmp_data_dir):
     return Ctx
 
 
-# ── Step 3: _msg_store — sent_message_id 저장 ──────────────────
+# ── Step 3: _msg_store — sent_message_id storage ──────────────────
 
 class TestSentMessageIdStore:
-    """save_bot_response가 sent_message_id를 정상적으로 저장하는지 검증"""
+    """Verify save_bot_response correctly stores sent_message_id"""
 
     def test_save_with_sent_message_id(self, tmp_data_dir):
-        """sent_message_id가 있을 때 저장되는지"""
+        """sent_message_id should be saved when provided"""
         ctx = _make_store(tmp_data_dir)
         try:
             ctx.save({"messages": [], "last_update_id": 0})
             ctx.save_bot_response(
-                chat_id=12345, text="질문입니다",
+                chat_id=12345, text="This is a question",
                 reply_to_message_ids=[100],
                 channel="broadcast", sent_message_id=42
             )
@@ -112,12 +112,12 @@ class TestSentMessageIdStore:
             ctx.restore()
 
     def test_save_without_sent_message_id(self, tmp_data_dir):
-        """sent_message_id가 None이면 필드가 없어야 함"""
+        """Field should not exist when sent_message_id is None"""
         ctx = _make_store(tmp_data_dir)
         try:
             ctx.save({"messages": [], "last_update_id": 0})
             ctx.save_bot_response(
-                chat_id=12345, text="일반 응답",
+                chat_id=12345, text="normal response",
                 reply_to_message_ids=[100],
                 channel="system"
             )
@@ -128,12 +128,12 @@ class TestSentMessageIdStore:
             ctx.restore()
 
     def test_backward_compat_no_sent_id_param(self, tmp_data_dir):
-        """기존 호출 패턴 (sent_message_id 생략)이 작동하는지"""
+        """Legacy call pattern (omitting sent_message_id) should still work"""
         ctx = _make_store(tmp_data_dir)
         try:
             ctx.save({"messages": [], "last_update_id": 0})
-            # 기존 코드처럼 sent_message_id 없이 호출
-            ctx.save_bot_response(12345, "테스트", [200], None, "system")
+            # Call without sent_message_id like legacy code
+            ctx.save_bot_response(12345, "test", [200], None, "system")
             loaded = ctx.load()
             assert len(loaded["messages"]) == 1
             assert "sent_message_id" not in loaded["messages"][0]
@@ -141,36 +141,36 @@ class TestSentMessageIdStore:
             ctx.restore()
 
 
-# ── Step 4: kanban — WAITING 라이프사이클 ───────────────────────
+# ── Step 4: kanban — WAITING lifecycle ───────────────────────
 
 class TestKanbanWaiting:
-    """set_task_waiting + get_waiting_context 검증"""
+    """Verify set_task_waiting + get_waiting_context"""
 
     def test_set_task_waiting(self, tmp_data_dir):
-        """IN_PROGRESS → WAITING 전환 + sent_ids 저장"""
+        """IN_PROGRESS → WAITING transition + sent_ids storage"""
         ctx = _make_kanban(tmp_data_dir)
         try:
             task = ctx.add_task("Test task", "in_progress", [100], 12345)
             assert task is not None
             task_id = task["id"]
 
-            result = ctx.set_task_waiting(task_id, [42, 43], "Waiting: 확인해주세요")
+            result = ctx.set_task_waiting(task_id, [42, 43], "Waiting: please confirm")
             assert result is True
 
-            # 카드 상태 확인
+            # Check card state
             card = ctx.get_waiting_context(task_id)
             assert card is not None
             assert card["column"] == "waiting"
             assert card["waiting_sent_ids"] == [42, 43]
             assert "waiting_since" in card
-            # activity_log 확인
+            # Check activity_log
             last_log = card["activity_log"][-1]
             assert "Waiting" in last_log["message"]
         finally:
             ctx.restore()
 
     def test_set_task_waiting_nonexistent(self, tmp_data_dir):
-        """존재하지 않는 task_id → False"""
+        """Non-existent task_id should return False"""
         ctx = _make_kanban(tmp_data_dir)
         try:
             result = ctx.set_task_waiting("nonexistent-id", [42])
@@ -179,7 +179,7 @@ class TestKanbanWaiting:
             ctx.restore()
 
     def test_get_waiting_context_returns_full_card(self, tmp_data_dir):
-        """WAITING 카드의 전체 필드가 반환되는지"""
+        """All fields of a WAITING card should be returned"""
         ctx = _make_kanban(tmp_data_dir)
         try:
             task = ctx.add_task("Full context task", "in_progress", [200, 201], 12345, ["tag1"])
@@ -196,7 +196,7 @@ class TestKanbanWaiting:
             ctx.restore()
 
     def test_get_waiting_context_nonexistent(self, tmp_data_dir):
-        """존재하지 않는 task → None"""
+        """Non-existent task should return None"""
         ctx = _make_kanban(tmp_data_dir)
         try:
             result = ctx.get_waiting_context("nonexistent")
@@ -205,13 +205,13 @@ class TestKanbanWaiting:
             ctx.restore()
 
 
-# ── Step 5: _working_lock — transition_to_waiting ───────────────
+# ── Step 5: _working_lock — transition_to_waiting ────────────────
 
 class TestWorkingLockWaiting:
-    """remove_working_lock(transition_to_waiting=True) 동작 검증"""
+    """Verify remove_working_lock(transition_to_waiting=True) behavior"""
 
     def test_transition_to_waiting_removes_lock(self, tmp_data_dir):
-        """transition_to_waiting=True여도 lock 파일은 삭제됨"""
+        """Lock file should be deleted even with transition_to_waiting=True"""
         lock_file = str(tmp_data_dir / "working.json")
 
         import heysquid.core._working_lock as wl
@@ -219,7 +219,7 @@ class TestWorkingLockWaiting:
         wl.WORKING_LOCK_FILE = lock_file
 
         try:
-            # lock 파일 생성
+            # Create lock file
             with open(lock_file, "w") as f:
                 json.dump({"message_id": [100], "instruction_summary": "test"}, f)
 
@@ -227,7 +227,7 @@ class TestWorkingLockWaiting:
 
             with patch.object(wl, '_dashboard_log'):
                 with patch('heysquid.core._working_lock.set_pm_speech', create=True):
-                    # typing stop을 mock
+                    # mock typing stop
                     with patch('heysquid.channels._typing.stop', create=True):
                         wl.remove_working_lock(transition_to_waiting=True)
 
@@ -236,7 +236,7 @@ class TestWorkingLockWaiting:
             wl.WORKING_LOCK_FILE = original
 
     def test_default_removes_lock_and_clears_speech(self, tmp_data_dir):
-        """기본 호출 (transition_to_waiting=False)은 기존 동작 유지"""
+        """Default call (transition_to_waiting=False) should preserve existing behavior"""
         lock_file = str(tmp_data_dir / "working.json")
 
         import heysquid.core._working_lock as wl
@@ -254,41 +254,41 @@ class TestWorkingLockWaiting:
                         wl.remove_working_lock()
 
             assert not os.path.exists(lock_file)
-            # set_pm_speech('') 호출 확인
+            # Verify set_pm_speech('') was called
             mock_speech.assert_called_with('')
         finally:
             wl.WORKING_LOCK_FILE = original
 
 
-# ── Step 6: hub.py — 버그 수정 + pick_next_task + ask_and_wait ──
+# ── Step 6: hub.py — bug fix + pick_next_task + ask_and_wait ──
 
 class TestBugFixInstructionKey:
-    """check_telegram() 라인 403 버그 수정 — task.get('text') → task.get('instruction')"""
+    """check_telegram() line 403 bug fix — task.get('text') → task.get('instruction')"""
 
     def test_kanban_title_uses_instruction(self):
-        """hub.py 소스에서 칸반 제목이 instruction 키를 사용하는지 확인.
+        """Verify hub.py source uses instruction key for kanban title.
 
-        (task.get("instruction") or "New task")[:80] 패턴이 있어야 하고,
-        (task.get("text") or "New task")[:80] 버그 패턴은 없어야 함.
+        Should contain (task.get("instruction") or "New task")[:80] pattern,
+        and should NOT contain (task.get("text") or "New task")[:80] bug pattern.
         """
         import heysquid.core.hub as hub
 
         with open(hub.__file__) as f:
             source = f.read()
 
-        # 수정된 패턴 존재 확인
+        # Verify fixed pattern exists
         assert '(task.get("instruction") or "New task")' in source, \
-            'task.get("instruction") or "New task" 패턴이 없음'
-        # 버그 패턴 부재 확인
+            'task.get("instruction") or "New task" pattern not found'
+        # Verify bug pattern is absent
         assert '(task.get("text") or "New task")' not in source, \
-            'task.get("text") or "New task" 버그가 여전히 존재'
+            'task.get("text") or "New task" bug still exists'
 
 
 class TestPickNextTask:
-    """pick_next_task() — WAITING reply 매칭 + oldest TODO fallback"""
+    """pick_next_task() — WAITING reply matching + oldest TODO fallback"""
 
     def _make_pending(self, *ids_and_instructions):
-        """테스트용 pending task 리스트 생성"""
+        """Create pending task list for testing"""
         tasks = []
         for i, (mid, inst) in enumerate(ids_and_instructions):
             tasks.append({
@@ -297,7 +297,7 @@ class TestPickNextTask:
                 "chat_id": 12345,
                 "timestamp": f"2026-02-25 10:{i:02d}:00",
                 "context_24h": "",
-                "user_name": "테스터",
+                "user_name": "tester",
                 "files": [],
                 "location": None,
                 "stale_resume": False,
@@ -305,10 +305,10 @@ class TestPickNextTask:
         return tasks
 
     def test_single_task_returns_it(self):
-        """pending 1개 → 그대로 반환"""
+        """Single pending task should be returned as-is"""
         from heysquid.core.hub import pick_next_task
 
-        pending = self._make_pending((100, "A 해줘"))
+        pending = self._make_pending((100, "Do A"))
 
         with patch('heysquid.core.hub.load_telegram_messages', return_value={"messages": []}):
             with patch('heysquid.dashboard._load_status', return_value={"kanban": {"tasks": []}}):
@@ -320,13 +320,13 @@ class TestPickNextTask:
         assert result["remaining"] == []
 
     def test_multiple_tasks_oldest_first(self):
-        """pending 3개 → oldest(timestamp 순) 선택"""
+        """3 pending tasks should select oldest (by timestamp)"""
         from heysquid.core.hub import pick_next_task
 
         pending = self._make_pending(
-            (100, "A 해줘"),
-            (101, "B 해줘"),
-            (102, "C 해줘"),
+            (100, "Do A"),
+            (101, "Do B"),
+            (102, "Do C"),
         )
 
         with patch('heysquid.core.hub.load_telegram_messages', return_value={"messages": []}):
@@ -337,15 +337,15 @@ class TestPickNextTask:
         assert len(result["remaining"]) == 2
 
     def test_empty_returns_none(self):
-        """빈 리스트 → None"""
+        """Empty list should return None"""
         from heysquid.core.hub import pick_next_task
         assert pick_next_task([]) is None
 
     def test_waiting_reply_matched(self):
-        """WAITING 카드의 sent_id에 reply_to_message_id 매칭"""
+        """Match reply_to_message_id to WAITING card's sent_id"""
         from heysquid.core.hub import pick_next_task
 
-        # WAITING 카드: sent_message_id=50으로 질문함
+        # WAITING card: asked question with sent_message_id=50
         waiting_card = {
             "id": "kb-waiting-1",
             "title": "A task",
@@ -355,15 +355,15 @@ class TestPickNextTask:
             "activity_log": [],
         }
 
-        # 메시지: msg_id=200이 msg_id=50에 대한 답장
+        # Message: msg_id=200 is a reply to msg_id=50
         messages = [
             {"message_id": 200, "reply_to_message_id": 50, "type": "user",
-             "text": "응 해줘", "processed": False},
+             "text": "Yes do it", "processed": False},
             {"message_id": 201, "reply_to_message_id": None, "type": "user",
-             "text": "B 해줘", "processed": False},
+             "text": "Do B", "processed": False},
         ]
 
-        pending = self._make_pending((200, "응 해줘"), (201, "B 해줘"))
+        pending = self._make_pending((200, "Yes do it"), (201, "Do B"))
         kanban_data = {"kanban": {"tasks": [waiting_card]}}
 
         with patch('heysquid.core.hub.load_telegram_messages',
@@ -378,7 +378,7 @@ class TestPickNextTask:
         assert result["remaining"][0]["message_id"] == 201
 
     def test_waiting_auto_match_single(self):
-        """WAITING 1개 + pending 1개 → 자동 매칭 (reply 없어도)"""
+        """1 WAITING + 1 pending should auto-match (even without reply)"""
         from heysquid.core.hub import pick_next_task
 
         waiting_card = {
@@ -406,7 +406,7 @@ class TestPickNextTask:
         assert result["waiting_card"]["id"] == "kb-waiting-1"
 
     def test_no_waiting_match_falls_through_to_oldest(self):
-        """WAITING은 있지만 reply 매칭 안 되면 → oldest TODO"""
+        """WAITING exists but no reply match should fall through to oldest TODO"""
         from heysquid.core.hub import pick_next_task
 
         waiting_card = {
@@ -417,13 +417,13 @@ class TestPickNextTask:
             "activity_log": [],
         }
 
-        # 2개 pending, 둘 다 reply 없음
+        # 2 pending, neither has a reply
         messages = [
             {"message_id": 400, "type": "user", "text": "X", "processed": False},
             {"message_id": 401, "type": "user", "text": "Y", "processed": False},
         ]
 
-        pending = self._make_pending((400, "X 해줘"), (401, "Y 해줘"))
+        pending = self._make_pending((400, "Do X"), (401, "Do Y"))
         kanban_data = {"kanban": {"tasks": [waiting_card]}}
 
         with patch('heysquid.core.hub.load_telegram_messages',
@@ -431,16 +431,16 @@ class TestPickNextTask:
             with patch('heysquid.dashboard._load_status', return_value=kanban_data):
                 result = pick_next_task(pending)
 
-        # WAITING 매칭 실패 → oldest
+        # WAITING match failed → oldest
         assert result["task"]["message_id"] == 400
         assert result["waiting_card"] is None
 
 
 class TestAskAndWait:
-    """ask_and_wait() — 질문 전송 + WAITING 전환 + lock 해제"""
+    """ask_and_wait() — send question + transition to WAITING + release lock"""
 
     def test_ask_and_wait_sends_and_transitions(self, tmp_data_dir):
-        """정상 흐름: 전송 → 봇응답 저장 → WAITING → lock 해제"""
+        """Normal flow: send → save bot response → WAITING → release lock"""
         from heysquid.core.hub import ask_and_wait
 
         with patch('heysquid.channels.telegram.send_message_sync', return_value=99) as mock_send:
@@ -448,66 +448,66 @@ class TestAskAndWait:
                 with patch('heysquid.dashboard.kanban.get_active_kanban_task_id', return_value="kb-123"):
                     with patch('heysquid.dashboard.kanban.set_task_waiting') as mock_waiting:
                         with patch('heysquid.core.hub.remove_working_lock') as mock_unlock:
-                            result = ask_and_wait(12345, [100], "이렇게 할까요?")
+                            result = ask_and_wait(12345, [100], "Should I do it this way?")
 
         assert result is True
 
-        # send_message_sync 호출 확인
-        mock_send.assert_called_once_with(12345, "이렇게 할까요?", _save=False)
+        # Verify send_message_sync call
+        mock_send.assert_called_once_with(12345, "Should I do it this way?", _save=False)
 
-        # save_bot_response 호출 확인 (sent_message_id=99)
+        # Verify save_bot_response call (sent_message_id=99)
         mock_save.assert_called_once()
         call_kwargs = mock_save.call_args
         assert call_kwargs[1].get("sent_message_id") == 99 or call_kwargs[0][-1] == 99
 
-        # set_task_waiting 호출 확인
-        mock_waiting.assert_called_once_with("kb-123", [99], reason="Waiting: 이렇게 할까요?")
+        # Verify set_task_waiting call
+        mock_waiting.assert_called_once_with("kb-123", [99], reason="Waiting: Should I do it this way?")
 
         # remove_working_lock(transition_to_waiting=True)
         mock_unlock.assert_called_once_with(transition_to_waiting=True)
 
     def test_ask_and_wait_send_failure(self):
-        """전송 실패 → False 반환, 나머지 호출 안 됨"""
+        """Send failure should return False, remaining calls should not be made"""
         from heysquid.core.hub import ask_and_wait
 
         with patch('heysquid.channels.telegram.send_message_sync', return_value=False):
             with patch('heysquid.core.hub.save_bot_response') as mock_save:
                 with patch('heysquid.core.hub.remove_working_lock') as mock_unlock:
-                    result = ask_and_wait(12345, [100], "질문")
+                    result = ask_and_wait(12345, [100], "question")
 
         assert result is False
         mock_save.assert_not_called()
         mock_unlock.assert_not_called()
 
     def test_ask_and_wait_single_message_id(self):
-        """message_id가 int일 때도 정상 작동"""
+        """Should work correctly when message_id is an int"""
         from heysquid.core.hub import ask_and_wait
 
         with patch('heysquid.channels.telegram.send_message_sync', return_value=88):
             with patch('heysquid.core.hub.save_bot_response') as mock_save:
                 with patch('heysquid.dashboard.kanban.get_active_kanban_task_id', return_value=None):
                     with patch('heysquid.core.hub.remove_working_lock'):
-                        result = ask_and_wait(12345, 100, "단일 ID 테스트")
+                        result = ask_and_wait(12345, 100, "single ID test")
 
         assert result is True
-        # ids가 [100]으로 변환되어 전달
+        # ids should be converted to [100] before passing
         assert mock_save.call_args[0][2] == [100]
 
 
-# ── Step 2: telegram.py — send_message 반환값 ──────────────────
+# ── Step 2: telegram.py — send_message return value ──────────────────
 
 class TestSendMessageReturnValue:
-    """send_message()가 int(msg_id)를 반환하는지 검증"""
+    """Verify send_message() returns int(msg_id)"""
 
     def test_send_message_returns_int(self):
-        """정상 전송 시 int(message_id) 반환"""
+        """Should return int(message_id) on successful send"""
         import heysquid.channels.telegram as tg
         import asyncio
 
         mock_msg = MagicMock()
         mock_msg.message_id = 42
 
-        # async mock — send_message는 async 함수이므로 coroutine 반환 필요
+        # async mock — send_message is async, needs to return coroutine
         async def mock_send(**kwargs):
             return mock_msg
 
@@ -525,12 +525,12 @@ class TestSendMessageReturnValue:
         assert isinstance(result, int)
 
     def test_send_message_backward_compat(self):
-        """int 반환값이 bool 체크와 호환되는지"""
+        """int return value should be compatible with bool checks"""
         assert bool(42) is True   # int → truthy
-        assert bool(0) is False   # 0은 아직 falsy이긴 하지만 message_id가 0일 일은 없음
+        assert bool(0) is False   # 0 is falsy but message_id is never 0
 
     def test_send_message_sync_passes_sent_id(self):
-        """send_message_sync가 sent_message_id를 save_bot_response에 전달하는지"""
+        """send_message_sync should pass sent_message_id to save_bot_response"""
         import heysquid.channels.telegram as tg
 
         with patch.object(tg, 'run_async_safe', return_value=77):
@@ -545,13 +545,13 @@ class TestSendMessageReturnValue:
         assert kwargs.get("sent_message_id") == 77
 
 
-# ── Step 1: telegram_listener.py — reply_to_message_id 필드 ────
+# ── Step 1: telegram_listener.py — reply_to_message_id field ────
 
 class TestReplyToMessageId:
-    """fetch_new_messages()가 reply_to_message_id를 포함하는지 코드 레벨 검증"""
+    """Code-level verification that fetch_new_messages() includes reply_to_message_id"""
 
     def test_message_data_has_reply_field(self):
-        """telegram_listener.py 소스에 reply_to_message_id 필드가 있는지"""
+        """telegram_listener.py source should contain reply_to_message_id field"""
         import heysquid.channels.telegram_listener as tl
         import inspect
 
@@ -561,13 +561,13 @@ class TestReplyToMessageId:
         assert "msg.reply_to_message else None" in source
 
 
-# ── 통합 테스트: 전체 라이프사이클 ───────────────────────────────
+# ── Integration test: full lifecycle ───────────────────────────────
 
 class TestFullLifecycle:
-    """Task Queue 전체 흐름 통합 테스트 (mock 기반)"""
+    """Task Queue full flow integration test (mock-based)"""
 
     def test_three_tasks_one_at_a_time(self):
-        """메시지 3개 → pick_next_task로 1개씩 처리"""
+        """3 messages should be processed one at a time via pick_next_task"""
         from heysquid.core.hub import pick_next_task
 
         pending = [
@@ -584,26 +584,26 @@ class TestFullLifecycle:
 
         with patch('heysquid.core.hub.load_telegram_messages', return_value={"messages": []}):
             with patch('heysquid.dashboard._load_status', return_value={"kanban": {"tasks": []}}):
-                # 1차
+                # Round 1
                 r1 = pick_next_task(pending)
                 assert r1["task"]["instruction"] == "A"
                 assert len(r1["remaining"]) == 2
 
-                # 2차
+                # Round 2
                 r2 = pick_next_task(r1["remaining"])
                 assert r2["task"]["instruction"] == "B"
                 assert len(r2["remaining"]) == 1
 
-                # 3차
+                # Round 3
                 r3 = pick_next_task(r2["remaining"])
                 assert r3["task"]["instruction"] == "C"
                 assert len(r3["remaining"]) == 0
 
-                # 4차 (없음)
+                # Round 4 (none left)
                 assert pick_next_task(r3["remaining"]) is None
 
     def test_waiting_reply_resumes_before_new(self):
-        """WAITING 답장이 새 작업보다 우선 처리"""
+        """WAITING reply should be processed before new tasks"""
         from heysquid.core.hub import pick_next_task
 
         waiting_card = {
@@ -615,16 +615,16 @@ class TestFullLifecycle:
 
         messages = [
             {"message_id": 200, "reply_to_message_id": 50, "type": "user",
-             "text": "응 해줘", "processed": False},
+             "text": "Yes do it", "processed": False},
             {"message_id": 201, "reply_to_message_id": None, "type": "user",
-             "text": "새 작업", "processed": False},
+             "text": "New task", "processed": False},
         ]
 
         pending = [
-            {"instruction": "응 해줘", "message_id": 200, "chat_id": 12345,
+            {"instruction": "Yes do it", "message_id": 200, "chat_id": 12345,
              "timestamp": "2026-02-25 10:05:00", "context_24h": "", "user_name": "u",
              "files": [], "location": None, "stale_resume": False},
-            {"instruction": "새 작업", "message_id": 201, "chat_id": 12345,
+            {"instruction": "New task", "message_id": 201, "chat_id": 12345,
              "timestamp": "2026-02-25 10:04:00", "context_24h": "", "user_name": "u",
              "files": [], "location": None, "stale_resume": False},
         ]
@@ -635,7 +635,7 @@ class TestFullLifecycle:
                        return_value={"kanban": {"tasks": [waiting_card]}}):
                 result = pick_next_task(pending)
 
-        # reply 매칭이 timestamp보다 우선
+        # Reply matching takes priority over timestamp
         assert result["task"]["message_id"] == 200
         assert result["waiting_card"]["id"] == "kb-w1"
 
@@ -643,7 +643,7 @@ class TestFullLifecycle:
 # ── get_mergeable_cards + suggest_card_merge ──────────────────
 
 class TestGetMergeableCards:
-    """get_mergeable_cards() — 같은 chat_id의 활성 카드 조회"""
+    """get_mergeable_cards() — retrieve active cards with same chat_id"""
 
     def _kanban_data(self, tasks):
         return {"tasks": tasks}
@@ -662,7 +662,7 @@ class TestGetMergeableCards:
         }
 
     def test_three_active_same_chat(self):
-        """같은 chat_id 활성 카드 3개 → 3개 반환, created_at 오름차순"""
+        """3 active cards with same chat_id should return 3, sorted by created_at ascending"""
         from heysquid.dashboard.kanban import get_mergeable_cards
 
         tasks = [
@@ -680,7 +680,7 @@ class TestGetMergeableCards:
         assert result[2]["id"] == "kb-3"
 
     def test_single_active_card(self):
-        """활성 카드 1개 → 1개 반환 (병합 불필요)"""
+        """1 active card should return 1 (no merge needed)"""
         from heysquid.dashboard.kanban import get_mergeable_cards
 
         tasks = [self._card("kb-1", 111, "todo")]
@@ -691,7 +691,7 @@ class TestGetMergeableCards:
         assert len(result) == 1
 
     def test_done_cards_excluded(self):
-        """done 카드만 → 빈 리스트"""
+        """Only done cards should return empty list"""
         from heysquid.dashboard.kanban import get_mergeable_cards
 
         tasks = [
@@ -705,7 +705,7 @@ class TestGetMergeableCards:
         assert len(result) == 0
 
     def test_automation_excluded(self):
-        """automation 카드는 제외"""
+        """Automation cards should be excluded"""
         from heysquid.dashboard.kanban import get_mergeable_cards
 
         tasks = [
@@ -720,7 +720,7 @@ class TestGetMergeableCards:
         assert result[0]["id"] == "kb-2"
 
     def test_different_chat_ids_filtered(self):
-        """다른 chat_id 카드는 제외"""
+        """Cards with different chat_id should be excluded"""
         from heysquid.dashboard.kanban import get_mergeable_cards
 
         tasks = [
@@ -737,7 +737,7 @@ class TestGetMergeableCards:
 
 
 class TestSuggestCardMerge:
-    """suggest_card_merge() — 병합 제안 텍스트 생성"""
+    """suggest_card_merge() — merge suggestion text generation"""
 
     def _card(self, id, chat_id, column, title="task", created_at="2026-02-25 10:00:00"):
         return {
@@ -753,7 +753,7 @@ class TestSuggestCardMerge:
         }
 
     def test_three_cards_returns_suggestion(self):
-        """카드 3개 → 제안 텍스트 + target/source IDs 반환"""
+        """3 cards should return suggestion text + target/source IDs"""
         from heysquid.core.hub import suggest_card_merge
 
         cards = [
@@ -766,14 +766,14 @@ class TestSuggestCardMerge:
             result = suggest_card_merge(111)
 
         assert result is not None
-        assert "3개" in result["text"]
+        assert "3 active cards" in result["text"]
         assert result["target_id"] == "kb-1"
         assert result["source_ids"] == ["kb-2", "kb-3"]
         assert len(result["cards"]) == 3
-        assert "여기에 합침" in result["text"]
+        assert "merge target" in result["text"]
 
     def test_single_card_returns_none(self):
-        """카드 1개 → None"""
+        """1 card should return None"""
         from heysquid.core.hub import suggest_card_merge
 
         cards = [self._card("kb-1", 111, "todo")]
@@ -784,7 +784,7 @@ class TestSuggestCardMerge:
         assert result is None
 
     def test_no_cards_returns_none(self):
-        """카드 0개 → None"""
+        """0 cards should return None"""
         from heysquid.core.hub import suggest_card_merge
 
         with patch('heysquid.dashboard.kanban.get_mergeable_cards', return_value=[]):
@@ -793,7 +793,7 @@ class TestSuggestCardMerge:
         assert result is None
 
     def test_two_cards_returns_suggestion(self):
-        """카드 2개 → 제안 반환 (PM이 3개 이상에서만 제안할지는 PM 판단)"""
+        """2 cards should return suggestion (PM decides if 3+ threshold applies)"""
         from heysquid.core.hub import suggest_card_merge
 
         cards = [

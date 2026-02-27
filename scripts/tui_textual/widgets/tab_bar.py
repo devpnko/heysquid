@@ -1,4 +1,4 @@
-"""TabBar — 상단 모드 탭 바 (CHAT ^1 | KANBAN ^2 | ...)"""
+"""TabBar -- Top mode tab bar (CHAT ^1 | KANBAN ^2 | ...)."""
 
 from textual.widget import Widget
 from textual.app import ComposeResult
@@ -12,12 +12,12 @@ TABS = [
     ("AUTO", "^5"),
 ]
 
-# 활성 탭 컬러
+# Active tab color
 TAB_ACTIVE_COLOR = "#ff6b9d"
 
 
 class TabBar(Widget):
-    """모드 전환 탭 바 — 현재 활성 모드를 하이라이트."""
+    """Mode switching tab bar -- highlights the currently active mode."""
 
     DEFAULT_CSS = """
     TabBar {
@@ -34,7 +34,7 @@ class TabBar(Widget):
         yield Static(self._build_tabs(), id="tab-bar-content")
 
     def set_active(self, index: int) -> None:
-        """활성 탭 변경."""
+        """Change active tab."""
         self._active = index
         try:
             content = self.query_one("#tab-bar-content", Static)

@@ -1,15 +1,15 @@
-"""KanbanInput — 칸반 전용 커맨드 입력 (항상 표시, / 불필요)"""
+"""KanbanInput -- Kanban-specific command input (always visible, no / prefix needed)."""
 
 from textual.binding import Binding
 from textual.widgets import Input
 from textual.message import Message
 
-# 칸반에서 사용 가능한 명령어만
+# Only commands available in kanban mode
 KANBAN_COMMANDS = ["done", "move", "del", "info", "merge", "clean"]
 
 
 class KanbanInput(Input):
-    """칸반 화면 하단 고정 입력. done K1, move K1 ip 형태로 바로 입력."""
+    """Fixed input at bottom of kanban screen. Direct input like: done K1, move K1 ip."""
 
     DEFAULT_CSS = """
     KanbanInput {
@@ -23,7 +23,7 @@ class KanbanInput(Input):
     ]
 
     class KanbanCommandSubmitted(Message):
-        """칸반 커맨드 제출 이벤트"""
+        """Kanban command submitted event."""
         def __init__(self, value: str) -> None:
             super().__init__()
             self.value = value
@@ -37,22 +37,22 @@ class KanbanInput(Input):
         self._tab_candidates: list[str] = []
 
     def action_tab_complete(self) -> None:
-        """Tab 키 → 칸반 커맨드 자동완성"""
+        """Tab key -> kanban command autocomplete."""
         text = self.value.strip()
-        # 이미 완성된 커맨드 → cycling
+        # Already completed command -> cycle
         if self.value.endswith(" ") and text.lower() in KANBAN_COMMANDS and self._tab_candidates:
             selected = self._tab_candidates[self._tab_index % len(self._tab_candidates)]
             self.value = selected + " "
             self._tab_index += 1
             return
-        # 빈 입력 → 전체 목록
+        # Empty input -> show full list
         if not text:
             self._tab_candidates = list(KANBAN_COMMANDS)
             selected = self._tab_candidates[self._tab_index % len(self._tab_candidates)]
             self.value = selected + " "
             self._tab_index += 1
             return
-        # partial → 필터링
+        # Partial -> filter
         candidates = [c for c in KANBAN_COMMANDS if c.startswith(text.lower())]
         if candidates:
             self._tab_candidates = candidates
@@ -61,7 +61,7 @@ class KanbanInput(Input):
             self._tab_index += 1
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
-        """Enter 키 처리"""
+        """Handle Enter key."""
         event.stop()
         text = self.value.strip()
         if text:
@@ -69,6 +69,6 @@ class KanbanInput(Input):
         self.value = ""
 
     def on_input_changed(self, event: Input.Changed) -> None:
-        """입력 변경 시 탭 상태 리셋"""
+        """Reset tab state on input change."""
         self._tab_index = 0
         self._tab_candidates = []

@@ -1,10 +1,10 @@
-"""경량 webhook 수신 서버 — 외부 시스템이 automation/skill을 트리거.
+"""Lightweight webhook receiver server — external systems trigger automations/skills.
 
 Usage:
-    python -m heysquid.core.webhook_server          # 기본 포트 8585
-    python -m heysquid.core.webhook_server 9090      # 커스텀 포트
+    python -m heysquid.core.webhook_server          # default port 8585
+    python -m heysquid.core.webhook_server 9090      # custom port
 
-외부 호출 예시:
+External call example:
     curl -X POST http://localhost:8585/webhook/briefing \
       -H "X-Webhook-Secret: my-secret" \
       -H "Content-Type: application/json" \
@@ -21,22 +21,22 @@ from heysquid.skills import run_skill, get_skill_registry, SkillContext
 
 logger = logging.getLogger(__name__)
 
-WEBHOOK_SECRET = None  # 시작 시 .env에서 로드
+WEBHOOK_SECRET = None  # Loaded from .env at startup
 
 
 class WebhookHandler(BaseHTTPRequestHandler):
     def do_POST(self):
-        # 인증
+        # Authentication
         auth = self.headers.get("X-Webhook-Secret", "")
         if WEBHOOK_SECRET and auth != WEBHOOK_SECRET:
             self._respond(401, {"ok": False, "error": "Unauthorized"})
             return
 
-        # Body 파싱
+        # Parse body
         length = int(self.headers.get("Content-Length", 0))
         body = json.loads(self.rfile.read(length)) if length > 0 else {}
 
-        # URL에서 이름 추출: /webhook/<name>
+        # Extract name from URL: /webhook/<name>
         path = self.path.strip("/")
         parts = path.split("/")
         if len(parts) < 2 or parts[0] != "webhook":
@@ -52,7 +52,7 @@ class WebhookHandler(BaseHTTPRequestHandler):
             callback_url=body.get("callback_url", ""),
         )
 
-        # automations 먼저 찾고, 없으면 skills에서 찾기
+        # Search automations first, then skills if not found
         if plugin_name in get_automation_registry():
             result = run_automation(plugin_name, ctx)
         else:
@@ -71,7 +71,7 @@ class WebhookHandler(BaseHTTPRequestHandler):
 
 
 def start_webhook_server(port: int = 8585):
-    """webhook 서버 시작 (블로킹)."""
+    """Start webhook server (blocking)."""
     global WEBHOOK_SECRET
     from heysquid.core.http_utils import get_secret
 

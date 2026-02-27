@@ -1,6 +1,6 @@
-"""heysquid.core.daemon — launchd 데몬 관리 (macOS).
+"""heysquid.core.daemon — launchd daemon management (macOS).
 
-plist 템플릿 렌더링, launchd 등록/해제, 프로세스 관리.
+plist template rendering, launchd register/unregister, process management.
 """
 
 import os
@@ -25,7 +25,7 @@ PLIST_NAMES = [
     "com.heysquid.discord",
 ]
 
-# 토큰이 있어야만 시작하는 선택적 서비스
+# Optional services that require a token to start
 OPTIONAL_SERVICES = {
     "com.heysquid.slack": "SLACK_BOT_TOKEN",
     "com.heysquid.discord": "DISCORD_BOT_TOKEN",
@@ -33,7 +33,7 @@ OPTIONAL_SERVICES = {
 
 
 def _python_path() -> str:
-    """현재 venv의 python 경로 반환."""
+    """Return the python path from the current venv."""
     venv_python = PROJECT_ROOT / "venv" / "bin" / "python3"
     if venv_python.exists():
         return str(venv_python)
@@ -41,20 +41,20 @@ def _python_path() -> str:
 
 
 def _template_dir() -> Path:
-    """plist 템플릿 디렉토리 경로."""
-    # 패키지 내 templates/launchd/
+    """Path to plist template directory."""
+    # Package templates/launchd/
     pkg_templates = PACKAGE_DIR / "templates" / "launchd"
     if pkg_templates.is_dir():
         return pkg_templates
-    # 프로젝트 루트 templates/launchd/
+    # Project root templates/launchd/
     root_templates = PROJECT_ROOT / "templates" / "launchd"
     if root_templates.is_dir():
         return root_templates
-    raise FileNotFoundError("plist 템플릿 디렉토리를 찾을 수 없습니다.")
+    raise FileNotFoundError("Could not find plist template directory.")
 
 
 def render_plist(template_path: Path, output_path: Path) -> None:
-    """plist 템플릿의 플레이스홀더를 실제 값으로 치환하여 저장."""
+    """Render plist template by replacing placeholders with actual values and save."""
     content = template_path.read_text(encoding="utf-8")
     replacements = {
         "{{PROJECT_ROOT}}": PROJECT_ROOT_STR,
@@ -67,7 +67,7 @@ def render_plist(template_path: Path, output_path: Path) -> None:
 
 
 def _load_env_tokens() -> dict:
-    """환경변수(.env) 로드하여 토큰 존재 여부 확인."""
+    """Load .env to check for token existence."""
     env_path = get_env_path()
     tokens = {}
     if os.path.exists(env_path):
@@ -77,7 +77,7 @@ def _load_env_tokens() -> dict:
 
 
 def start() -> None:
-    """데몬 시작: plist 렌더링 → launchd 등록."""
+    """Start daemon: render plist -> register with launchd."""
     LAUNCH_AGENTS.mkdir(parents=True, exist_ok=True)
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
     DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -85,7 +85,7 @@ def start() -> None:
     tmpl_dir = _template_dir()
     env_tokens = _load_env_tokens()
 
-    # 레거시 briefing plist 제거
+    # Remove legacy briefing plist
     briefing_dst = LAUNCH_AGENTS / "com.heysquid.briefing.plist"
     if briefing_dst.exists():
         subprocess.run(["launchctl", "unload", str(briefing_dst)],
@@ -93,14 +93,14 @@ def start() -> None:
         briefing_dst.unlink(missing_ok=True)
 
     for name in PLIST_NAMES:
-        # 선택적 서비스: 토큰 없으면 스킵
+        # Optional service: skip if token is missing
         required_token = OPTIONAL_SERVICES.get(name)
         if required_token and not env_tokens.get(required_token):
             continue
 
         template = tmpl_dir / f"{name}.plist.template"
         if not template.exists():
-            print(f"  [WARN] 템플릿 없음: {template.name}")
+            print(f"  [WARN] Template not found: {template.name}")
             continue
 
         dst = LAUNCH_AGENTS / f"{name}.plist"
@@ -108,25 +108,25 @@ def start() -> None:
         subprocess.run(["launchctl", "load", str(dst)], capture_output=True)
 
         label = name.split(".")[-1].upper()
-        print(f"  [OK] {label} 시작")
+        print(f"  [OK] {label} started")
 
-    # 대시보드 서버
+    # Dashboard server
     _start_dashboard_server()
 
     print()
-    print(f"대시보드: http://localhost:8420/dashboard.html")
-    print(f"로그: tail -f {LOGS_DIR / 'executor.log'}")
-    print(f"상태 확인: heysquid status")
+    print(f"Dashboard: http://localhost:8420/dashboard.html")
+    print(f"Logs: tail -f {LOGS_DIR / 'executor.log'}")
+    print(f"Check status: heysquid status")
 
 
 def _start_dashboard_server() -> None:
-    """대시보드 HTTP 서버 시작 (이미 실행 중이면 스킵)."""
+    """Start dashboard HTTP server (skip if already running)."""
     result = subprocess.run(
         ["lsof", "-i", ":8420"],
         capture_output=True,
     )
     if result.returncode == 0:
-        print("  [OK] 대시보드 서버 이미 실행 중")
+        print("  [OK] Dashboard server already running")
         return
 
     serve_sh = PROJECT_ROOT / "scripts" / "serve_dashboard.sh"
@@ -138,41 +138,41 @@ def _start_dashboard_server() -> None:
                 stdout=lf, stderr=lf,
                 start_new_session=True,
             )
-        print("  [OK] 대시보드 서버 시작")
+        print("  [OK] Dashboard server started")
 
 
 def stop() -> None:
-    """데몬 중지: launchd 해제 + 프로세스 kill."""
-    # 1. launchd 해제
+    """Stop daemon: unload launchd + kill processes."""
+    # 1. Unload launchd
     for name in PLIST_NAMES + ["com.heysquid.briefing"]:
         dst = LAUNCH_AGENTS / f"{name}.plist"
         if dst.exists():
             subprocess.run(["launchctl", "unload", str(dst)], capture_output=True)
             dst.unlink(missing_ok=True)
 
-    # 2. 대시보드 서버 종료
+    # 2. Stop dashboard server
     subprocess.run(["pkill", "-f", "http.server 8420"], capture_output=True)
 
-    # 3. executor + Claude 프로세스 종료
+    # 3. Kill executor + Claude processes
     subprocess.run(["pkill", "-f", "bash.*executor.sh"], capture_output=True)
 
-    # caffeinate → 부모(claude) 추적 kill
+    # caffeinate -> trace and kill parent (claude)
     _kill_claude_processes()
 
-    # 4. 추가 listener 프로세스
+    # 4. Additional listener processes
     for pattern in ["slack_listener", "discord_listener"]:
         subprocess.run(["pkill", "-f", pattern], capture_output=True)
 
-    # 5. lock/pid 파일 정리
+    # 5. Clean up lock/pid files
     for fname in ["executor.lock", "executor.pid", "working.json", "claude.pid"]:
         fpath = DATA_DIR / fname
         fpath.unlink(missing_ok=True)
 
-    print("[OK] 데몬 + 잠금 파일 정리 완료")
+    print("[OK] Daemon + lock files cleaned up")
 
 
 def _kill_claude_processes() -> None:
-    """caffeinate 래퍼를 통해 Claude 프로세스를 추적하여 종료."""
+    """Trace and kill Claude processes via caffeinate wrapper."""
     result = subprocess.run(
         ["pgrep", "-f", "caffeinate.*append-system-prompt-file"],
         capture_output=True, text=True,
@@ -186,7 +186,7 @@ def _kill_claude_processes() -> None:
         cpid = cpid.strip()
         if not cpid:
             continue
-        # caffeinate의 부모 = claude
+        # caffeinate's parent = claude
         parent_result = subprocess.run(
             ["ps", "-p", cpid, "-o", "ppid="],
             capture_output=True, text=True,
@@ -201,7 +201,7 @@ def _kill_claude_processes() -> None:
     subprocess.run(["pkill", "-f", "tee.*executor.stream"],
                    capture_output=True)
 
-    # 2초 대기 후 force kill
+    # Wait 2 seconds then force kill
     time.sleep(2)
     result = subprocess.run(
         ["pgrep", "-f", "caffeinate.*append-system-prompt-file"],
@@ -225,15 +225,15 @@ def _kill_claude_processes() -> None:
 
 
 def restart() -> None:
-    """데몬 재시작."""
+    """Restart daemon."""
     stop()
     time.sleep(1)
     start()
 
 
 def status() -> None:
-    """데몬 상태 출력."""
-    print("=== heysquid 데몬 상태 ===\n")
+    """Print daemon status."""
+    print("=== heysquid Daemon Status ===\n")
 
     # Listeners
     print("--- Listeners ---")
@@ -248,58 +248,58 @@ def status() -> None:
             capture_output=True, text=True,
         )
         if label_name in result.stdout:
-            print(f"  [{prefix}] {display}: 실행 중")
+            print(f"  [{prefix}] {display}: running")
         else:
-            print(f"  [{prefix}] {display}: 중지됨")
+            print(f"  [{prefix}] {display}: stopped")
 
     # Scheduler
     print("\n--- Scheduler ---")
     result = subprocess.run(["launchctl", "list"], capture_output=True, text=True)
     if "com.heysquid.scheduler" in result.stdout:
-        print("  상태: 실행 중")
+        print("  Status: running")
     else:
-        print("  상태: 중지됨")
+        print("  Status: stopped")
 
-    # 프로세스
-    print("\n--- 프로세스 ---")
+    # Processes
+    print("\n--- Processes ---")
     processes = {
         "executor.sh": "bash.*executor.sh",
         "Claude Code": "caffeinate.*append-system-prompt-file",
     }
     for name, pattern in processes.items():
         result = subprocess.run(["pgrep", "-f", pattern], capture_output=True)
-        state = "실행 중" if result.returncode == 0 else "대기"
+        state = "running" if result.returncode == 0 else "idle"
         print(f"  {name}: {state}")
 
-    # 대시보드
-    print("\n--- 대시보드 서버 ---")
+    # Dashboard
+    print("\n--- Dashboard Server ---")
     result = subprocess.run(["lsof", "-i", ":8420"], capture_output=True)
     if result.returncode == 0:
-        print("  상태: 실행 중 (http://localhost:8420/dashboard.html)")
+        print("  Status: running (http://localhost:8420/dashboard.html)")
     else:
-        print("  상태: 중지됨")
+        print("  Status: stopped")
 
-    # Lock 파일
-    print("\n--- 잠금 파일 ---")
+    # Lock files
+    print("\n--- Lock Files ---")
     lock_file = DATA_DIR / "executor.lock"
     if lock_file.exists():
-        print(f"  executor.lock: 존재 ({lock_file.read_text().strip()})")
+        print(f"  executor.lock: exists ({lock_file.read_text().strip()})")
     else:
-        print("  executor.lock: 없음")
+        print("  executor.lock: none")
 
     working_file = DATA_DIR / "working.json"
     if working_file.exists():
-        print("  working.json: 존재")
+        print("  working.json: exists")
     else:
-        print("  working.json: 없음")
+        print("  working.json: none")
 
-    # 등록된 automations + skills
-    print("\n--- 등록된 Automations ---")
+    # Registered automations + skills
+    print("\n--- Registered Automations ---")
     try:
         from heysquid.automations import discover_automations
         autos = discover_automations()
         if not autos:
-            print("  (등록된 automation 없음)")
+            print("  (no registered automations)")
         else:
             for name, meta in autos.items():
                 trigger = meta.get("trigger", "?")
@@ -310,34 +310,34 @@ def status() -> None:
                     info += f" @ {schedule}"
                 print(f"  {name}: {desc} [{info}]")
     except Exception:
-        print("  (automation 목록 조회 실패)")
+        print("  (failed to list automations)")
 
-    print("\n--- 등록된 Skills ---")
+    print("\n--- Registered Skills ---")
     try:
         from heysquid.skills._base import discover_skills
         skills = discover_skills()
         if not skills:
-            print("  (등록된 스킬 없음)")
+            print("  (no registered skills)")
         else:
             for name, meta in skills.items():
                 trigger = meta.get("trigger", "?")
                 desc = meta.get("description", "")
                 print(f"  {name}: {desc} [{trigger}]")
     except Exception:
-        print("  (스킬 목록 조회 실패)")
+        print("  (failed to list skills)")
 
 
 def logs(follow: bool = False) -> None:
-    """로그 출력."""
+    """Print logs."""
     log_file = LOGS_DIR / "executor.log"
     if not log_file.exists():
-        print("(로그 없음)")
+        print("(no logs)")
         return
 
     if follow:
         os.execvp("tail", ["tail", "-f", str(log_file)])
     else:
-        # 최근 30줄
+        # Last 30 lines
         with open(log_file) as f:
             lines = f.readlines()
         for line in lines[-30:]:

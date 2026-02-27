@@ -1,4 +1,4 @@
-"""SquadView — 히스토리 목록 + 토론 엔트리 뷰"""
+"""SquadView -- History list + discussion entry view."""
 
 from textual.containers import VerticalScroll
 from textual.widgets import Static, ListView, ListItem
@@ -9,17 +9,17 @@ from ..utils import AGENT_SHORT
 from ..colors import AGENT_COLORS, ENTRY_TYPE_STYLE
 
 ENTRY_TYPE_LABELS = {
-    "opinion": "의견",
-    "agree": "동의",
-    "disagree": "반대",
-    "proposal": "제안",
-    "conclusion": "결론",
-    "risk": "리스크",
+    "opinion": "Opinion",
+    "agree": "Agree",
+    "disagree": "Disagree",
+    "proposal": "Proposal",
+    "conclusion": "Conclusion",
+    "risk": "Risk",
 }
 
 
 def _get_squad_agent_info(agent_key: str) -> tuple[str, str, str, bool]:
-    """agent 키 → (emoji, display_name, color_hex, is_crew)"""
+    """agent key -> (emoji, display_name, color_hex, is_crew)"""
     if agent_key.startswith("kraken:"):
         expert_name = agent_key[7:]
         expert = KRAKEN_CREW.get(expert_name, {})
@@ -38,7 +38,7 @@ def _get_squad_agent_info(agent_key: str) -> tuple[str, str, str, bool]:
 
 
 def _render_entries(entries: list[dict]) -> str:
-    """토론 엔트리를 Rich 마크업 문자열로 렌더링"""
+    """Render discussion entries as Rich markup string."""
     parts = []
     for entry in entries:
         agent_key = entry.get("agent", "")
@@ -63,10 +63,10 @@ def _render_entries(entries: list[dict]) -> str:
 
 
 class SquadHistoryList(VerticalScroll):
-    """상단 히스토리 목록"""
+    """Top history list."""
 
     class DiscussionSelected(Message):
-        """히스토리 항목 선택"""
+        """History item selected."""
         def __init__(self, discussion_id: str | None) -> None:
             super().__init__()
             self.discussion_id = discussion_id
@@ -100,11 +100,11 @@ class SquadHistoryList(VerticalScroll):
         yield Static("", id="squad-hist-content")
 
     def update_history(self, history: list[dict], active_squad: dict | None) -> None:
-        """히스토리 + 활성 토론으로 목록 갱신"""
+        """Refresh list with history + active discussion."""
         self._items = history
         self._active = active_squad
 
-        # 변경 감지: active 상태 + 히스토리 수 + active entries 수
+        # Change detection: active state + history count + active entries count
         active_entries = len(active_squad.get("entries", [])) if active_squad else 0
         render_key = f"{len(history)}:{active_squad is not None}:{active_entries}"
         if render_key == self._last_render_key:
@@ -114,7 +114,7 @@ class SquadHistoryList(VerticalScroll):
         lines = []
         total_items = []
 
-        # Active 토론 (맨 위)
+        # Active discussion (top)
         if active_squad:
             mode = active_squad.get("mode", "squid")
             mode_icon = "🐙" if mode == "kraken" else "🦑"
@@ -127,7 +127,7 @@ class SquadHistoryList(VerticalScroll):
                 lines.append(f"[bold yellow]○ {mode_icon} {topic} — {n_entries} entries (concluded)[/bold yellow]")
             total_items.append({"type": "active", "data": active_squad})
 
-        # 아카이브된 히스토리 (최신순)
+        # Archived history (newest first)
         for item in reversed(history):
             mode = item.get("mode", "squid")
             mode_icon = "🐙" if mode == "kraken" else "🦑"
@@ -138,13 +138,13 @@ class SquadHistoryList(VerticalScroll):
             total_items.append({"type": "history", "data": item})
 
         if not lines:
-            lines.append("[dim]토론 기록이 없습니다[/dim]")
+            lines.append("[dim]No discussion history.[/dim]")
 
         content = self.query_one("#squad-hist-content", Static)
         content.update("\n".join(lines))
 
     def _on_key(self, event) -> None:
-        """키보드: Up/Down 선택, Enter로 하단 뷰에 표시"""
+        """Keyboard: Up/Down to select, Enter to display in bottom view."""
         all_items = []
         if self._active:
             all_items.append({"type": "active", "data": self._active})
@@ -173,7 +173,7 @@ class SquadHistoryList(VerticalScroll):
                 self.post_message(SquadHistoryList.DiscussionSelected(disc_id))
 
     def _highlight_and_select(self, all_items):
-        """선택된 항목 하이라이트 + 하단 뷰에 표시"""
+        """Highlight selected item + display in bottom view."""
         lines = []
         for i, item in enumerate(all_items):
             data = item["data"]
@@ -202,7 +202,7 @@ class SquadHistoryList(VerticalScroll):
         content = self.query_one("#squad-hist-content", Static)
         content.update("\n".join(lines))
 
-        # 선택된 토론의 entries를 하단에 표시
+        # Display selected discussion's entries in bottom view
         if 0 <= self._selected_index < len(all_items):
             item = all_items[self._selected_index]
             disc_id = item["data"].get("id") if item["type"] == "history" else None
@@ -210,7 +210,7 @@ class SquadHistoryList(VerticalScroll):
 
 
 class SquadEntryView(VerticalScroll):
-    """하단 토론 엔트리 뷰 (스크롤 가능)"""
+    """Bottom discussion entry view (scrollable)."""
 
     DEFAULT_CSS = """
     SquadEntryView {
@@ -230,15 +230,15 @@ class SquadEntryView(VerticalScroll):
         yield Static("", id="squad-disc-content")
 
     def update_squad(self, squad: dict | None) -> None:
-        """토론 데이터로 뷰 업데이트"""
+        """Update view with discussion data."""
         if not squad:
             content = self.query_one("#squad-disc-content", Static)
             content.update(
-                "[dim]토론이 없습니다.\n\n"
-                ":squid @agent1 @agent2 주제\n"
-                "  → Squid 모드 토론 시작\n\n"
-                ":kraken \\[주제]\n"
-                "  → Kraken 모드 (전원+Crew)[/dim]"
+                "[dim]No active discussion.\n\n"
+                ":squid @agent1 @agent2 topic\n"
+                "  -> Start Squid mode discussion\n\n"
+                ":kraken \\[topic]\n"
+                "  -> Kraken mode (all agents + Crew)[/dim]"
             )
             self._last_entry_count = -1
             return
@@ -257,7 +257,7 @@ class SquadEntryView(VerticalScroll):
         else:
             header = "[bold]DISCUSSION[/bold]  [dim]○ ARCHIVED[/dim]"
 
-        # Kraken 참가자 아이콘
+        # Kraken participant icons
         parts = [header]
         if squad.get("mode") == "kraken":
             icons = ""
@@ -271,13 +271,13 @@ class SquadEntryView(VerticalScroll):
         parts.append("")
         parts.append(_render_entries(entries))
 
-        # 업데이트
+        # Update widgets
         title = self.query_one(".disc-title", Static)
         title.update(header)
         content = self.query_one("#squad-disc-content", Static)
         content.update("\n".join(parts))
 
-        # 자동 스크롤 (active일 때만)
+        # Auto-scroll (only when active)
         if status_label == "active":
             self.call_after_refresh(self.scroll_end, animate=False)
 

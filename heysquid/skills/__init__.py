@@ -1,4 +1,4 @@
-"""heysquid.skills — 수동 호출 역량 모듈."""
+"""heysquid.skills — manually invoked capability modules."""
 
 from ._base import (  # noqa: F401
     discover_skills, get_skill_registry, reload_skills,

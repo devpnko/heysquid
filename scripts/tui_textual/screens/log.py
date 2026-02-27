@@ -1,4 +1,4 @@
-"""LogScreen — Mission Log + Stream Log 통합 뷰"""
+"""LogScreen -- Mission Log + Stream Log unified view."""
 
 from collections import deque
 
@@ -18,7 +18,7 @@ from ..colors import AGENT_COLORS
 
 
 class LogScreen(Screen):
-    """Log 모드 — Mission Log (상) + Stream Log (하) 반반 분할"""
+    """Log mode -- Mission Log (top) + Stream Log (bottom) split view."""
 
     DEFAULT_CSS = """
     LogScreen {
@@ -60,7 +60,7 @@ class LogScreen(Screen):
         yield MissionLogView(id="log-mission")
         yield StreamLogView(id="log-stream")
         yield CommandInput(id="log-cmd")
-        yield Static("[dim] q:quit  Ctrl+1~5:mode  Ctrl+\u2190\u2192  /cmd  drag+Ctrl+C:복사[/dim]", id="log-status-bar")
+        yield Static("[dim] q:quit  Ctrl+1~5:mode  Ctrl+\u2190\u2192  /cmd  drag+Ctrl+C:copy[/dim]", id="log-status-bar")
 
     def _header_text(self) -> str:
         pm_color = AGENT_COLORS.get("pm", "#ff6b9d")
@@ -94,10 +94,10 @@ class LogScreen(Screen):
         return f"{status}    [{count_color}]({up}/4)[/{count_color}]"
 
     def refresh_data(self, stream_buffer: deque, flash: str = "") -> None:
-        """폴링 데이터로 화면 갱신 — 각 섹션 독립적으로 보호"""
+        """Refresh screen with polled data -- each section protected independently."""
         status = load_agent_status()
 
-        # Stream Log 최우선 (가장 중요한 실시간 데이터)
+        # Stream Log highest priority (most important real-time data)
         try:
             stream = self.query_one(StreamLogView)
             stream.update_log(stream_buffer)
@@ -111,28 +111,28 @@ class LogScreen(Screen):
         except Exception:
             pass
 
-        # 헤더
+        # Header
         try:
             header = self.query_one("#log-header", Static)
             header.update(self._header_text())
         except Exception:
             pass
 
-        # 프로세스 상태 바
+        # Process status bar
         try:
             proc_bar = self.query_one("#log-process-bar", Static)
             proc_bar.update(self._process_status_text())
         except Exception:
             pass
 
-        # Agent 바
+        # Agent bar
         try:
             bar = self.query_one(AgentCompactBar)
             bar.update_status(status)
         except Exception:
             pass
 
-        # 상태바
+        # Status bar
         if flash:
             try:
                 status_bar = self.query_one("#log-status-bar", Static)

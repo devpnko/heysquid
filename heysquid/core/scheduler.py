@@ -1,8 +1,8 @@
-"""heysquid.core.scheduler — automation 스케줄러.
+"""heysquid.core.scheduler — automation scheduler.
 
-launchd로 1분마다 호출되어:
-1. 현재 시각(HH:MM)에 매칭되는 schedule automation 실행
-2. 매 호출마다 interval automation 실행 (예: 스레드 예약 게시)
+Called every minute via launchd:
+1. Run schedule automations matching the current time (HH:MM)
+2. Run interval automations on every invocation (e.g., scheduled thread posts)
 
 Usage:
     python -m heysquid.core.scheduler
@@ -23,22 +23,22 @@ logger = logging.getLogger(__name__)
 
 
 def run_scheduled_automations():
-    """현재 시각에 매칭되는 schedule automation 실행"""
+    """Run schedule automations matching the current time"""
     from heysquid.dashboard import sync_automations
 
     now_hm = datetime.now().strftime("%H:%M")
 
-    # 메타 동기화 (1분마다 호출되므로 항상 최신 유지)
+    # Sync metadata (called every minute, so always up to date)
     try:
         sync_automations()
     except Exception as e:
-        logger.warning(f"sync_automations 실패: {e}")
+        logger.warning(f"sync_automations failed: {e}")
 
     try:
         from heysquid.dashboard import sync_workspaces
         sync_workspaces()
     except Exception as e:
-        logger.warning(f"sync_workspaces 실패: {e}")
+        logger.warning(f"sync_workspaces failed: {e}")
 
     registry = get_automation_registry()
 
@@ -48,15 +48,15 @@ def run_scheduled_automations():
     for name, meta in registry.items():
         trigger = meta.get("trigger")
 
-        # 1. schedule 트리거: 정확한 HH:MM 매칭
+        # 1. schedule trigger: exact HH:MM matching
         if trigger == "schedule":
             if meta.get("schedule") != now_hm:
                 continue
-            logger.info(f"Automation {name} 실행 (schedule={now_hm})")
+            logger.info(f"Running automation {name} (schedule={now_hm})")
 
-        # 2. interval 트리거: 매 호출마다 실행
+        # 2. interval trigger: run on every invocation
         elif trigger == "interval":
-            pass  # 항상 실행
+            pass  # Always run
 
         else:
             continue
@@ -65,11 +65,11 @@ def run_scheduled_automations():
         try:
             result = run_automation(name, ctx)
             if result["ok"]:
-                logger.info(f"Automation {name} 완료")
+                logger.info(f"Automation {name} completed")
             else:
-                logger.error(f"Automation {name} 실행 실패: {result['error']}")
+                logger.error(f"Automation {name} failed: {result['error']}")
         except Exception as e:
-            logger.error(f"Automation {name} 예외: {e}")
+            logger.error(f"Automation {name} exception: {e}")
 
 
 if __name__ == "__main__":

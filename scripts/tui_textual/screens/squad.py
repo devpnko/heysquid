@@ -1,4 +1,4 @@
-"""SquadScreen — 에이전트 상태 + 히스토리/토론 분할 뷰"""
+"""SquadScreen -- Agent status + history/discussion split view."""
 
 from textual.screen import Screen
 from textual.app import ComposeResult
@@ -17,7 +17,7 @@ from ..colors import AGENT_COLORS
 
 
 class SquadScreen(Screen):
-    """Squad 모드 — 왼쪽 에이전트 패널 + 오른쪽 히스토리/토론 분할"""
+    """Squad mode -- left agent panel + right history/discussion split."""
 
     DEFAULT_CSS = """
     SquadScreen {
@@ -54,7 +54,7 @@ class SquadScreen(Screen):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self._selected_history_id: str | None = None  # None = active 토론
+        self._selected_history_id: str | None = None  # None = active discussion
 
     def compose(self) -> ComposeResult:
         yield TabBar(active=2, id="squad-tab-bar")
@@ -68,7 +68,7 @@ class SquadScreen(Screen):
                 yield SquadHistoryList(id="squad-history-list")
                 yield SquadEntryView(id="squad-entry-view")
         yield CommandInput(id="squad-cmd")
-        yield Static("[dim] q:quit  Ctrl+1~5:mode  /cmd  ↑↓:select  Enter:view  drag+Ctrl+C:복사[/dim]", id="squad-status-bar")
+        yield Static("[dim] q:quit  Ctrl+1~5:mode  /cmd  ↑↓:select  Enter:view  drag+Ctrl+C:copy[/dim]", id="squad-status-bar")
 
     def _header_text(self) -> str:
         pm_color = AGENT_COLORS.get("pm", "#ff6b9d")
@@ -81,25 +81,25 @@ class SquadScreen(Screen):
         return f"[bold]🦑 SQUID[/bold]  [bold {pm_color}]\\[SQUAD][/bold {pm_color}]  {indicator}"
 
     def refresh_data(self, flash: str = "") -> None:
-        """폴링 데이터로 화면 갱신 — 각 섹션 독립적으로 보호"""
+        """Refresh screen with polled data -- each section protected independently."""
         status = load_agent_status()
         history = load_squad_history()
 
-        # 헤더
+        # Header
         try:
             header = self.query_one("#squad-header", Static)
             header.update(self._header_text())
         except Exception:
             pass
 
-        # Agent 컴팩트 바
+        # Agent compact bar
         try:
             bar = self.query_one(AgentCompactBar)
             bar.update_status(status)
         except Exception:
             pass
 
-        # 서브헤더 + 에이전트 패널
+        # Subheader + agent panel
         squad = status.get("squad_log")
         try:
             subheader = self.query_one("#squad-subheader", Static)
@@ -121,7 +121,7 @@ class SquadScreen(Screen):
         except Exception:
             pass
 
-        # 히스토리 + 토론 뷰
+        # History + discussion view
         try:
             hist_list = self.query_one(SquadHistoryList)
             hist_list.update_history(history, squad)
@@ -142,7 +142,7 @@ class SquadScreen(Screen):
         except Exception:
             pass
 
-        # 상태바
+        # Status bar
         if flash:
             try:
                 status_bar = self.query_one("#squad-status-bar", Static)
@@ -153,9 +153,9 @@ class SquadScreen(Screen):
     def on_squad_history_list_discussion_selected(
         self, event: SquadHistoryList.DiscussionSelected
     ) -> None:
-        """히스토리 목록에서 토론 선택"""
+        """Handle discussion selection from history list."""
         self._selected_history_id = event.discussion_id
-        # 선택된 토론으로 하단 뷰 즉시 갱신
+        # Immediately refresh bottom view with selected discussion
         status = load_agent_status()
         history = load_squad_history()
         entry_view = self.query_one(SquadEntryView)
@@ -169,7 +169,7 @@ class SquadScreen(Screen):
             entry_view._last_entry_count = -1  # force refresh
             entry_view.update_squad(selected)
         else:
-            # active 토론으로 복귀
+            # Return to active discussion
             squad = status.get("squad_log")
             entry_view._last_entry_count = -1
             entry_view.update_squad(squad)

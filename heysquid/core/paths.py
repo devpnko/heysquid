@@ -22,5 +22,5 @@ PERMANENT_MEMORY_FILE = os.path.join(DATA_DIR, "permanent_memory.md")
 INDEX_FILE = os.path.join(TASKS_DIR, "index.json")
 
 # --- Tuning constants ---
-SESSION_MEMORY_MAX_CONVERSATIONS = 50  # 최근 대화 최대 항목 수
-WORKING_LOCK_TIMEOUT = 1800  # 30분
+SESSION_MEMORY_MAX_CONVERSATIONS = 50  # Max number of recent conversations
+WORKING_LOCK_TIMEOUT = 1800  # 30 minutes

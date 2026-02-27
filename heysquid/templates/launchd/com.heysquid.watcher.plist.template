@@ -12,7 +12,7 @@
         <string>caffeinate -ims {{PYTHON}} -m heysquid.telegram_listener</string>
     </array>
 
-    <!-- listener.py를 상시 실행 데몬으로 유지 -->
+    <!-- Keep listener.py running as a persistent daemon -->
     <key>KeepAlive</key>
     <true/>
 

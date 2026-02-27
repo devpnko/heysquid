@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""채널 ID 확인용 — getUpdates 대신 최근 업데이트에서 channel_post 탐색"""
+"""Channel ID lookup -- search for channel_post in recent getUpdates."""
 import os, sys, asyncio
 from dotenv import load_dotenv
 from telegram import Bot
@@ -12,8 +12,8 @@ async def main():
     request = HTTPXRequest(connect_timeout=10.0, read_timeout=15.0)
     bot = Bot(token=BOT_TOKEN, request=request)
 
-    # 방법 1: getUpdates에서 channel_post 찾기
-    # listener가 message만 consume하므로 channel_post는 남아있을 수 있음
+    # Method 1: Find channel_post in getUpdates
+    # Since listener only consumes messages, channel_posts may remain
     try:
         updates = await bot.get_updates(
             timeout=5,
@@ -22,23 +22,23 @@ async def main():
         for u in updates:
             if u.channel_post:
                 ch = u.channel_post.chat
-                print(f"[찾음] 채널명: {ch.title}")
-                print(f"[찾음] 채널 ID: {ch.id}")
-                print(f"\n.env에 추가하세요:")
+                print(f"[Found] Channel name: {ch.title}")
+                print(f"[Found] Channel ID: {ch.id}")
+                print(f"\nAdd to .env:")
                 print(f"TELEGRAM_AGENTBOX_CHANNEL_ID={ch.id}")
                 return
     except Exception as e:
-        print(f"getUpdates 실패: {e}")
+        print(f"getUpdates failed: {e}")
 
-    # 방법 2: 채널에 테스트 메시지 전송 시도 (채널 username 필요)
-    print("channel_post를 찾지 못했습니다.")
+    # Method 2: Try sending a test message to channel (requires channel username)
+    print("Could not find channel_post.")
     print()
-    print("대안: 채널 username이나 초대 링크를 알려주세요.")
-    print("또는 @userinfobot 을 채널에 추가하면 채널 ID를 알려줍니다.")
+    print("Alternative: Provide the channel username or invite link.")
+    print("Or add @userinfobot to the channel to get the channel ID.")
     print()
-    print("가장 쉬운 방법:")
-    print("1. 텔레그램에서 @RawDataBot 을 채널에 추가")
-    print("2. 채널에 메시지 보내면 봇이 채널 ID를 알려줌")
-    print("3. 확인 후 @RawDataBot 제거")
+    print("Easiest method:")
+    print("1. Add @RawDataBot to the channel on Telegram")
+    print("2. Send a message in the channel and the bot will show the channel ID")
+    print("3. Remove @RawDataBot after confirming")
 
 asyncio.run(main())

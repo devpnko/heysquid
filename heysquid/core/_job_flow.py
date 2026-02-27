@@ -18,7 +18,7 @@ from ..channels.telegram import send_files_sync, run_async_safe
 
 
 def _format_file_size(size_bytes):
-    """파일 크기를 사람이 읽기 쉬운 형식으로 변환"""
+    """Convert file size to human-readable format"""
     if size_bytes < 1024:
         return f"{size_bytes} B"
     elif size_bytes < 1024 * 1024:
@@ -28,7 +28,7 @@ def _format_file_size(size_bytes):
 
 
 def reserve_memory_telegram(instruction, chat_id, timestamp, message_id):
-    """작업 시작 시 즉시 메모리 예약"""
+    """Reserve memory immediately at task start"""
     if isinstance(message_id, list):
         message_ids = message_id
         main_message_id = message_ids[0]
@@ -44,19 +44,19 @@ def reserve_memory_telegram(instruction, chat_id, timestamp, message_id):
     now = datetime.now()
 
     if len(message_ids) > 1:
-        msg_id_info = f"{', '.join(map(str, message_ids))} (합산 {len(message_ids)}개)"
+        msg_id_info = f"{', '.join(map(str, message_ids))} (combined {len(message_ids)} messages)"
         msg_date_info = "\n".join([f"  - msg_{mid}: {ts}" for mid, ts in zip(message_ids, timestamps)])
     else:
         msg_id_info = str(main_message_id)
         msg_date_info = timestamps[0]
 
-    content = f"""[시간] {now.strftime("%Y-%m-%d %H:%M:%S")}
-[메시지ID] {msg_id_info}
-[출처] Telegram (chat_id: {chat_id})
-[메시지날짜]
+    content = f"""[Time] {now.strftime("%Y-%m-%d %H:%M:%S")}
+[MessageID] {msg_id_info}
+[Source] Telegram (chat_id: {chat_id})
+[MessageDate]
 {msg_date_info}
-[지시] {instruction}
-[결과] (작업 진행 중...)
+[Instruction] {instruction}
+[Result] (task in progress...)
 """
 
     with open(filepath, "w", encoding="utf-8") as f:
@@ -65,7 +65,7 @@ def reserve_memory_telegram(instruction, chat_id, timestamp, message_id):
     update_index(
         message_id=main_message_id,
         instruction=instruction,
-        result_summary="(작업 진행 중...)",
+        result_summary="(task in progress...)",
         files=[],
         chat_id=chat_id,
         timestamp=timestamps[0]
@@ -74,33 +74,33 @@ def reserve_memory_telegram(instruction, chat_id, timestamp, message_id):
     for i, (msg_id, ts) in enumerate(zip(message_ids[1:], timestamps[1:]), 2):
         ref_dir = get_task_dir(msg_id)
         ref_file = os.path.join(ref_dir, "task_info.txt")
-        ref_content = f"""[시간] {now.strftime("%Y-%m-%d %H:%M:%S")}
-[메시지ID] {msg_id}
-[출처] Telegram (chat_id: {chat_id})
-[메시지날짜] {ts}
-[지시] (메인 작업 msg_{main_message_id}에 합산됨)
-[참조] tasks/msg_{main_message_id}/
-[결과] (작업 진행 중...)
+        ref_content = f"""[Time] {now.strftime("%Y-%m-%d %H:%M:%S")}
+[MessageID] {msg_id}
+[Source] Telegram (chat_id: {chat_id})
+[MessageDate] {ts}
+[Instruction] (combined into main task msg_{main_message_id})
+[Reference] tasks/msg_{main_message_id}/
+[Result] (task in progress...)
 """
         with open(ref_file, "w", encoding="utf-8") as f:
             f.write(ref_content)
 
         update_index(
             message_id=msg_id,
-            instruction=f"(msg_{main_message_id}에 합산됨)",
-            result_summary="(작업 진행 중...)",
+            instruction=f"(combined into msg_{main_message_id})",
+            result_summary="(task in progress...)",
             files=[],
             chat_id=chat_id,
             timestamp=ts
         )
 
-    print(f"[MEM] 메모리 예약 완료: {task_dir}/task_info.txt")
+    print(f"[MEM] Memory reserved: {task_dir}/task_info.txt")
     if len(message_ids) > 1:
-        print(f"   합산 메시지: {len(message_ids)}개 ({', '.join(map(str, message_ids))})")
+        print(f"   Combined messages: {len(message_ids)} ({', '.join(map(str, message_ids))})")
 
 
 def report_telegram(instruction, result_text, chat_id, timestamp, message_id, files=None):
-    """작업 결과를 전체 채널에 브로드캐스트하고 메모리에 저장"""
+    """Broadcast task results to all channels and save to memory"""
     if isinstance(message_id, list):
         message_ids = message_id
         main_message_id = message_ids[0]
@@ -110,12 +110,12 @@ def report_telegram(instruction, result_text, chat_id, timestamp, message_id, fi
         main_message_id = message_id
         timestamps = [timestamp]
 
-    # 전체 채널 브로드캐스트 (hub에 위임)
+    # Broadcast to all channels (delegated to hub)
     from .hub import report_broadcast
     success = report_broadcast(instruction, result_text, chat_id, timestamp, message_id, files)
 
     if not success:
-        result_text = f"[전송 실패] {result_text}"
+        result_text = f"[Send failed] {result_text}"
         files = []
 
     task_dir = get_task_dir(main_message_id)
@@ -124,24 +124,24 @@ def report_telegram(instruction, result_text, chat_id, timestamp, message_id, fi
     now = datetime.now()
 
     if len(message_ids) > 1:
-        msg_id_info = f"{', '.join(map(str, message_ids))} (합산 {len(message_ids)}개)"
+        msg_id_info = f"{', '.join(map(str, message_ids))} (combined {len(message_ids)} messages)"
         msg_date_info = "\n".join([f"  - msg_{mid}: {ts}" for mid, ts in zip(message_ids, timestamps)])
     else:
         msg_id_info = str(main_message_id)
         msg_date_info = timestamps[0]
 
-    content = f"""[시간] {now.strftime("%Y-%m-%d %H:%M:%S")}
-[메시지ID] {msg_id_info}
-[출처] Telegram (chat_id: {chat_id})
-[메시지날짜]
+    content = f"""[Time] {now.strftime("%Y-%m-%d %H:%M:%S")}
+[MessageID] {msg_id_info}
+[Source] Telegram (chat_id: {chat_id})
+[MessageDate]
 {msg_date_info}
-[지시] {instruction}
-[결과] {result_text}
+[Instruction] {instruction}
+[Result] {result_text}
 """
 
     if files:
         file_names = [os.path.basename(f) for f in files]
-        content += f"[보낸파일] {', '.join(file_names)}\n"
+        content += f"[SentFiles] {', '.join(file_names)}\n"
 
     with open(filepath, "w", encoding="utf-8") as f:
         f.write(content)
@@ -158,27 +158,27 @@ def report_telegram(instruction, result_text, chat_id, timestamp, message_id, fi
     for i, (msg_id, ts) in enumerate(zip(message_ids[1:], timestamps[1:]), 2):
         ref_dir = get_task_dir(msg_id)
         ref_file = os.path.join(ref_dir, "task_info.txt")
-        ref_content = f"""[시간] {now.strftime("%Y-%m-%d %H:%M:%S")}
-[메시지ID] {msg_id}
-[출처] Telegram (chat_id: {chat_id})
-[메시지날짜] {ts}
-[지시] (메인 작업 msg_{main_message_id}에 합산됨)
-[참조] tasks/msg_{main_message_id}/
-[결과] {result_text[:100]}...
+        ref_content = f"""[Time] {now.strftime("%Y-%m-%d %H:%M:%S")}
+[MessageID] {msg_id}
+[Source] Telegram (chat_id: {chat_id})
+[MessageDate] {ts}
+[Instruction] (combined into main task msg_{main_message_id})
+[Reference] tasks/msg_{main_message_id}/
+[Result] {result_text[:100]}...
 """
         with open(ref_file, "w", encoding="utf-8") as f:
             f.write(ref_content)
 
         update_index(
             message_id=msg_id,
-            instruction=f"(msg_{main_message_id}에 합산됨)",
+            instruction=f"(combined into msg_{main_message_id})",
             result_summary=result_text[:100],
             files=[],
             chat_id=chat_id,
             timestamp=ts
         )
 
-    print(f"[MEM] 메모리 저장 완료: {task_dir}/task_info.txt")
+    print(f"[MEM] Memory saved: {task_dir}/task_info.txt")
 
     # Kanban: move to Done
     try:
@@ -215,7 +215,7 @@ def _set_done_reactions(message_ids):
 
 
 def mark_done_telegram(message_id):
-    """텔레그램 메시지 처리 완료 표시 — flock 사용"""
+    """Mark Telegram messages as processed — uses flock"""
     if isinstance(message_id, list):
         message_ids = message_id
     else:
@@ -223,7 +223,7 @@ def mark_done_telegram(message_id):
 
     new_instructions = load_new_instructions()
     if new_instructions:
-        print(f"[LOG] 작업 중 추가된 지시사항 {len(new_instructions)}개 함께 처리")
+        print(f"[LOG] Processing {len(new_instructions)} additional instructions added during work")
         for inst in new_instructions:
             message_ids.append(inst["message_id"])
 
@@ -242,6 +242,6 @@ def mark_done_telegram(message_id):
     _set_done_reactions(ids_set)
 
     if len(message_ids) > 1:
-        print(f"[DONE] 메시지 {len(message_ids)}개 처리 완료 표시: {', '.join(map(str, message_ids))}")
+        print(f"[DONE] Marked {len(message_ids)} messages as processed: {', '.join(map(str, message_ids))}")
     else:
-        print(f"[DONE] 메시지 {message_ids[0]} 처리 완료 표시")
+        print(f"[DONE] Marked message {message_ids[0]} as processed")

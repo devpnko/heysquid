@@ -26,21 +26,21 @@ class ChannelListener(ABC):
 
     @abstractmethod
     async def fetch_new_messages(self):
-        """새 메시지 폴링/수신. 반환: 수신 수, None=에러"""
+        """Poll/receive new messages. Returns: count received, None=error"""
         ...
 
     @abstractmethod
     async def handle_stop_command(self, msg_data: dict):
-        """중단 명령어 처리"""
+        """Handle stop command"""
         ...
 
     @abstractmethod
     async def listen_loop(self):
-        """메인 루프"""
+        """Main loop"""
         ...
 
     def save_message(self, message_data: dict):
-        """공통: messages.json에 메시지 저장 (flock atomic)"""
+        """Common: Save message to messages.json (flock atomic)"""
         def _append(data):
             existing_ids = {m["message_id"] for m in data.get("messages", [])}
             if message_data["message_id"] not in existing_ids:
@@ -50,18 +50,18 @@ class ChannelListener(ABC):
 
 
 def trigger_executor():
-    """executor.sh를 백그라운드 프로세스로 실행 (stale lock 자동 정리 + 원자적 선점)
+    """Run executor.sh as a background process (auto-cleanup stale locks + atomic preemption)
 
-    공통 함수: 모든 채널 listener가 사용.
+    Common function: used by all channel listeners.
 
-    dedup 체크 순서:
-    1. executor.pid 파일의 PID가 살아있는지 (os.kill(pid, 0))
-    2. pgrep -f "append-system-prompt-file" (caffeinate 프로세스)
-    둘 다 실패해야 stale lock으로 판정.
+    Dedup check order:
+    1. Check if the PID in executor.pid is alive (os.kill(pid, 0))
+    2. pgrep -f "append-system-prompt-file" (caffeinate process)
+    Both must fail to be considered a stale lock.
 
-    NOTE: Claude Code는 시작 후 cmdline을 "claude"로 재작성하므로
-    pgrep만으로는 실행 중인 PM을 감지 못할 수 있음.
-    executor.pid 기반 체크가 1차 방어선.
+    NOTE: Claude Code rewrites its cmdline to "claude" after startup, so
+    pgrep alone may not detect a running PM session.
+    The executor.pid-based check is the primary defense.
     """
     from ..paths import EXECUTOR_LOCK_FILE
     from ..config import PROJECT_ROOT_STR as PROJECT_ROOT
@@ -70,30 +70,30 @@ def trigger_executor():
     executor_pidfile = os.path.join(PROJECT_ROOT, "data", "executor.pid")
 
     if os.path.exists(lockfile):
-        # 1차: executor.pid로 직접 프로세스 생존 확인
+        # Primary: Verify process liveness via executor.pid
         if os.path.exists(executor_pidfile):
             try:
                 with open(executor_pidfile) as f:
                     pid = int(f.read().strip())
-                os.kill(pid, 0)  # signal 0 = 생존 확인만 (kill 안 함)
-                print(f"[TRIGGER] executor 이미 실행 중 (PID {pid}) — 스킵")
+                os.kill(pid, 0)  # signal 0 = liveness check only (does not kill)
+                print(f"[TRIGGER] executor already running (PID {pid}) — skipping")
                 return
             except (ProcessLookupError, ValueError, OSError):
-                pass  # PID 죽었거나 파일 손상 → 아래로
+                pass  # PID dead or file corrupted — fall through
 
-        # 2차: pgrep fallback (caffeinate 프로세스 감지)
+        # Secondary: pgrep fallback (detect caffeinate process)
         has_claude = subprocess.run(
             ["pgrep", "-f", "append-system-prompt-file"],
             capture_output=True,
         ).returncode == 0
         if has_claude:
-            print("[TRIGGER] executor 이미 실행 중 (pgrep) — 스킵")
+            print("[TRIGGER] executor already running (pgrep) — skipping")
             return
 
-        # 둘 다 실패 → stale lock
+        # Both checks failed — stale lock
         try:
             os.remove(lockfile)
-            print("[TRIGGER] stale executor.lock 제거됨")
+            print("[TRIGGER] stale executor.lock removed")
         except OSError:
             pass
         try:
@@ -106,7 +106,7 @@ def trigger_executor():
         os.write(fd, f"pre-lock by listener PID {os.getpid()}\n".encode())
         os.close(fd)
     except FileExistsError:
-        print("[TRIGGER] 다른 트리거가 이미 lock 선점 — 스킵")
+        print("[TRIGGER] another trigger already acquired the lock — skipping")
         return
 
     executor = os.path.join(PROJECT_ROOT, "scripts", "executor.sh")
@@ -122,7 +122,7 @@ def trigger_executor():
     os.makedirs(log_dir, exist_ok=True)
     log_file = os.path.join(log_dir, "executor.log")
 
-    print("[TRIGGER] executor.sh 백그라운드 실행!")
+    print("[TRIGGER] launching executor.sh in background!")
     try:
         with open(log_file, "a") as lf:
             subprocess.Popen(
@@ -133,8 +133,8 @@ def trigger_executor():
                 start_new_session=True,
             )
     except Exception as e:
-        # H-9: Popen 실패 시 lock 파일 정리
-        print(f"[ERROR] executor.sh 실행 실패: {e}")
+        # H-9: Clean up lock file on Popen failure
+        print(f"[ERROR] executor.sh launch failed: {e}")
         try:
             os.remove(lockfile)
         except OSError:

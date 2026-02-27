@@ -1,24 +1,24 @@
 """
-FanMolt 스킬 — AI 크리에이터 등록/운영/리포트 자동화.
+FanMolt skill — AI creator registration/operation/report automation.
 
-SQUID가 FanMolt 에이전트를 관리하는 리모컨.
-오너는 persona만 정의, 나머지는 SQUID가 heartbeat 돌림.
+A remote control for SQUID to manage FanMolt agents.
+The owner only defines the persona; SQUID handles the heartbeat loop.
 
-사용법:
-    fanmolt create <이름> <설명>          — 에이전트 등록
-    fanmolt list                         — 목록
-    fanmolt stats                        — 통계
-    fanmolt beat [이름]                  — heartbeat 1사이클
-    fanmolt post <이름> [레시피명]        — 글 1개 작성
-    fanmolt blueprint <이름> <템플릿>     — Blueprint 적용
-    fanmolt instructions <이름>           — 지시문 조회
-    fanmolt config <이름> [key=value ...] — 활동 설정 조회/변경
-    fanmolt del <이름>                   — 삭제
+Usage:
+    fanmolt create <name> <description>   — register agent
+    fanmolt list                           — list agents
+    fanmolt stats                          — statistics
+    fanmolt beat [name]                    — run 1 heartbeat cycle
+    fanmolt post <name> [recipe_name]      — write 1 post
+    fanmolt blueprint <name> <template>    — apply blueprint
+    fanmolt instructions <name>            — view instructions
+    fanmolt config <name> [key=value ...]  — view/change activity settings
+    fanmolt del <name>                     — delete agent
 """
 
 SKILL_META = {
     "name": "fanmolt",
-    "description": "FanMolt AI 크리에이터 관리 — 등록, 활동, 리포트",
+    "description": "FanMolt AI creator management — registration, activity, reports",
     "trigger": "manual",
     "enabled": True,
     "icon": "💰",
@@ -26,10 +26,10 @@ SKILL_META = {
 
 
 def execute(**kwargs) -> dict:
-    """스킬 진입점.
+    """Skill entry point.
 
-    triggered_by="scheduler" → 전체 에이전트 heartbeat
-    triggered_by="manual"    → args 파싱해서 서브커맨드 실행
+    triggered_by="scheduler" → heartbeat for all agents
+    triggered_by="manual"    → parse args and run subcommand
     """
     from .agent_manager import create_agent, list_agents, delete_agent, get_stats
     from .heartbeat_runner import run_heartbeat, run_all, force_post
@@ -38,14 +38,14 @@ def execute(**kwargs) -> dict:
     args = kwargs.get("args", "").strip()
     chat_id = kwargs.get("chat_id", 0)
 
-    # 스케줄러 → 전체 heartbeat
+    # scheduler → full heartbeat
     if triggered_by == "scheduler":
         results = run_all()
         report = _format_report(results)
         _send_telegram(chat_id, report)
         return {"ok": True, "report": report, "results": results}
 
-    # 수동 → 서브커맨드
+    # manual → subcommand
     parts = args.split(None, 1)
     cmd = parts[0].lower() if parts else "help"
     cmd_args = parts[1] if len(parts) > 1 else ""
@@ -70,22 +70,22 @@ def execute(**kwargs) -> dict:
         return _cmd_del(cmd_args, chat_id)
     else:
         msg = (
-            "fanmolt 명령어:\n"
-            "  create <이름> <설명>          — 에이전트 등록\n"
-            "  list                         — 목록\n"
-            "  stats                        — 통계\n"
-            "  beat [이름]                  — heartbeat\n"
-            "  post <이름> [레시피명]        — 글 작성\n"
-            "  blueprint <이름> <템플릿>     — Blueprint 적용\n"
-            "  instructions <이름>           — 지시문 조회\n"
-            "  config <이름> [key=val ...]  — 활동 설정\n"
-            "  del <이름>                   — 삭제"
+            "fanmolt commands:\n"
+            "  create <name> <description>   — register agent\n"
+            "  list                           — list agents\n"
+            "  stats                          — statistics\n"
+            "  beat [name]                    — heartbeat\n"
+            "  post <name> [recipe_name]      — write post\n"
+            "  blueprint <name> <template>    — apply blueprint\n"
+            "  instructions <name>            — view instructions\n"
+            "  config <name> [key=val ...]    — activity settings\n"
+            "  del <name>                     — delete agent"
         )
         _send_telegram(chat_id, msg)
         return {"ok": True, "message": msg}
 
 
-# --- 서브커맨드 ---
+# --- subcommands ---
 
 
 def _cmd_create(args: str, chat_id: int) -> dict:
@@ -93,11 +93,11 @@ def _cmd_create(args: str, chat_id: int) -> dict:
 
     parts = args.split(None, 1)
     if not parts:
-        return {"ok": False, "error": "사용법: fanmolt create <이름> <설명>"}
+        return {"ok": False, "error": "Usage: fanmolt create <name> <description>"}
     name = parts[0]
-    desc = parts[1] if len(parts) > 1 else f"{name} AI 크리에이터"
+    desc = parts[1] if len(parts) > 1 else f"{name} AI creator"
     result = create_agent(name=name, description=desc)
-    msg = f"✅ {name} 등록 완료" if result.get("ok") else f"❌ 등록 실패: {result.get('error')}"
+    msg = f"✅ {name} registered" if result.get("ok") else f"❌ Registration failed: {result.get('error')}"
     _send_telegram(chat_id, msg)
     return result
 
@@ -107,14 +107,14 @@ def _cmd_list(chat_id: int) -> dict:
 
     agents = list_agents()
     if not agents:
-        msg = "등록된 에이전트 없음"
+        msg = "No registered agents"
     else:
-        lines = [f"📋 에이전트 {len(agents)}개:"]
+        lines = [f"📋 {len(agents)} agent(s):"]
         for a in agents:
             posts = a.get("stats", {}).get("posts", 0)
             act = get_activity(a)
             sched = act["schedule_hours"]
-            lines.append(f"  • {a['name']} (@{a['handle']}) — 글 {posts}개 | ⏱{sched}h")
+            lines.append(f"  • {a['name']} (@{a['handle']}) — {posts} post(s) | ⏱{sched}h")
         msg = "\n".join(lines)
     _send_telegram(chat_id, msg)
     return {"ok": True, "agents": agents}
@@ -125,11 +125,11 @@ def _cmd_stats(chat_id: int) -> dict:
 
     stats = get_stats()
     msg = (
-        f"📊 FanMolt 전체 통계\n"
-        f"  에이전트: {stats['agent_count']}개\n"
-        f"  글: {stats['total_posts']}개\n"
-        f"  댓글: {stats['total_comments']}개\n"
-        f"  답변: {stats['total_replies']}개"
+        f"📊 FanMolt overall stats\n"
+        f"  Agents: {stats['agent_count']}\n"
+        f"  Posts: {stats['total_posts']}\n"
+        f"  Comments: {stats['total_comments']}\n"
+        f"  Replies: {stats['total_replies']}"
     )
     _send_telegram(chat_id, msg)
     return {"ok": True, "stats": stats}
@@ -154,12 +154,12 @@ def _cmd_post(args: str, chat_id: int) -> dict:
 
     parts = args.strip().split(None, 1)
     if not parts:
-        return {"ok": False, "error": "사용법: fanmolt post <이름> [레시피명]"}
+        return {"ok": False, "error": "Usage: fanmolt post <name> [recipe_name]"}
     handle = parts[0]
     recipe_name = parts[1] if len(parts) > 1 else None
     result = force_post(handle, recipe_name=recipe_name)
     label = f"{handle}" + (f" ({recipe_name})" if recipe_name else "")
-    msg = f"✅ {label} 글 작성 완료" if result.get("ok") else f"❌ {result.get('error')}"
+    msg = f"✅ {label} post created" if result.get("ok") else f"❌ {result.get('error')}"
     _send_telegram(chat_id, msg)
     return result
 
@@ -169,12 +169,12 @@ def _cmd_blueprint(args: str, chat_id: int) -> dict:
 
     parts = args.strip().split(None, 1)
     if len(parts) < 2:
-        return {"ok": False, "error": "사용법: fanmolt blueprint <이름> <템플릿>"}
+        return {"ok": False, "error": "Usage: fanmolt blueprint <name> <template>"}
     handle, template_name = parts[0], parts[1]
     result = apply_blueprint(handle, template_name)
     if result.get("ok"):
         recipes = ", ".join(result.get("recipes", []))
-        msg = f"✅ {handle}에 Blueprint 적용 완료\n레시피: {recipes}"
+        msg = f"✅ Blueprint applied to {handle}\nRecipes: {recipes}"
     else:
         msg = f"❌ {result.get('error')}"
     _send_telegram(chat_id, msg)
@@ -187,21 +187,21 @@ def _cmd_instructions(args: str, chat_id: int) -> dict:
 
     handle = args.strip()
     if not handle:
-        return {"ok": False, "error": "사용법: fanmolt instructions <이름>"}
+        return {"ok": False, "error": "Usage: fanmolt instructions <name>"}
     agent = load_agent(handle)
     if not agent:
-        return {"ok": False, "error": f"에이전트 없음: {handle}"}
+        return {"ok": False, "error": f"Agent not found: {handle}"}
 
     try:
         client = FanMoltClient(agent["api_key"])
         md = client.get_instructions()
-        # 텔레그램 메시지 길이 제한 (4096자)
+        # Telegram message length limit (4096 chars)
         if len(md) > 4000:
-            md = md[:4000] + "\n\n... (잘림)"
+            md = md[:4000] + "\n\n... (truncated)"
         _send_telegram(chat_id, md)
         return {"ok": True, "length": len(md)}
     except Exception as e:
-        msg = f"❌ 지시문 조회 실패: {e}"
+        msg = f"❌ Failed to fetch instructions: {e}"
         _send_telegram(chat_id, msg)
         return {"ok": False, "error": str(e)}
 
@@ -211,11 +211,11 @@ def _cmd_config(args: str, chat_id: int) -> dict:
 
     parts = args.strip().split()
     if not parts:
-        # 설정 가능한 키 목록 안내
-        lines = ["⚙️ fanmolt config <이름> [key=val ...]\n\n설정 가능한 키:"]
+        # Show available config keys
+        lines = ["⚙️ fanmolt config <name> [key=val ...]\n\nAvailable keys:"]
         for k, v in DEFAULT_ACTIVITY.items():
             lines.append(f"  {k} = {v}  ({type(v).__name__})")
-        lines.append("\n예: fanmolt config my_agent schedule_hours=2 max_comments_per_beat=5")
+        lines.append("\nExample: fanmolt config my_agent schedule_hours=2 max_comments_per_beat=5")
         msg = "\n".join(lines)
         _send_telegram(chat_id, msg)
         return {"ok": True, "message": msg}
@@ -223,11 +223,11 @@ def _cmd_config(args: str, chat_id: int) -> dict:
     handle = parts[0]
     agent = load_agent(handle)
     if not agent:
-        msg = f"❌ 에이전트 없음: {handle}"
+        msg = f"❌ Agent not found: {handle}"
         _send_telegram(chat_id, msg)
         return {"ok": False, "error": msg}
 
-    # key=value 파싱
+    # parse key=value pairs
     changes = {}
     for part in parts[1:]:
         if "=" in part:
@@ -235,9 +235,9 @@ def _cmd_config(args: str, chat_id: int) -> dict:
             changes[k] = v
 
     if not changes:
-        # 조회 모드: 현재 설정 표시
+        # View mode: show current settings
         act = get_activity(agent)
-        lines = [f"⚙️ {handle} 활동 설정:"]
+        lines = [f"⚙️ {handle} activity settings:"]
         for k, v in act.items():
             default = DEFAULT_ACTIVITY.get(k)
             marker = "" if v == default else " ✏️"
@@ -246,11 +246,11 @@ def _cmd_config(args: str, chat_id: int) -> dict:
         _send_telegram(chat_id, msg)
         return {"ok": True, "activity": act}
 
-    # 변경 모드
+    # Update mode
     result = update_activity(handle, changes)
     if result.get("ok"):
         applied = result["applied"]
-        lines = [f"✅ {handle} 설정 변경:"]
+        lines = [f"✅ {handle} settings updated:"]
         for k, v in applied.items():
             lines.append(f"  {k} = {v}")
         msg = "\n".join(lines)
@@ -265,20 +265,20 @@ def _cmd_del(args: str, chat_id: int) -> dict:
 
     handle = args.strip()
     if not handle:
-        return {"ok": False, "error": "사용법: fanmolt del <이름>"}
+        return {"ok": False, "error": "Usage: fanmolt del <name>"}
     ok = delete_agent(handle)
-    msg = f"✅ {handle} 삭제 완료" if ok else f"❌ {handle} 찾을 수 없음"
+    msg = f"✅ {handle} deleted" if ok else f"❌ {handle} not found"
     _send_telegram(chat_id, msg)
     return {"ok": ok}
 
 
-# --- 헬퍼 ---
+# --- helpers ---
 
 
 def _format_report(results: list) -> str:
     if not results:
-        return "활동할 에이전트 없음"
-    lines = ["📊 FanMolt heartbeat 완료"]
+        return "No agents to run"
+    lines = ["📊 FanMolt heartbeat complete"]
     for r in results:
         name = r.get("handle", "?")
         if r.get("error"):
@@ -286,15 +286,15 @@ def _format_report(results: list) -> str:
             continue
         replies = r.get("replies", 0)
         comments = r.get("comments", 0)
-        posted = "글 1" if r.get("posted") else ""
+        posted = "1 post" if r.get("posted") else ""
         parts = []
         if replies:
-            parts.append(f"답변 {replies}")
+            parts.append(f"{replies} reply(ies)")
         if comments:
-            parts.append(f"댓글 {comments}")
+            parts.append(f"{comments} comment(s)")
         if posted:
             parts.append(posted)
-        activity = " | ".join(parts) if parts else "활동 없음"
+        activity = " | ".join(parts) if parts else "no activity"
         lines.append(f"  {name}: {activity}")
     return "\n".join(lines)
 

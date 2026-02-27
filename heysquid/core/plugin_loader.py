@@ -1,6 +1,6 @@
-"""heysquid.core.plugin_loader — 공유 plugin discovery + runner.
+"""heysquid.core.plugin_loader — shared plugin discovery + runner.
 
-skills/ 와 automations/ 패키지가 공통으로 사용하는 엔진.
+Common engine used by both skills/ and automations/ packages.
 """
 
 import importlib
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class PluginContext:
-    """플러그인 실행 컨텍스트"""
+    """Plugin execution context"""
     triggered_by: str = "scheduler"  # "scheduler" | "manual" | "pm" | "webhook"
     chat_id: int = 0
     args: str = ""
@@ -25,7 +25,7 @@ class PluginContext:
 
 
 def _load_plugins_config() -> dict:
-    """data/skills_config.json 로드 (없으면 빈 dict)"""
+    """Load data/skills_config.json (empty dict if not found)"""
     config_path = DATA_DIR / "skills_config.json"
     if not config_path.exists():
         return {}
@@ -33,12 +33,12 @@ def _load_plugins_config() -> dict:
         with open(config_path, "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception as e:
-        logger.warning(f"skills_config.json 로드 실패: {e}")
+        logger.warning(f"Failed to load skills_config.json: {e}")
         return {}
 
 
 def discover_plugins(package_name: str, package_dir: Path) -> dict[str, dict]:
-    """지정된 패키지 디렉토리 스캔 → SKILL_META가 있는 모듈 자동 수집."""
+    """Scan the given package directory -> auto-collect modules with SKILL_META."""
     config = _load_plugins_config()
     registry: dict[str, dict] = {}
     for folder in package_dir.iterdir():
@@ -50,7 +50,7 @@ def discover_plugins(package_name: str, package_dir: Path) -> dict[str, dict]:
             if not meta:
                 continue
 
-            # config override 적용
+            # Apply config override
             override = config.get(folder.name, {})
             if override:
                 meta = {**meta, **override}
@@ -65,13 +65,13 @@ def discover_plugins(package_name: str, package_dir: Path) -> dict[str, dict]:
             meta["_execute"] = getattr(mod, "execute", None)
             registry[folder.name] = meta
         except Exception as e:
-            logger.warning(f"Plugin {folder.name} 로드 실패: {e}")
+            logger.warning(f"Failed to load plugin {folder.name}: {e}")
     return registry
 
 
 def run_plugin(package_name: str, name: str, ctx: PluginContext | None = None,
                registry: dict = None) -> dict:
-    """플러그인 execute() 실행 + dashboard 상태 업데이트."""
+    """Run plugin execute() + update dashboard status."""
     if registry is None:
         from pathlib import Path as _P
         pkg = importlib.import_module(package_name)
@@ -80,14 +80,14 @@ def run_plugin(package_name: str, name: str, ctx: PluginContext | None = None,
 
     meta = registry.get(name)
     if not meta:
-        return {"ok": False, "error": f"플러그인 '{name}' 없음"}
+        return {"ok": False, "error": f"Plugin '{name}' not found"}
 
     if not meta.get("enabled", True):
-        return {"ok": False, "error": f"플러그인 '{name}' 비활성화됨"}
+        return {"ok": False, "error": f"Plugin '{name}' is disabled"}
 
     execute_fn = meta.get("_execute")
     if not execute_fn:
-        return {"ok": False, "error": f"플러그인 '{name}': execute() 없음"}
+        return {"ok": False, "error": f"Plugin '{name}': no execute() function"}
 
     from heysquid.dashboard import update_skill_status
     update_skill_status(name, 'running')
@@ -100,7 +100,7 @@ def run_plugin(package_name: str, name: str, ctx: PluginContext | None = None,
                             last_error=str(e)[:200])
         response = {"ok": False, "error": str(e)}
 
-    # 콜백 URL이 있으면 결과 전송
+    # Send result if callback URL is provided
     if ctx and ctx.callback_url:
         _send_callback(ctx.callback_url, name, response)
 
@@ -108,9 +108,9 @@ def run_plugin(package_name: str, name: str, ctx: PluginContext | None = None,
 
 
 def _send_callback(url: str, plugin_name: str, result: dict):
-    """완료 콜백 전송 (best-effort, 실패해도 무시)."""
+    """Send completion callback (best-effort, failures ignored)."""
     try:
         import requests
         requests.post(url, json={"plugin": plugin_name, **result}, timeout=10)
     except Exception as e:
-        logger.warning(f"Callback 실패 ({url}): {e}")
+        logger.warning(f"Callback failed ({url}): {e}")

@@ -1,4 +1,4 @@
-"""LogView — Mission Log + Stream Log 위젯"""
+"""LogView -- Mission Log + Stream Log widgets."""
 
 from collections import deque
 
@@ -11,7 +11,7 @@ from ..utils import trunc
 
 
 class MissionLogView(VerticalScroll):
-    """Mission Log — 에이전트 활동 로그 (상단)"""
+    """Mission Log -- Agent activity log (top section)."""
 
     DEFAULT_CSS = """
     MissionLogView {
@@ -31,7 +31,7 @@ class MissionLogView(VerticalScroll):
         yield Static("", id="mission-log-content")
 
     def update_log(self, entries: list[dict]) -> None:
-        """mission_log 엔트리 업데이트"""
+        """Update with mission_log entries."""
         snapshot = (len(entries), entries[-1] if entries else None)
         if snapshot == self._last_snapshot:
             return
@@ -65,7 +65,7 @@ class MissionLogView(VerticalScroll):
 
 
 class StreamLogView(VerticalScroll):
-    """Stream Log — Claude 도구 호출 로그 (하단, dim)"""
+    """Stream Log -- Claude tool call log (bottom section, dimmed)."""
 
     DEFAULT_CSS = """
     StreamLogView {
@@ -85,7 +85,7 @@ class StreamLogView(VerticalScroll):
         yield Static("", id="stream-log-content")
 
     def update_log(self, buffer: deque) -> None:
-        """stream buffer 업데이트"""
+        """Update with stream buffer."""
         snapshot = (len(buffer), buffer[-1] if buffer else None)
         if snapshot == self._last_snapshot:
             return

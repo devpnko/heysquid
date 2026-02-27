@@ -1,6 +1,6 @@
-"""데이터 폴링 — messages.json, agent_status.json, stream.jsonl 로딩
+"""Data polling -- loading messages.json, agent_status.json, stream.jsonl
 
-자가 복구 원칙: 어떤 파일이 깨져도 캐시 반환 → 파일 복구 시 자동 갱신.
+Self-healing principle: return cache if any file is corrupted -> auto-refresh when file recovers.
 """
 
 import json
@@ -17,7 +17,7 @@ from .utils import trunc
 
 log = logging.getLogger("tui.poller")
 
-# --- 파일 경로 ---
+# --- File paths ---
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DATA_DIR = os.path.join(ROOT, "data")
 STATUS_FILE = os.path.join(DATA_DIR, "agent_status.json")
@@ -34,12 +34,12 @@ SQUAD_HISTORY_FILE = os.path.join(DATA_DIR, "squad_history.json")
 CHAT_MAX_MESSAGES = 200
 STREAM_BUFFER_SIZE = 200
 
-# --- Stream 에이전트 추적 ---
+# --- Stream agent tracking ---
 _stream_active_agents: dict = {}
 
 
 def _safe_load_json(path: str, cache: dict, key: str = "data"):
-    """JSON 파일을 안전하게 로드. 어떤 예외든 캐시 반환. mtime 변경 시에만 재로드."""
+    """Safely load JSON file. Return cache on any exception. Reload only on mtime change."""
     try:
         mtime = os.path.getmtime(path)
     except OSError:
@@ -55,8 +55,8 @@ def _safe_load_json(path: str, cache: dict, key: str = "data"):
         cache[key] = data
         return data
     except Exception as e:
-        # 어떤 예외든 (UnicodeDecodeError, JSONDecodeError, OSError, ...)
-        # 캐시 반환. mtime은 업데이트하지 않아 → 파일 복구되면 자동 재로드.
+        # Any exception (UnicodeDecodeError, JSONDecodeError, OSError, ...)
+        # Return cache. Don't update mtime -> auto-reload when file recovers.
         log.debug("Failed to load %s: %s", os.path.basename(path), e)
         return cache[key]
 
@@ -68,10 +68,10 @@ _workspaces_cache: dict = {"mtime": 0.0, "data": {}}
 
 
 def load_agent_status() -> dict:
-    """agent_status.json + 분리 파일(kanban/automations/workspaces) merge 로드."""
+    """Load agent_status.json + merge separate files (kanban/automations/workspaces)."""
     base = _safe_load_json(STATUS_FILE, _status_cache)
 
-    # 분리 파일 우선 (최신 데이터), 없으면 base fallback
+    # Prefer separate files (latest data), fallback to base
     kanban = _safe_load_json(KANBAN_FILE, _kanban_cache)
     if kanban:
         base["kanban"] = kanban
@@ -88,19 +88,19 @@ def load_agent_status() -> dict:
 
 
 def is_executor_live() -> bool:
-    """executor가 실행 중인지 (claude PM 프로세스 기준)"""
+    """Check if executor is running (based on claude PM process)."""
     procs = get_executor_processes()
     return procs["claude"]
 
 
-# --- Executor 프로세스 상태 ---
+# --- Executor process status ---
 _proc_cache: dict = {"ts": 0.0, "data": {
     "executor": False, "claude": False, "caffeinate": False, "viewer": False,
 }}
 
 
 def _pid_alive(pid: int) -> bool:
-    """PID가 살아있는지 확인 (os.kill signal 0)"""
+    """Check if PID is alive (os.kill signal 0)."""
     try:
         os.kill(pid, 0)
         return True
@@ -109,7 +109,7 @@ def _pid_alive(pid: int) -> bool:
 
 
 def _read_pids(path: str) -> list[int]:
-    """PID 파일에서 PID 목록 읽기"""
+    """Read PID list from PID file."""
     try:
         with open(path) as f:
             return [int(l.strip()) for l in f if l.strip().isdigit()]
@@ -118,7 +118,7 @@ def _read_pids(path: str) -> list[int]:
 
 
 def get_executor_processes() -> dict:
-    """executor 관련 4개 프로세스 상태 (5초 캐시)"""
+    """Status of 4 executor-related processes (5-second cache)."""
     now = time.time()
     if now - _proc_cache["ts"] < 5:
         return _proc_cache["data"]
@@ -158,12 +158,12 @@ def get_executor_processes() -> dict:
     return procs
 
 
-# --- Chat 데이터 폴링 ---
+# --- Chat data polling ---
 _chat_cache: dict = {"mtime": 0.0, "data": {"messages": []}, "messages": []}
 
 
 def poll_chat_messages() -> list[dict]:
-    """messages.json에서 채팅 메시지 폴링 (mtime 기반 캐시, 자가 복구)"""
+    """Poll chat messages from messages.json (mtime-based cache, self-healing)."""
     raw = _safe_load_json(MESSAGES_FILE, _chat_cache)
     if isinstance(raw, dict):
         msgs = raw.get("messages", [])
@@ -176,19 +176,19 @@ _squad_history_cache: dict = {"mtime": 0.0, "data": []}
 
 
 def load_squad_history() -> list[dict]:
-    """squad_history.json 로드 (mtime 캐시, 자가 복구)"""
+    """Load squad_history.json (mtime cache, self-healing)."""
     return _safe_load_json(SQUAD_HISTORY_FILE, _squad_history_cache)
 
 
 def invalidate_chat_cache():
-    """캐시 무효화 (메시지 전송 후 즉시 갱신 위해)"""
+    """Invalidate cache (for immediate refresh after message send)."""
     _chat_cache["mtime"] = 0.0
 
 
-# --- Stream 로그 폴링 ---
+# --- Stream log polling ---
 
 def load_stream_lines(last_pos: int, buffer: deque) -> int:
-    """executor.stream.jsonl tail 읽기. 새 줄을 buffer에 추가, 새 position 반환."""
+    """Read executor.stream.jsonl tail. Append new lines to buffer, return new position."""
     try:
         size = os.path.getsize(STREAM_FILE)
     except OSError:
@@ -223,7 +223,7 @@ def load_stream_lines(last_pos: int, buffer: deque) -> int:
 
 
 def _parse_stream_event(d: dict):
-    """JSONL 이벤트 → 표시용 [(time, emoji, agent, text), ...] 리스트"""
+    """JSONL event -> display [(time, emoji, agent, text), ...] list."""
     t = d.get("type", "")
     now = datetime.now().strftime("%H:%M")
 
@@ -261,7 +261,7 @@ def _parse_stream_event(d: dict):
                         }
                     lines = [
                         (now, "┌─", da or "pm", f"{emoji} [{label}]{model_str}"),
-                        ("", "│", da or "pm", f"  임무: {desc}"),
+                        ("", "│", da or "pm", f"  Mission: {desc}"),
                     ]
                     prompt = inp.get("prompt", "")
                     if prompt:
@@ -306,7 +306,7 @@ def _parse_stream_event(d: dict):
                     text = c.get("content", "")
                     lines = [
                         ("", "│", da, ""),
-                        (now, "✅", da, f"└─ [{agent['type']}] 완료 ({elapsed:.1f}초){model_str}"),
+                        (now, "✅", da, f"└─ [{agent['type']}] Done ({elapsed:.1f}s){model_str}"),
                     ]
                     if isinstance(text, str) and text:
                         for rl in trunc(text, 150).split(". ")[:2]:
@@ -321,6 +321,6 @@ def _parse_stream_event(d: dict):
         turns = d.get("num_turns", 0)
         _stream_active_agents.clear()
         return [(now, "✨", "system",
-                 f"Session end  ${cost:.4f} | {dur:.0f}s | {turns}턴")]
+                 f"Session end  ${cost:.4f} | {dur:.0f}s | {turns} turns")]
 
     return None

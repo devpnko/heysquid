@@ -41,11 +41,11 @@ def _dashboard_log(agent, message):
 
 def check_working_lock():
     """
-    작업 잠금 파일 확인. 마지막 활동 기준 30분 타임아웃.
+    Check working lock file. 30-minute timeout based on last activity.
 
     Returns:
-        dict or None: 잠금 정보 (존재하면) 또는 None
-        특수 케이스: {"stale": True, ...} - 스탈 작업
+        dict or None: Lock info (if exists) or None
+        Special case: {"stale": True, ...} - stale task
     """
     if not os.path.exists(WORKING_LOCK_FILE):
         return None
@@ -54,7 +54,7 @@ def check_working_lock():
         with open(WORKING_LOCK_FILE, "r", encoding="utf-8") as f:
             lock_info = json.load(f)
     except Exception as e:
-        print(f"[WARN] working.json 읽기 오류: {e}")
+        print(f"[WARN] Error reading working.json: {e}")
         return None
 
     last_activity_str = lock_info.get("last_activity", lock_info.get("started_at"))
@@ -65,17 +65,17 @@ def check_working_lock():
         idle_seconds = (now - last_activity).total_seconds()
 
         if idle_seconds > WORKING_LOCK_TIMEOUT:
-            print(f"[WARN] 스탈 작업 감지 (마지막 활동: {int(idle_seconds/60)}분 전)")
-            print(f"   메시지 ID: {lock_info.get('message_id')}")
-            print(f"   지시사항: {lock_info.get('instruction_summary')}")
+            print(f"[WARN] Stale task detected (last activity: {int(idle_seconds/60)} min ago)")
+            print(f"   Message ID: {lock_info.get('message_id')}")
+            print(f"   Instruction: {lock_info.get('instruction_summary')}")
             lock_info["stale"] = True
             return lock_info
 
-        print(f"[INFO] 작업 진행 중 (마지막 활동: {int(idle_seconds/60)}분 전)")
+        print(f"[INFO] Task in progress (last activity: {int(idle_seconds/60)} min ago)")
         return lock_info
 
     except Exception as e:
-        print(f"[WARN] 타임스탬프 파싱 오류: {e}")
+        print(f"[WARN] Timestamp parsing error: {e}")
         lock_age = time.time() - os.path.getmtime(WORKING_LOCK_FILE)
         if lock_age > WORKING_LOCK_TIMEOUT:
             try:
@@ -87,10 +87,10 @@ def check_working_lock():
 
 
 def create_working_lock(message_id, instruction, chat_id=None):
-    """원자적으로 작업 잠금 파일 생성."""
+    """Atomically create working lock file."""
     if isinstance(message_id, list):
         message_ids = message_id
-        msg_id_str = f"{', '.join(map(str, message_ids))} (합산 {len(message_ids)}개)"
+        msg_id_str = f"{', '.join(map(str, message_ids))} (combined {len(message_ids)} messages)"
     else:
         message_ids = [message_id]
         msg_id_str = str(message_id)
@@ -111,15 +111,15 @@ def create_working_lock(message_id, instruction, chat_id=None):
     try:
         with open(WORKING_LOCK_FILE, "x", encoding="utf-8") as f:
             json.dump(lock_data, f, ensure_ascii=False, indent=2)
-        print(f"[LOCK] 작업 잠금 생성: message_id={msg_id_str}")
+        print(f"[LOCK] Working lock created: message_id={msg_id_str}")
         _dashboard_log('pm', f'Starting: {summary}')
 
-        # Kanban: move to In Progress (없으면 자동 생성)
+        # Kanban: move to In Progress (auto-create if not found)
         try:
             from ..dashboard.kanban import update_kanban_by_message_ids, add_kanban_task, COL_IN_PROGRESS, COL_TODO
             moved = update_kanban_by_message_ids(message_ids, COL_IN_PROGRESS)
             if not moved:
-                # 카드가 없음 → TODO 생성 후 즉시 IN_PROGRESS
+                # Card not found -> create TODO then immediately move to IN_PROGRESS
                 add_kanban_task(
                     title=summary,
                     column=COL_IN_PROGRESS,
@@ -138,12 +138,12 @@ def create_working_lock(message_id, instruction, chat_id=None):
 
         return True
     except FileExistsError:
-        print(f"[WARN] 잠금 파일 이미 존재. 다른 작업이 진행 중입니다.")
+        print(f"[WARN] Lock file already exists. Another task is in progress.")
         return False
 
 
 def update_working_activity():
-    """작업 잠금의 마지막 활동 시각 갱신"""
+    """Update the last activity timestamp of the working lock"""
     if not os.path.exists(WORKING_LOCK_FILE):
         return
 
@@ -157,11 +157,11 @@ def update_working_activity():
             json.dump(lock_data, f, ensure_ascii=False, indent=2)
 
     except Exception as e:
-        print(f"[WARN] working.json 활동 갱신 오류: {e}")
+        print(f"[WARN] Error updating working.json activity: {e}")
 
 
 def check_new_messages_during_work():
-    """작업 중 새 메시지 확인"""
+    """Check for new messages during work"""
     if not os.path.exists(WORKING_LOCK_FILE):
         return []
 
@@ -208,7 +208,7 @@ def check_new_messages_during_work():
 
 
 def save_new_instructions(new_messages):
-    """새 지시사항을 파일에 저장"""
+    """Save new instructions to file"""
     if not new_messages:
         return
 
@@ -231,11 +231,11 @@ def save_new_instructions(new_messages):
     with open(NEW_INSTRUCTIONS_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
-    print(f"[SAVE] 새 지시사항 저장: {len(new_messages)}개")
+    print(f"[SAVE] New instructions saved: {len(new_messages)}")
 
 
 def load_new_instructions():
-    """저장된 새 지시사항 읽기"""
+    """Read saved new instructions"""
     if not os.path.exists(NEW_INSTRUCTIONS_FILE):
         return []
 
@@ -244,26 +244,26 @@ def load_new_instructions():
             data = json.load(f)
         return data.get("instructions", [])
     except Exception as e:
-        print(f"[WARN] new_instructions.json 읽기 오류: {e}")
+        print(f"[WARN] Error reading new_instructions.json: {e}")
         return []
 
 
 def clear_new_instructions():
-    """새 지시사항 파일 삭제"""
+    """Delete new instructions file"""
     if os.path.exists(NEW_INSTRUCTIONS_FILE):
         try:
             os.remove(NEW_INSTRUCTIONS_FILE)
-            print("[CLEAN] 새 지시사항 파일 정리 완료")
+            print("[CLEAN] New instructions file cleaned up")
         except OSError as e:
-            print(f"[WARN] new_instructions.json 삭제 오류: {e}")
+            print(f"[WARN] Error deleting new_instructions.json: {e}")
 
 
 def remove_working_lock(transition_to_waiting=False):
-    """작업 잠금 파일 삭제.
+    """Delete working lock file.
 
     Args:
-        transition_to_waiting: True면 WAITING 상태 전환 (다른 TODO 처리 가능하게).
-            로그 메시지만 변경, pm.speech는 유지.
+        transition_to_waiting: If True, transition to WAITING state (allow other TODOs to be processed).
+            Only changes log message, pm.speech is preserved.
     """
     # Stop typing indicator before removing lock
     try:
@@ -275,10 +275,10 @@ def remove_working_lock(transition_to_waiting=False):
     if os.path.exists(WORKING_LOCK_FILE):
         os.remove(WORKING_LOCK_FILE)
         if transition_to_waiting:
-            print("[UNLOCK] 작업 잠금 해제 (WAITING 전환)")
+            print("[UNLOCK] Working lock released (WAITING transition)")
             _dashboard_log('pm', 'Waiting for feedback...')
         else:
-            print("[UNLOCK] 작업 잠금 해제")
+            print("[UNLOCK] Working lock released")
             _dashboard_log('pm', 'Standing by...')
             try:
                 from ..dashboard import set_pm_speech

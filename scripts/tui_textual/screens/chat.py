@@ -1,4 +1,4 @@
-"""ChatScreen — 채팅 모드 화면"""
+"""ChatScreen -- Chat mode screen."""
 
 from textual.screen import Screen
 from textual.app import ComposeResult
@@ -15,7 +15,7 @@ from ..colors import AGENT_COLORS
 
 
 class ChatScreen(Screen):
-    """Chat 모드 — 메시지 뷰 + 입력"""
+    """Chat mode -- message view + input."""
 
     DEFAULT_CSS = """
     ChatScreen {
@@ -68,7 +68,7 @@ class ChatScreen(Screen):
             indicator = f"[bold green]● LIVE[/bold green] [dim]({up}/4)[/dim]"
         else:
             indicator = f"[bold red]● OFFLINE[/bold red] [dim]({up}/4)[/dim]"
-        # PM 상태 표시
+        # PM status indicator
         pm_indicator = ""
         if pm_status == "chatting":
             pm_indicator = "  [bold cyan]💬 chatting[/bold cyan]"
@@ -79,10 +79,10 @@ class ChatScreen(Screen):
         return f"[bold]🦑 SQUID[/bold]  [bold {pm_color}]\\[CHAT][/bold {pm_color}]  {indicator}{pm_indicator}"
 
     def _status_bar_text(self) -> str:
-        return "[dim] q:quit  Ctrl+1~5:mode  Ctrl+\u2190\u2192  Enter:send  Tab:/ @완성  drag+Ctrl+C:복사[/dim]"
+        return "[dim] q:quit  Ctrl+1~5:mode  Ctrl+\u2190\u2192  Enter:send  Tab:/ @complete  drag+Ctrl+C:copy[/dim]"
 
     def on_text_area_changed(self, event) -> None:
-        """ChatInput 텍스트 변경 → 자동완성 힌트 업데이트"""
+        """ChatInput text changed -> update autocomplete hint."""
         hint = self._compute_autocomplete_hint(event.text_area.text)
         hint_widget = self.query_one("#autocomplete-hint", Static)
         if hint:
@@ -92,22 +92,22 @@ class ChatScreen(Screen):
             hint_widget.update("")
             hint_widget.remove_class("has-hint")
 
-    # 커맨드 카테고리 (힌트 표시용 — 칸반 명령어는 칸반 탭에 있으므로 제외)
+    # Command categories (for hint display -- kanban commands excluded, they're in the kanban tab)
     _CMD_GROUPS = [
-        ("제어", ["stop", "resume", "doctor"]),
-        ("팀", ["squid", "kraken", "endsquad"]),
-        ("기타", ["skill", "dashboard"]),
+        ("Control", ["stop", "resume", "doctor"]),
+        ("Team", ["squid", "kraken", "endsquad"]),
+        ("Other", ["skill", "dashboard"]),
     ]
 
     def _compute_autocomplete_hint(self, text: str) -> str:
-        """입력 텍스트 기반 자동완성 힌트 계산"""
-        # 슬래시 커맨드
+        """Compute autocomplete hint based on input text."""
+        # Slash commands
         if text.startswith("/"):
             partial = text.lstrip("/").rstrip(" ").lower()
             if text.endswith(" ") and partial in COMMANDS:
                 return ""
             if not partial:
-                # 전체 목록 — 카테고리별 그룹핑
+                # Full list -- grouped by category
                 parts = []
                 for label, cmds in self._CMD_GROUPS:
                     parts.append(f"[{label}] " + " ".join(f"/{c}" for c in cmds))
@@ -116,7 +116,7 @@ class ChatScreen(Screen):
             if candidates:
                 return "  " + " · ".join(f"/{c}" for c in candidates)
             return ""
-        # @멘션
+        # @mention
         at_ctx = get_at_context(text)
         if at_ctx:
             _, _, candidates = at_ctx
@@ -125,8 +125,8 @@ class ChatScreen(Screen):
         return ""
 
     def refresh_data(self, flash: str = "") -> None:
-        """폴링 데이터로 화면 갱신 — 각 섹션 독립적으로 보호"""
-        # 메시지 업데이트 최우선
+        """Refresh screen with polled data -- each section protected independently."""
+        # Message update highest priority
         try:
             messages = poll_chat_messages()
             msg_view = self.query_one("#chat-messages", MessageView)
@@ -134,7 +134,7 @@ class ChatScreen(Screen):
         except Exception:
             pass
 
-        # 에이전트 상태 (실패해도 무시)
+        # Agent status (ignore on failure)
         try:
             status = load_agent_status()
             pm_status = status.get("pm", {}).get("status", "idle")
@@ -145,7 +145,7 @@ class ChatScreen(Screen):
         except Exception:
             pass
 
-        # 상태바
+        # Status bar
         if flash:
             try:
                 status_bar = self.query_one("#chat-status-bar", Static)
@@ -154,6 +154,6 @@ class ChatScreen(Screen):
                 pass
 
     def clear_flash(self) -> None:
-        """flash 메시지 클리어"""
+        """Clear flash message."""
         status_bar = self.query_one("#chat-status-bar", Static)
         status_bar.update(self._status_bar_text())
