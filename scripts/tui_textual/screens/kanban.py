@@ -198,11 +198,25 @@ class KanbanScreen(Screen):
             except Exception:
                 pass
 
+    def _get_card_width(self) -> int:
+        """컬럼 body 위젯의 실제 content 폭에서 카드 텍스트 폭 계산."""
+        try:
+            # VerticalScroll (kanban-col-body) 의 content 영역 폭
+            body_scroll = self.query_one("#kbody-todo").parent
+            # content_region = 패딩·스크롤바 제외한 실제 콘텐츠 영역
+            w = body_scroll.content_region.width
+            # 카드 테두리 "│ " = 2셀 제외
+            return max(w - 2, 8)
+        except Exception:
+            return 14
+
     def _render_columns(self, status: dict) -> None:
         """각 컬럼 위젯에 데이터 렌더링"""
         kanban = status.get("kanban", {})
         tasks = kanban.get("tasks", [])
         skills = status.get("automations", {})
+
+        card_w = self._get_card_width()
 
         # 컬럼별 카드 텍스트 수집
         groups: dict[str, list[str]] = {key: [] for key, _, _ in _COLUMNS}
@@ -222,7 +236,7 @@ class KanbanScreen(Screen):
             sched = sk.get("schedule", "")
             sched_s = f" {sched}" if sched else ""
             runs = sk.get("run_count", 0)
-            short_name = _trunc(name, 10)
+            short_name = _trunc(name, card_w - 6)  # sid+icon 공간 제외
             lines = [
                 f"[{bc_auto}]\u256d\u2500[/{bc_auto}]",
                 f"[{bc_auto}]\u2502[/{bc_auto}] [bold cyan]{sid}[/bold cyan] {icon} [bold]{short_name}[/bold]",
@@ -255,11 +269,10 @@ class KanbanScreen(Screen):
             # ID + 아이콘 접두어 폭 계산 후 제목 줄바꿈
             id_label = f"[bold cyan]{sid}[/bold cyan] " if sid else ""
             prefix_icon = "[dim]\u2713[/dim] " if col == "done" else ""
-            # ID(ex: "K1 ")=4cells + 아이콘("✓ ")=2cells → 첫줄은 좁고 둘째줄은 넓음
             id_cells = _cell_width(sid) + 1 if sid else 0  # +1 for space
             icon_cells = 2 if col == "done" else 0
-            first_line_max = 14 - id_cells - icon_cells
-            cont_line_max = 14
+            first_line_max = card_w - id_cells - icon_cells
+            cont_line_max = card_w - 1  # 들여쓰기 1칸
 
             title_lines = _wrap_lines(raw_title, first_line_max, max_lines=1)
             if _cell_width(raw_title) > first_line_max:
