@@ -92,10 +92,9 @@ class ChatScreen(Screen):
             hint_widget.update("")
             hint_widget.remove_class("has-hint")
 
-    # 커맨드 카테고리 (힌트 표시용)
+    # 커맨드 카테고리 (힌트 표시용 — 칸반 명령어는 칸반 탭에 있으므로 제외)
     _CMD_GROUPS = [
         ("제어", ["stop", "resume", "doctor"]),
-        ("칸반", ["done", "clean", "del", "move", "merge", "info"]),
         ("팀", ["squid", "kraken", "endsquad"]),
         ("기타", ["skill", "dashboard"]),
     ]
