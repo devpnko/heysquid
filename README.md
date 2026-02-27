@@ -24,23 +24,29 @@ Most AI coding tools wait for you to sit at a computer. heysquid works while you
 ## Quick Start
 
 ```bash
-pip install heysquid              # Core (Telegram)
-pip install 'heysquid[slack]'     # + Slack support
-pip install 'heysquid[discord]'   # + Discord support
-pip install 'heysquid[all]'       # Everything
+# 1. Prerequisites (skip if already installed)
+brew install node              # Node.js (required for Claude Code CLI)
+npm install -g @anthropic-ai/claude-code   # Claude Code CLI
 
-heysquid init       # Interactive setup wizard
+# 2. Install heysquid
+pip3 install heysquid          # Core (Telegram)
+
+# 3. Setup & run
+heysquid init       # Interactive setup wizard (Telegram token required)
 heysquid start      # Start the daemon
 ```
 
-That's it. Send a message to your bot and start working.
+That's it. Send a message to your Telegram bot and start working.
+
+> **First time?** See the **[detailed Getting Started guide](docs/getting-started.md)** — covers every step from installing Homebrew/Node.js/Python to your first message.
 
 ### Prerequisites
 
-- **macOS** (launchd-based daemon; Linux support planned)
-- **Python 3.10+**
-- **Claude Code CLI** — [Install guide](https://docs.anthropic.com/en/docs/claude-code)
-- **Claude Max subscription** — No additional API costs ($0 beyond subscription)
+- **macOS** (launchd daemon; Windows users: use [WSL2](docs/getting-started.md#windows에서-사용하고-싶어요))
+- **Node.js 18+** — Required for Claude Code CLI (`brew install node`)
+- **Python 3.10+** — Runtime (`brew install python@3.12`)
+- **Claude Code CLI** — `npm install -g @anthropic-ai/claude-code`
+- **Claude Max subscription** — Recommended ($100/mo, unlimited). Claude Pro ($20/mo) works with daily limits.
 - **Telegram bot token** — Get one from [@BotFather](https://t.me/BotFather)
 
 ## How It Works
