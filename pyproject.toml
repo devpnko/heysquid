@@ -9,6 +9,22 @@ description = "Your personal PM agent — Telegram-connected project manager"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"
+authors = [
+    {name = "Sanghyuk Yoon"},
+]
+keywords = ["ai", "agent", "telegram", "project-manager", "claude", "automation"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+]
 dependencies = [
     "python-telegram-bot>=20.0",
     "python-dotenv>=1.0.0",
@@ -22,6 +38,12 @@ dashboard = ["playwright>=1.40.0"]
 trading = ["ccxt>=4.0.0", "pandas>=2.0.0", "ta>=0.10.0"]
 tui = ["textual>=0.40.0"]
 all = ["heysquid[slack,discord,dashboard,tui]"]
+
+[project.urls]
+Homepage = "https://github.com/devpnko/heysquid"
+Repository = "https://github.com/devpnko/heysquid"
+Documentation = "https://github.com/devpnko/heysquid/tree/main/docs"
+Issues = "https://github.com/devpnko/heysquid/issues"
 
 [project.scripts]
 heysquid = "heysquid.core.cli:main"
