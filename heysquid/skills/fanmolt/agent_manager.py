@@ -7,6 +7,7 @@ import uuid
 from pathlib import Path
 from datetime import datetime
 
+from ...core.http_utils import http_get
 from .api_client import FanMoltClient, register_agent
 
 logger = logging.getLogger(__name__)
@@ -49,14 +50,36 @@ def save_agent(handle: str, data: dict) -> None:
     )
 
 
+def _fetch_blueprint(template: str | dict) -> dict | None:
+    """Blueprint 로드. 문자열이면 원격 fetch, dict이면 그대로 반환."""
+    if isinstance(template, dict):
+        return template
+    if isinstance(template, str):
+        url = f"https://fanmolt.com/blueprints/{template}.json"
+        try:
+            return http_get(url)
+        except Exception as e:
+            logger.warning("Blueprint fetch 실패 (%s): %s", url, e)
+            return None
+    return None
+
+
 def create_agent(name: str, description: str, category: str = "build",
-                 persona: str = "", tags: list = None) -> dict:
+                 persona: str = "", tags: list = None,
+                 blueprint_template: str | dict = None) -> dict:
     """새 에이전트 등록 → API key 발급 → 로컬 설정 저장."""
     handle = _to_handle(name)
 
     # 중복 체크
     if _agent_path(handle).exists():
         return {"ok": False, "error": f"이미 존재: {handle}"}
+
+    # Blueprint 로드
+    blueprint = None
+    if blueprint_template:
+        blueprint = _fetch_blueprint(blueprint_template)
+        if not blueprint:
+            return {"ok": False, "error": f"Blueprint 로드 실패: {blueprint_template}"}
 
     # FanMolt 등록
     try:
@@ -66,6 +89,7 @@ def create_agent(name: str, description: str, category: str = "build",
             description=description,
             tags=tags or [],
             category=category,
+            blueprint=blueprint,
         )
     except Exception as e:
         return {"ok": False, "error": f"등록 실패: {e}"}
@@ -74,6 +98,12 @@ def create_agent(name: str, description: str, category: str = "build",
     api_key = agent_data.get("api_key", "")
     if not api_key:
         return {"ok": False, "error": "API key 발급 실패"}
+
+    # Blueprint에서 persona 동기화
+    if blueprint:
+        bp_persona = blueprint.get("persona", {}).get("system_prompt", "")
+        if bp_persona:
+            persona = bp_persona
 
     # 프로필 업데이트
     if persona or description:
@@ -101,6 +131,9 @@ def create_agent(name: str, description: str, category: str = "build",
         "last_heartbeat_at": None,
         "stats": {"posts": 0, "comments": 0, "replies": 0},
     }
+    if blueprint:
+        config["blueprint"] = blueprint
+        config["recipe_states"] = {}
     save_agent(handle, config)
 
     return {"ok": True, "handle": handle, "name": name}
@@ -125,6 +158,35 @@ def delete_agent(handle: str) -> bool:
         return False
     path.unlink()
     return True
+
+
+def apply_blueprint(handle: str, template: str | dict) -> dict:
+    """기존 에이전트에 blueprint 적용 (PUT /agents/me + 로컬 업데이트)."""
+    agent = load_agent(handle)
+    if not agent:
+        return {"ok": False, "error": f"에이전트 없음: {handle}"}
+
+    blueprint = _fetch_blueprint(template)
+    if not blueprint:
+        return {"ok": False, "error": f"Blueprint 로드 실패: {template}"}
+
+    # 서버 업데이트
+    try:
+        client = FanMoltClient(agent["api_key"])
+        client.update_me(blueprint=blueprint)
+    except Exception as e:
+        return {"ok": False, "error": f"서버 업데이트 실패: {e}"}
+
+    # 로컬 업데이트
+    agent["blueprint"] = blueprint
+    agent["recipe_states"] = agent.get("recipe_states", {})
+    bp_persona = blueprint.get("persona", {}).get("system_prompt", "")
+    if bp_persona:
+        agent["persona"] = bp_persona
+    save_agent(handle, agent)
+
+    recipe_names = [r["name"] for r in blueprint.get("recipes", [])]
+    return {"ok": True, "handle": handle, "recipes": recipe_names}
 
 
 def get_stats() -> dict:

@@ -2,7 +2,7 @@
 
 import logging
 
-from ...core.http_utils import http_get, http_post_json, http_put_json, get_secret
+from ...core.http_utils import http_get, http_get_text, http_post_json, http_put_json, get_secret
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +25,10 @@ class FanMoltClient:
 
     def get_me(self) -> dict:
         return http_get(f"{self.base}/agents/me", token=self.api_key)
+
+    def get_instructions(self) -> str:
+        """Blueprint → 마크다운 지시문 조회 (text/markdown 응답)."""
+        return http_get_text(f"{self.base}/agents/me/instructions", token=self.api_key)
 
     def update_me(self, **fields) -> dict:
         return http_put_json(
@@ -74,7 +78,8 @@ class FanMoltClient:
         return resp.get("notifications", [])
 
 
-def register_agent(name: str, handle: str, description: str, tags: list = None, category: str = "build") -> dict:
+def register_agent(name: str, handle: str, description: str, tags: list = None,
+                    category: str = "build", blueprint: dict = None) -> dict:
     """새 에이전트 등록 (인증 불필요). API key를 반환."""
     base = _base_url()
     payload = {
@@ -86,4 +91,6 @@ def register_agent(name: str, handle: str, description: str, tags: list = None, 
         "category": category,
         "framework": "heysquid",
     }
+    if blueprint:
+        payload["blueprint"] = blueprint
     return http_post_json(f"{base}/agents/register", payload=payload)

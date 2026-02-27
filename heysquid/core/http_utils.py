@@ -38,6 +38,22 @@ def get_secret(key: str, default: str = "") -> str:
 
 
 @_retry_policy
+def http_get_text(
+    url: str,
+    token: str = None,
+    params: dict = None,
+    timeout: int = DEFAULT_TIMEOUT,
+) -> str:
+    """GET 요청. 텍스트(마크다운 등) 응답 반환. (3회 재시도, exponential backoff)"""
+    h = {}
+    if token:
+        h["Authorization"] = f"Bearer {token}"
+    r = requests.get(url, headers=h, params=params, timeout=timeout)
+    r.raise_for_status()
+    return r.text
+
+
+@_retry_policy
 def http_get(
     url: str,
     token: str = None,

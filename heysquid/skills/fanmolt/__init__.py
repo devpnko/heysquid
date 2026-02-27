@@ -5,12 +5,14 @@ SQUID가 FanMolt 에이전트를 관리하는 리모컨.
 오너는 persona만 정의, 나머지는 SQUID가 heartbeat 돌림.
 
 사용법:
-    fanmolt create <이름> <설명>   — 에이전트 등록
-    fanmolt list                  — 목록
-    fanmolt stats                 — 통계
-    fanmolt beat [이름]           — heartbeat 1사이클
-    fanmolt post <이름>           — 글 1개 작성
-    fanmolt del <이름>            — 삭제
+    fanmolt create <이름> <설명>          — 에이전트 등록
+    fanmolt list                         — 목록
+    fanmolt stats                        — 통계
+    fanmolt beat [이름]                  — heartbeat 1사이클
+    fanmolt post <이름> [레시피명]        — 글 1개 작성
+    fanmolt blueprint <이름> <템플릿>     — Blueprint 적용
+    fanmolt instructions <이름>           — 지시문 조회
+    fanmolt del <이름>                   — 삭제
 """
 
 SKILL_META = {
@@ -57,17 +59,23 @@ def execute(**kwargs) -> dict:
         return _cmd_beat(cmd_args, chat_id)
     elif cmd == "post":
         return _cmd_post(cmd_args, chat_id)
+    elif cmd == "blueprint":
+        return _cmd_blueprint(cmd_args, chat_id)
+    elif cmd == "instructions":
+        return _cmd_instructions(cmd_args, chat_id)
     elif cmd == "del":
         return _cmd_del(cmd_args, chat_id)
     else:
         msg = (
             "fanmolt 명령어:\n"
-            "  create <이름> <설명>  — 에이전트 등록\n"
-            "  list                 — 목록\n"
-            "  stats                — 통계\n"
-            "  beat [이름]          — heartbeat\n"
-            "  post <이름>          — 글 작성\n"
-            "  del <이름>           — 삭제"
+            "  create <이름> <설명>          — 에이전트 등록\n"
+            "  list                         — 목록\n"
+            "  stats                        — 통계\n"
+            "  beat [이름]                  — heartbeat\n"
+            "  post <이름> [레시피명]        — 글 작성\n"
+            "  blueprint <이름> <템플릿>     — Blueprint 적용\n"
+            "  instructions <이름>           — 지시문 조회\n"
+            "  del <이름>                   — 삭제"
         )
         _send_telegram(chat_id, msg)
         return {"ok": True, "message": msg}
@@ -138,13 +146,58 @@ def _cmd_beat(args: str, chat_id: int) -> dict:
 def _cmd_post(args: str, chat_id: int) -> dict:
     from .heartbeat_runner import force_post
 
-    handle = args.strip()
-    if not handle:
-        return {"ok": False, "error": "사용법: fanmolt post <이름>"}
-    result = force_post(handle)
-    msg = f"✅ {handle} 글 작성 완료" if result.get("ok") else f"❌ {result.get('error')}"
+    parts = args.strip().split(None, 1)
+    if not parts:
+        return {"ok": False, "error": "사용법: fanmolt post <이름> [레시피명]"}
+    handle = parts[0]
+    recipe_name = parts[1] if len(parts) > 1 else None
+    result = force_post(handle, recipe_name=recipe_name)
+    label = f"{handle}" + (f" ({recipe_name})" if recipe_name else "")
+    msg = f"✅ {label} 글 작성 완료" if result.get("ok") else f"❌ {result.get('error')}"
     _send_telegram(chat_id, msg)
     return result
+
+
+def _cmd_blueprint(args: str, chat_id: int) -> dict:
+    from .agent_manager import apply_blueprint
+
+    parts = args.strip().split(None, 1)
+    if len(parts) < 2:
+        return {"ok": False, "error": "사용법: fanmolt blueprint <이름> <템플릿>"}
+    handle, template_name = parts[0], parts[1]
+    result = apply_blueprint(handle, template_name)
+    if result.get("ok"):
+        recipes = ", ".join(result.get("recipes", []))
+        msg = f"✅ {handle}에 Blueprint 적용 완료\n레시피: {recipes}"
+    else:
+        msg = f"❌ {result.get('error')}"
+    _send_telegram(chat_id, msg)
+    return result
+
+
+def _cmd_instructions(args: str, chat_id: int) -> dict:
+    from .agent_manager import load_agent
+    from .api_client import FanMoltClient
+
+    handle = args.strip()
+    if not handle:
+        return {"ok": False, "error": "사용법: fanmolt instructions <이름>"}
+    agent = load_agent(handle)
+    if not agent:
+        return {"ok": False, "error": f"에이전트 없음: {handle}"}
+
+    try:
+        client = FanMoltClient(agent["api_key"])
+        md = client.get_instructions()
+        # 텔레그램 메시지 길이 제한 (4096자)
+        if len(md) > 4000:
+            md = md[:4000] + "\n\n... (잘림)"
+        _send_telegram(chat_id, md)
+        return {"ok": True, "length": len(md)}
+    except Exception as e:
+        msg = f"❌ 지시문 조회 실패: {e}"
+        _send_telegram(chat_id, msg)
+        return {"ok": False, "error": str(e)}
 
 
 def _cmd_del(args: str, chat_id: int) -> dict:

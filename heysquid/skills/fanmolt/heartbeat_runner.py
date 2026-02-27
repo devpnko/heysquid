@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 
 from .agent_manager import load_agent, save_agent, list_agents
 from .api_client import FanMoltClient
-from .content_gen import generate_post, generate_reply, generate_comment
+from .content_gen import generate_post, generate_post_from_recipe, generate_reply, generate_comment
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +34,40 @@ def _hours_since(iso_str: str | None) -> float:
         return 999
 
 
+# 트리거별 최소 간격 (시간)
+_TRIGGER_INTERVALS = {
+    "daily": 20,       # ~1일 (여유분)
+    "weekly": 160,     # ~7일 (여유분)
+    "every_4h": 4,
+}
+
+
+def _get_due_recipes(agent: dict) -> list[dict]:
+    """blueprint.recipes 중 실행할 시간이 된 레시피 목록 반환."""
+    blueprint = agent.get("blueprint")
+    if not blueprint:
+        return []
+
+    recipe_states = agent.get("recipe_states", {})
+    due = []
+
+    for recipe in blueprint.get("recipes", []):
+        trigger = recipe.get("trigger", "on_demand")
+        if trigger == "on_demand":
+            continue
+
+        interval = _TRIGGER_INTERVALS.get(trigger)
+        if interval is None:
+            continue
+
+        state = recipe_states.get(recipe["name"], {})
+        last_run = state.get("last_run")
+        if _hours_since(last_run) >= interval:
+            due.append(recipe)
+
+    return due
+
+
 def run_heartbeat(handle: str) -> dict:
     """에이전트 1명의 heartbeat 1사이클.
 
@@ -45,11 +79,14 @@ def run_heartbeat(handle: str) -> dict:
 
     client = FanMoltClient(agent["api_key"])
     persona = agent.get("persona", "")
+    blueprint = agent.get("blueprint")
+    engagement = blueprint.get("engagement", {}) if blueprint else {}
     result = {"handle": handle, "replies": 0, "comments": 0, "posted": False}
 
     llm_failed = False
 
     # 1. 알림 확인 → 댓글 답변 (최우선, MAX_REPLIES_PER_BEAT 상한)
+    reply_style = engagement.get("reply_style")
     try:
         last_noti_id = agent.get("last_notification_id")
         noti_params = {"since": agent.get("last_heartbeat_at")}
@@ -65,7 +102,7 @@ def run_heartbeat(handle: str) -> dict:
                 break
             if n.get("type") in ("comment.created", "comment.reply"):
                 try:
-                    reply = generate_reply(persona, n)
+                    reply = generate_reply(persona, n, reply_style=reply_style)
                     client.create_comment(n["post_id"], reply, parent_id=n.get("comment_id"))
                     replied += 1
                     time.sleep(MIN_COMMENT_INTERVAL_SEC)
@@ -83,6 +120,7 @@ def run_heartbeat(handle: str) -> dict:
         logger.warning("알림 조회 실패: %s", e)
 
     # 2. 피드 탐색 → 댓글 달기 (이미 댓글 단 포스트 스킵)
+    engage_topics = engagement.get("engage_topics")
     if not llm_failed:
         try:
             feed = client.get_feed(sort="new", limit=15)
@@ -99,7 +137,7 @@ def run_heartbeat(handle: str) -> dict:
                 if post_id in commented_posts:
                     continue
                 try:
-                    comment = generate_comment(persona, post)
+                    comment = generate_comment(persona, post, engage_topics=engage_topics)
                     if comment:
                         client.create_comment(post_id, comment)
                         commented += 1
@@ -121,13 +159,37 @@ def run_heartbeat(handle: str) -> dict:
     if not llm_failed and _hours_since(agent.get("last_post_at")) >= MIN_POST_INTERVAL_HOURS:
         try:
             prev_titles = _get_prev_titles(client)
-            post_data = generate_post(persona, agent.get("category", "build"), prev_titles)
-            # post_ratio_free 적용 (LLM 판단 대신 확률 기반)
-            ratio = agent.get("post_ratio_free", 70)
-            post_data["is_free"] = random.random() * 100 < ratio
-            client.create_post(**post_data)
-            result["posted"] = True
-            agent["last_post_at"] = _now()
+            due_recipes = _get_due_recipes(agent)
+
+            if due_recipes:
+                # Blueprint 모드: due 레시피 순차 실행
+                rules = blueprint.get("rules") if blueprint else None
+                recipe_states = agent.get("recipe_states", {})
+                for recipe in due_recipes:
+                    try:
+                        post_data = generate_post_from_recipe(
+                            persona, recipe, rules=rules, prev_titles=prev_titles,
+                        )
+                        client.create_post(**post_data)
+                        recipe_states.setdefault(recipe["name"], {})["last_run"] = _now()
+                        result["posted"] = True
+                        agent["last_post_at"] = _now()
+                        prev_titles.append(post_data.get("title", ""))
+                    except RuntimeError:
+                        llm_failed = True
+                        logger.warning("%s: LLM 불가 — 레시피 %s 스킵", handle, recipe["name"])
+                        break
+                    except Exception as e:
+                        logger.warning("레시피 %s 실행 실패: %s", recipe["name"], e)
+                agent["recipe_states"] = recipe_states
+            else:
+                # 기존 모드: blueprint 없거나 due 레시피 없음
+                post_data = generate_post(persona, agent.get("category", "build"), prev_titles)
+                ratio = agent.get("post_ratio_free", 70)
+                post_data["is_free"] = random.random() * 100 < ratio
+                client.create_post(**post_data)
+                result["posted"] = True
+                agent["last_post_at"] = _now()
         except RuntimeError:
             llm_failed = True
             logger.warning("%s: LLM 불가 — 글 작성 스킵", handle)
@@ -185,18 +247,35 @@ def run_due_agents() -> list[dict]:
     return results
 
 
-def force_post(handle: str) -> dict:
-    """쿨다운 무시, 즉시 글 1개 작성."""
+def force_post(handle: str, recipe_name: str = None) -> dict:
+    """쿨다운 무시, 즉시 글 1개 작성. recipe_name 지정 시 해당 레시피로 생성."""
     agent = load_agent(handle)
     if not agent:
         return {"ok": False, "error": f"에이전트 없음: {handle}"}
 
     client = FanMoltClient(agent["api_key"])
     persona = agent.get("persona", "")
+    blueprint = agent.get("blueprint")
 
     try:
         prev_titles = _get_prev_titles(client)
-        post_data = generate_post(persona, agent.get("category", "build"), prev_titles)
+
+        if recipe_name and blueprint:
+            # 특정 레시피로 생성
+            recipes = {r["name"]: r for r in blueprint.get("recipes", [])}
+            recipe = recipes.get(recipe_name)
+            if not recipe:
+                available = ", ".join(recipes.keys()) or "없음"
+                return {"ok": False, "error": f"레시피 '{recipe_name}' 없음. 사용 가능: {available}"}
+            rules = blueprint.get("rules")
+            post_data = generate_post_from_recipe(persona, recipe, rules=rules, prev_titles=prev_titles)
+            # recipe_states 업데이트
+            recipe_states = agent.get("recipe_states", {})
+            recipe_states.setdefault(recipe_name, {})["last_run"] = _now()
+            agent["recipe_states"] = recipe_states
+        else:
+            post_data = generate_post(persona, agent.get("category", "build"), prev_titles)
+
         resp = client.create_post(**post_data)
         agent["last_post_at"] = _now()
         stats = agent.get("stats", {})
