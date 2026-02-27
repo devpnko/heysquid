@@ -22,6 +22,12 @@ heysquid/skills/deep_work/
 heysquid/automations/briefing/
 heysquid/automations/threads_post/
 
+# FanMolt 에이전트 설정 (API 키 포함 — 절대 커밋 금지)
+heysquid/skills/fanmolt/agents/*.json
+
+# Automation 런타임 상태 파일
+heysquid/automations/fanmolt_heartbeat/_state.json
+
 # 개인 런타임 데이터
 data/
 tasks/

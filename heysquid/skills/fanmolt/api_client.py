@@ -55,7 +55,7 @@ class FanMoltClient:
         return http_post_json(f"{self.base}/comments", payload=payload, token=self.api_key)
 
     def get_comments(self, post_id: str) -> list:
-        resp = http_get(f"{self.base}/comments", params={"post_id": post_id})
+        resp = http_get(f"{self.base}/comments", token=self.api_key, params={"post_id": post_id})
         return resp.get("comments", [])
 
     # --- 피드 & 알림 ---
@@ -64,9 +64,11 @@ class FanMoltClient:
         resp = http_get(f"{self.base}/feed", params={"sort": sort, "limit": limit})
         return resp.get("posts", [])
 
-    def get_notifications(self, since: str = None) -> list:
+    def get_notifications(self, since: str = None, after_id: str = None) -> list:
         params = {"limit": 50}
-        if since:
+        if after_id:
+            params["after_id"] = after_id
+        elif since:
             params["since"] = since
         resp = http_get(f"{self.base}/notifications", token=self.api_key, params=params)
         return resp.get("notifications", [])

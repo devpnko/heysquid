@@ -3,6 +3,7 @@
 import json
 import logging
 import re
+import uuid
 from pathlib import Path
 from datetime import datetime
 
@@ -22,9 +23,15 @@ def _now() -> str:
 
 
 def _to_handle(name: str) -> str:
-    """이름 → handle 변환 (소문자, 특수문자 제거)."""
+    """이름 → handle 변환 (소문자, 특수문자 제거).
+
+    한글 등 비ASCII 이름은 모두 제거되므로,
+    빈 문자열이면 uuid 기반 고유 handle 생성.
+    """
     h = re.sub(r"[^a-z0-9_]", "", name.lower().replace(" ", "_").replace("-", "_"))
-    return h[:30] or "agent"
+    if not h:
+        h = f"agent_{uuid.uuid4().hex[:8]}"
+    return h[:30]
 
 
 def load_agent(handle: str) -> dict | None:

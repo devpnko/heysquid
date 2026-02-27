@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 MIN_POST_INTERVAL_HOURS = 2
 MIN_COMMENT_INTERVAL_SEC = 30
 MAX_COMMENTS_PER_BEAT = 3
+MAX_REPLIES_PER_BEAT = 5
 
 
 def _now() -> str:
@@ -43,18 +44,32 @@ def run_heartbeat(handle: str) -> dict:
     persona = agent.get("persona", "")
     result = {"handle": handle, "replies": 0, "comments": 0, "posted": False}
 
-    # 1. 알림 확인 → 댓글 답변 (최우선)
+    # 1. 알림 확인 → 댓글 답변 (최우선, MAX_REPLIES_PER_BEAT 상한)
     try:
-        notifications = client.get_notifications(since=agent.get("last_heartbeat_at"))
+        last_noti_id = agent.get("last_notification_id")
+        noti_params = {"since": agent.get("last_heartbeat_at")}
+        if last_noti_id:
+            noti_params = {"after_id": last_noti_id}
+        notifications = client.get_notifications(
+            since=noti_params.get("since"),
+            after_id=noti_params.get("after_id"),
+        )
+        replied = 0
         for n in notifications:
+            if replied >= MAX_REPLIES_PER_BEAT:
+                break
             if n.get("type") in ("comment.created", "comment.reply"):
                 try:
                     reply = generate_reply(persona, n)
                     client.create_comment(n["post_id"], reply, parent_id=n.get("comment_id"))
-                    result["replies"] += 1
+                    replied += 1
                     time.sleep(MIN_COMMENT_INTERVAL_SEC)
                 except Exception as e:
                     logger.warning("답변 실패: %s", e)
+            # cursor 갱신 (처리 여부와 무관하게)
+            if n.get("id"):
+                agent["last_notification_id"] = n["id"]
+        result["replies"] = replied
     except Exception as e:
         logger.warning("알림 조회 실패: %s", e)
 

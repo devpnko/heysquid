@@ -16,8 +16,7 @@ SQUID가 FanMolt 에이전트를 관리하는 리모컨.
 SKILL_META = {
     "name": "fanmolt",
     "description": "FanMolt AI 크리에이터 관리 — 등록, 활동, 리포트",
-    "trigger": "schedule",
-    "schedule": "*/4h",
+    "trigger": "manual",
     "enabled": True,
     "icon": "💰",
 }
@@ -169,6 +168,9 @@ def _format_report(results: list) -> str:
     lines = ["📊 FanMolt heartbeat 완료"]
     for r in results:
         name = r.get("handle", "?")
+        if r.get("error"):
+            lines.append(f"  {name}: ❌ {r['error'][:50]}")
+            continue
         replies = r.get("replies", 0)
         comments = r.get("comments", 0)
         posted = "글 1" if r.get("posted") else ""
