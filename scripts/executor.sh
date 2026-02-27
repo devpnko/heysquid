@@ -42,7 +42,13 @@ log() {
 # PID 파일 불필요, 어떤 환경에서든 동작.
 
 kill_all_pm() {
-    # 1차: caffeinate → 부모(claude) 찾아서 kill
+    # 1차: PID 파일 (가장 확실 — orphan claude도 잡음)
+    if [ -f "$PIDFILE" ]; then
+        while IFS= read -r OLD_PID; do
+            [ -n "$OLD_PID" ] && kill "$OLD_PID" 2>/dev/null && log "[KILL] PID=$OLD_PID (from pidfile)"
+        done < "$PIDFILE"
+    fi
+    # 2차: caffeinate → 부모(claude) 찾아서 kill
     local CAFE_PIDS
     CAFE_PIDS=$(pgrep -f "caffeinate.*append-system-prompt-file" 2>/dev/null || true)
     if [ -n "$CAFE_PIDS" ]; then
@@ -53,17 +59,17 @@ kill_all_pm() {
             kill "$CPID" 2>/dev/null && log "[KILL] caffeinate PID=$CPID"
         done
     fi
-    # 2차: pgrep 패턴 (append-system-prompt-file)
+    # 3차: pgrep 패턴 (append-system-prompt-file)
     pkill -f "append-system-prompt-file" 2>/dev/null || true
-    # 3차: PID 파일 fallback
+    sleep 2
+    # force kill (-9): PID 파일 + caffeinate 패턴
     if [ -f "$PIDFILE" ]; then
         while IFS= read -r OLD_PID; do
-            [ -n "$OLD_PID" ] && kill "$OLD_PID" 2>/dev/null && log "[KILL] PID=$OLD_PID (from pidfile)"
+            if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" 2>/dev/null; then
+                kill -9 "$OLD_PID" 2>/dev/null && log "[KILL-9] PID=$OLD_PID (from pidfile)"
+            fi
         done < "$PIDFILE"
-        rm -f "$PIDFILE"
     fi
-    sleep 2
-    # force kill: 같은 순서로 -9
     CAFE_PIDS=$(pgrep -f "caffeinate.*append-system-prompt-file" 2>/dev/null || true)
     if [ -n "$CAFE_PIDS" ]; then
         for CPID in $CAFE_PIDS; do
@@ -74,10 +80,38 @@ kill_all_pm() {
         done
     fi
     pkill -9 -f "append-system-prompt-file" 2>/dev/null || true
+    # 확인 후 PID 파일 삭제 (죽었는지 검증)
+    if [ -f "$PIDFILE" ]; then
+        local SURVIVOR=0
+        while IFS= read -r OLD_PID; do
+            if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" 2>/dev/null; then
+                log "[WARN] PM survived kill: PID=$OLD_PID"
+                SURVIVOR=1
+            fi
+        done < "$PIDFILE"
+        if [ "$SURVIVOR" -eq 0 ]; then
+            rm -f "$PIDFILE"
+        else
+            log "[ERROR] Some PM processes survived! PID file retained."
+        fi
+    fi
 }
 
 is_pm_alive() {
-    pgrep -f "caffeinate.*append-system-prompt-file" > /dev/null 2>&1
+    # 1차: caffeinate 패턴 (정상 상태)
+    if pgrep -f "caffeinate.*append-system-prompt-file" > /dev/null 2>&1; then
+        return 0
+    fi
+    # 2차: PID 파일 (caffeinate 죽고 claude만 orphan으로 남은 경우)
+    if [ -f "$PIDFILE" ]; then
+        while IFS= read -r OLD_PID; do
+            if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" 2>/dev/null; then
+                log "[WARN] Orphan PM detected: PID=$OLD_PID (no caffeinate)"
+                return 0
+            fi
+        done < "$PIDFILE"
+    fi
+    return 1
 }
 
 # ========================================
@@ -86,8 +120,10 @@ is_pm_alive() {
 cleanup() {
     local exit_code=${?:-0}
     log "[CLEANUP] executor.sh exiting (code=$exit_code)"
-    # stream_viewer 정리 (독립 프로세스)
+    # stream_viewer + tail 정리 (이 세션이 spawn한 것 + 고아 프로세스 모두)
     [ -n "${VIEWER_PID:-}" ] && kill "$VIEWER_PID" 2>/dev/null || true
+    pkill -f "stream_viewer.py" 2>/dev/null || true
+    pkill -f "tail.*executor.stream" 2>/dev/null || true
     kill_all_pm
     rm -f "$LOCKFILE" "$EXECUTOR_PIDFILE" 2>/dev/null
     log "[CLEANUP] Done."
@@ -121,6 +157,24 @@ log "CWD=$(pwd)"
 # executor.sh 자신의 PID 기록 (trigger_executor의 dedup 체크에 사용)
 echo $$ > "$EXECUTOR_PIDFILE"
 log "[INFO] executor.pid=$$"
+
+# ========================================
+# 좀비 stream_viewer / tail 정리
+# ========================================
+# 이전 세션의 stream_viewer가 남아있으면 old code로 agent_status.json을 오염시킴
+ZOMBIE_VIEWERS=$(pgrep -f "stream_viewer.py" 2>/dev/null || true)
+if [ -n "$ZOMBIE_VIEWERS" ]; then
+    for ZPID in $ZOMBIE_VIEWERS; do
+        kill "$ZPID" 2>/dev/null && log "[CLEANUP] Killed zombie stream_viewer PID=$ZPID"
+    done
+    sleep 1
+fi
+ZOMBIE_TAILS=$(pgrep -f "tail.*executor.stream" 2>/dev/null || true)
+if [ -n "$ZOMBIE_TAILS" ]; then
+    for ZPID in $ZOMBIE_TAILS; do
+        kill "$ZPID" 2>/dev/null && log "[CLEANUP] Killed zombie tail PID=$ZPID"
+    done
+fi
 
 # ========================================
 # 프로세스 중복 실행 방지
