@@ -2,10 +2,14 @@
 """Dashboard HTTP server with Save API endpoints."""
 
 from http.server import HTTPServer, SimpleHTTPRequestHandler
+from socketserver import ThreadingMixIn
 import base64
 import json
 import os
+import sys
 import threading
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data')
 WS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'workspaces')
@@ -25,17 +29,23 @@ class DashboardHandler(SimpleHTTPRequestHandler):
     def do_POST(self):
         if self.path == '/api/save-workspace':
             content = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
-            self._update_agent_status('workspaces', content)
+            from heysquid.dashboard._store import store as _store
+            _store.modify("workspaces", lambda data: content)
             self._respond(200, {'ok': True})
 
         elif self.path == '/api/kanban/feedback':
             content = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
             task_id = content.get('task_id', '')
             message = content.get('message', '')
+            title = content.get('title', '')
             if not task_id or not message:
                 self._respond(400, {'error': 'task_id and message required'})
                 return
-            self._kanban_add_activity(task_id, 'pm', message)
+            from heysquid.dashboard.kanban import add_kanban_activity
+            add_kanban_activity(task_id, 'pm', message)
+            # messages.json 주입 → PM 세션 트리거
+            from heysquid.channels.dashboard import inject_feedback
+            inject_feedback(message, task_title=title, task_id=task_id)
             self._respond(200, {'ok': True})
 
         elif self.path == '/api/kanban/delete':
@@ -44,8 +54,20 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             if not task_id:
                 self._respond(400, {'error': 'task_id required'})
                 return
-            deleted = self._kanban_delete(task_id)
+            from heysquid.dashboard.kanban import delete_kanban_task
+            deleted = delete_kanban_task(task_id)
             self._respond(200, {'ok': True, 'deleted': deleted})
+
+        elif self.path == '/api/kanban/merge':
+            content = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+            source_id = content.get('source_id', '')
+            target_id = content.get('target_id', '')
+            if not source_id or not target_id:
+                self._respond(400, {'error': 'source_id and target_id required'})
+                return
+            from heysquid.dashboard.kanban import merge_kanban_tasks
+            merged = merge_kanban_tasks(source_id, target_id)
+            self._respond(200, {'ok': True, 'merged': merged})
 
         elif self.path == '/api/kanban/move':
             content = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
@@ -54,7 +76,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             if not task_id or not column:
                 self._respond(400, {'error': 'task_id and column required'})
                 return
-            moved = self._kanban_move(task_id, column)
+            from heysquid.dashboard.kanban import move_kanban_task
+            moved = move_kanban_task(task_id, column)
             self._respond(200, {'ok': True, 'moved': moved})
 
         elif self.path == '/api/automation/config':
@@ -125,30 +148,57 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             try:
                 with open(status_path, 'r', encoding='utf-8') as f:
                     data = json.load(f)
-                # Live migration: "skills" → "automations"
-                if 'skills' in data and 'automations' not in data:
-                    data['automations'] = data.pop('skills')
-                elif 'skills' in data:
-                    data.pop('skills', None)
-                if 'automations' not in data:
-                    data['automations'] = {}
-                if 'kanban' not in data or data['kanban'] is None:
-                    data['kanban'] = {"tasks": []}
+                # automations: prefer separate automations.json
+                auto_path = os.path.join(DATA_DIR, 'automations.json')
+                try:
+                    with open(auto_path, 'r', encoding='utf-8') as af:
+                        data['automations'] = json.load(af)
+                except (FileNotFoundError, json.JSONDecodeError):
+                    # Fallback: in-memory migration from agent_status.json
+                    if 'skills' in data and 'automations' not in data:
+                        data['automations'] = data.pop('skills')
+                    elif 'skills' in data:
+                        data.pop('skills', None)
+                    if 'automations' not in data:
+                        data['automations'] = {}
+                # kanban: prefer separate kanban.json (Phase 2 split)
+                kanban_path = os.path.join(DATA_DIR, 'kanban.json')
+                try:
+                    with open(kanban_path, 'r', encoding='utf-8') as kf:
+                        data['kanban'] = json.load(kf)
+                except (FileNotFoundError, json.JSONDecodeError):
+                    if 'kanban' not in data or data['kanban'] is None:
+                        data['kanban'] = {"tasks": []}
                 # Cache non-empty automations data (survives file corruption)
                 if data['automations']:
                     _automations_cache = data['automations']
                 elif _automations_cache:
                     data['automations'] = _automations_cache
-                # Auto-populate workspaces from directory if missing
-                if 'workspaces' not in data:
-                    data['workspaces'] = {}
-                    if os.path.isdir(WS_DIR):
-                        for name in os.listdir(WS_DIR):
-                            if os.path.isdir(os.path.join(WS_DIR, name)):
-                                data['workspaces'][name] = {
-                                    'status': 'standby',
-                                    'last_active': '', 'description': name,
-                                }
+                # workspaces: prefer separate workspaces.json
+                ws_json_path = os.path.join(DATA_DIR, 'workspaces.json')
+                try:
+                    with open(ws_json_path, 'r', encoding='utf-8') as wf:
+                        data['workspaces'] = json.load(wf)
+                except (FileNotFoundError, json.JSONDecodeError):
+                    # Fallback: auto-populate from directory
+                    if 'workspaces' not in data:
+                        data['workspaces'] = {}
+                        if os.path.isdir(WS_DIR):
+                            for name in os.listdir(WS_DIR):
+                                if os.path.isdir(os.path.join(WS_DIR, name)):
+                                    data['workspaces'][name] = {
+                                        'status': 'standby',
+                                        'last_active': '', 'description': name,
+                                    }
+                # squad_log: prefer separate squad_log.json
+                sq_path = os.path.join(DATA_DIR, 'squad_log.json')
+                try:
+                    with open(sq_path, 'r', encoding='utf-8') as sqf:
+                        sq_data = json.load(sqf)
+                        if sq_data:  # non-empty dict = active squad
+                            data['squad_log'] = sq_data
+                except (FileNotFoundError, json.JSONDecodeError):
+                    pass  # keep whatever's in agent_status.json
                 # Cache non-empty workspaces data
                 if data.get('workspaces'):
                     _workspaces_cache = data['workspaces']
@@ -162,9 +212,18 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(content)
             except (FileNotFoundError, json.JSONDecodeError):
-                resp = {"automations": _automations_cache or {}, "kanban": {"tasks": []}}
-                if _workspaces_cache:
-                    resp["workspaces"] = _workspaces_cache
+                resp = {}
+                # Try separate JSON files even when agent_status.json fails
+                for fname, key, default in [
+                    ('kanban.json', 'kanban', {"tasks": []}),
+                    ('automations.json', 'automations', _automations_cache or {}),
+                    ('workspaces.json', 'workspaces', _workspaces_cache or {}),
+                ]:
+                    try:
+                        with open(os.path.join(DATA_DIR, fname), 'r', encoding='utf-8') as sf:
+                            resp[key] = json.load(sf)
+                    except (FileNotFoundError, json.JSONDecodeError):
+                        resp[key] = default
                 self._respond(200, resp)
             return
 
@@ -184,62 +243,11 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
         super().do_GET()
 
-    def _kanban_add_activity(self, task_id, agent, message):
-        from datetime import datetime
-        path = os.path.join(DATA_DIR, 'agent_status.json')
-        with open(path) as f:
-            data = json.load(f)
-        for task in data.get('kanban', {}).get('tasks', []):
-            if task['id'] == task_id:
-                task.setdefault('activity_log', []).append({
-                    'time': datetime.now().strftime('%H:%M:%S'),
-                    'agent': agent,
-                    'message': message,
-                })
-                task['updated_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                break
-        with open(path, 'w') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-
-    def _kanban_delete(self, task_id):
-        path = os.path.join(DATA_DIR, 'agent_status.json')
-        with open(path) as f:
-            data = json.load(f)
-        tasks = data.get('kanban', {}).get('tasks', [])
-        original = len(tasks)
-        data['kanban']['tasks'] = [t for t in tasks if t['id'] != task_id]
-        with open(path, 'w') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        return len(data['kanban']['tasks']) < original
-
-    def _kanban_move(self, task_id, new_column):
-        from datetime import datetime
-        valid = {'automation', 'todo', 'in_progress', 'waiting', 'done'}
-        if new_column not in valid:
-            return False
-        path = os.path.join(DATA_DIR, 'agent_status.json')
-        with open(path) as f:
-            data = json.load(f)
-        for task in data.get('kanban', {}).get('tasks', []):
-            if task['id'] == task_id:
-                old = task['column']
-                task['column'] = new_column
-                task['updated_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                task.setdefault('activity_log', []).append({
-                    'time': datetime.now().strftime('%H:%M:%S'),
-                    'agent': 'pm',
-                    'message': f'Moved from {old} to {new_column}',
-                })
-                with open(path, 'w') as f:
-                    json.dump(data, f, ensure_ascii=False, indent=2)
-                return True
-        return False
-
     def _save_automation_config(self, name, content):
         from datetime import datetime, timedelta
         global _automations_cache
 
-        # 1. Update skills_config.json
+        # 1. Update skills_config.json (separate file, single writer)
         config_path = os.path.join(DATA_DIR, 'skills_config.json')
         try:
             with open(config_path, 'r') as f:
@@ -251,44 +259,30 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         with open(config_path, 'w') as f:
             json.dump(config, f, ensure_ascii=False, indent=2)
 
-        # 2. Update agent_status.json automations
-        status_path = os.path.join(DATA_DIR, 'agent_status.json')
-        try:
-            with open(status_path, 'r') as f:
-                data = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
-            data = {}
-        automations = data.get('automations', data.get('skills', {}))
-        if name in automations:
+        # 2. Update automations.json (flock-protected via store)
+        from heysquid.dashboard._store import store as _store
+
+        def _modify(data):
+            if name not in data:
+                return False  # skip save
             for key in ('schedule', 'enabled', 'description', 'workspace'):
                 if key in content:
-                    automations[name][key] = content[key]
-            # Recompute next_run on schedule change
-            if 'schedule' in content and automations[name].get('trigger') == 'schedule':
+                    data[name][key] = content[key]
+            if 'schedule' in content and data[name].get('trigger') == 'schedule':
                 try:
                     now = datetime.now()
                     h, m = content['schedule'].split(':')
                     next_dt = now.replace(hour=int(h), minute=int(m), second=0, microsecond=0)
                     if next_dt <= now:
                         next_dt += timedelta(days=1)
-                    automations[name]['next_run'] = next_dt.strftime('%Y-%m-%dT%H:%M')
+                    data[name]['next_run'] = next_dt.strftime('%Y-%m-%dT%H:%M')
                 except (ValueError, IndexError):
                     pass
-            data['automations'] = automations
-            with open(status_path, 'w') as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
+
+        _store.modify("automations", _modify)
 
         # 3. Update server cache
-        if automations:
-            _automations_cache = automations
-
-    def _update_agent_status(self, key, value):
-        path = os.path.join(DATA_DIR, 'agent_status.json')
-        with open(path) as f:
-            data = json.load(f)
-        data[key] = value
-        with open(path, 'w') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+        _automations_cache = {}
 
     def _save_json(self, filename, content):
         path = os.path.join(DATA_DIR, filename)
@@ -321,7 +315,11 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         pass  # Suppress request logs
 
 
+class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
+    daemon_threads = True
+
+
 if __name__ == '__main__':
-    server = HTTPServer(('127.0.0.1', 8420), DashboardHandler)
+    server = ThreadingHTTPServer(('127.0.0.1', 8420), DashboardHandler)
     print(f'Dashboard server running on http://127.0.0.1:8420')
     server.serve_forever()

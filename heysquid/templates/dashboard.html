@@ -1904,7 +1904,7 @@ body.deco-mode .ws-resize-handle { display: block; }
 /* === KANBAN BOARD === */
 .btn-kanban {
   position: absolute;
-  bottom: 82px; right: 100px;
+  bottom: 64px; right: 170px;
   font-family: 'Press Start 2P', monospace;
   font-size: 7px;
   padding: 5px 12px;
@@ -2122,6 +2122,12 @@ body.deco-mode .ws-resize-handle { display: block; }
   align-items: center;
 }
 .kanban-card-meta .meta-logs { color: #6b7a8d; }
+.kanban-card-agent {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  margin-right: 4px;
+}
 
 /* Automation card (Automation column) */
 .kanban-skill-card {
@@ -2382,6 +2388,98 @@ body.deco-mode .ws-resize-handle { display: block; }
   transition: all 0.15s;
 }
 .kanban-modal-close:hover { color: #fff; border-color: #5a6070; background: #2a3048; }
+.kanban-modal-btn-merge {
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  background: rgba(99,102,241,0.1);
+  border: 1px solid rgba(99,102,241,0.3);
+  color: #818cf8;
+  cursor: pointer;
+  padding: 6px 16px;
+  border-radius: 6px;
+  transition: all 0.15s;
+  margin-right: auto;
+}
+.kanban-modal-btn-merge:hover { background: rgba(99,102,241,0.2); border-color: #818cf8; }
+.merge-target-list {
+  margin-top: 8px;
+  max-height: 160px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.merge-target-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: #1a1f2e;
+  border: 1px solid #2a3040;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-size: 12px;
+  color: #c8d0dc;
+}
+.merge-target-item:hover { border-color: #818cf8; background: #1e2340; }
+.merge-target-col {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  color: #fff;
+  flex-shrink: 0;
+}
+.merge-target-col.c-in_progress { background: #16a34a; }
+.merge-target-col.c-todo { background: #334155; }
+.merge-target-col.c-waiting { background: #d97706; }
+.merge-target-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Kanban merge mode */
+.kanban-merge-toggle {
+  font-family: inherit; font-size: 12px; font-weight: 500;
+  background: transparent; border: 1px solid #3a4050;
+  color: #8892a4; cursor: pointer; padding: 4px 12px;
+  border-radius: 6px; transition: all 0.15s;
+}
+.kanban-merge-toggle:hover { border-color: #818cf8; color: #818cf8; }
+.kanban-merge-toggle.active { background: #818cf8; color: #fff; border-color: #818cf8; }
+.kanban-merge-bar {
+  display: none; position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+  background: #1e2340; border: 1px solid #818cf8; border-radius: 10px;
+  padding: 8px 16px; gap: 12px; align-items: center; z-index: 20;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+}
+.kanban-merge-bar.visible { display: flex; }
+.kanban-merge-bar span { color: #c8d0dc; font-size: 13px; }
+.merge-bar-btn {
+  font-family: inherit; font-size: 12px; font-weight: 600;
+  background: #818cf8; border: none; color: #fff; cursor: pointer;
+  padding: 6px 16px; border-radius: 6px; transition: background 0.15s;
+}
+.merge-bar-btn:hover { background: #6366f1; }
+.merge-bar-cancel {
+  font-family: inherit; font-size: 12px;
+  background: transparent; border: 1px solid #3a4050;
+  color: #8892a4; cursor: pointer; padding: 6px 12px; border-radius: 6px;
+}
+.merge-bar-cancel:hover { border-color: #5a6070; color: #c8d0dc; }
+.kanban-card.merge-selected { border-color: #818cf8; background: rgba(129,140,248,0.1); }
+.kanban-card .merge-check {
+  display: none; position: absolute; top: 6px; right: 6px;
+  width: 18px; height: 18px; border-radius: 4px; border: 2px solid #4a5060;
+  background: transparent; cursor: pointer; z-index: 5;
+}
+body.merge-mode .kanban-card { position: relative; }
+body.merge-mode .kanban-card .merge-check { display: block; }
+body.merge-mode .kanban-card.merge-selected .merge-check {
+  background: #818cf8; border-color: #818cf8;
+}
+body.merge-mode .kanban-card.merge-selected .merge-check::after {
+  content: '\\2713'; color: #fff; font-size: 12px;
+  position: absolute; top: -1px; left: 2px;
+}
 
 /* Automation edit form */
 .km-edit-row { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
@@ -2721,6 +2819,7 @@ body.deco-mode .skill-machine:hover::after { opacity: 1; }
         Active: <strong id="kbStatActive">0</strong>
         Done: <strong id="kbStatDone">0</strong>
       </div>
+      <button class="kanban-merge-toggle" id="kanbanMergeToggle" onclick="toggleMergeMode()">Merge</button>
       <button class="kanban-close-btn" onclick="toggleKanbanView()">✕ Close</button>
     </div>
     <div class="kanban-columns">
@@ -2744,6 +2843,12 @@ body.deco-mode .skill-machine:hover::after { opacity: 1; }
         <div class="kanban-col-header">Done <span class="col-count" id="countDone">0</span></div>
         <div class="kanban-col-body" id="colDone"></div>
       </div>
+    </div>
+    <!-- Merge floating bar -->
+    <div class="kanban-merge-bar" id="kanbanMergeBar">
+      <span id="mergeBarCount">0 selected</span>
+      <button class="merge-bar-btn" onclick="executeMergeSelected()">Merge Selected</button>
+      <button class="merge-bar-cancel" onclick="toggleMergeMode()">Cancel</button>
     </div>
   </div>
 
@@ -2805,7 +2910,13 @@ body.deco-mode .skill-machine:hover::after { opacity: 1; }
         <button onclick="sendKanbanFeedback()">Send Feedback</button>
       </div>
       <!-- Bottom actions -->
+      <!-- Merge target picker (hidden by default) -->
+      <div id="kanbanMergeWrap" style="display:none">
+        <div class="kanban-modal-section-title">Merge into...</div>
+        <div class="merge-target-list" id="kanbanMergeList"></div>
+      </div>
       <div class="kanban-modal-actions">
+        <button class="kanban-modal-btn-merge" id="kanbanBtnMerge" onclick="toggleMergePicker()">Merge</button>
         <button class="kanban-modal-btn-delete" onclick="deleteKanbanTask()">Delete</button>
         <button class="kanban-modal-close" onclick="closeKanbanModal()">Close</button>
       </div>
@@ -5616,6 +5727,49 @@ function _tagColorClass(tag) {
   return '';
 }
 
+var _CARD_AGENT_COLORS = {
+  pm: '#f97316', researcher: '#8b5cf6', developer: '#3b82f6',
+  reviewer: '#10b981', tester: '#f472b6', writer: '#ef4444'
+};
+
+function _buildCardInnerHTML(task) {
+  var timeStr = (task.updated_at || task.created_at || '').split(' ')[1] || '';
+  if (timeStr) timeStr = timeStr.slice(0, 5);
+
+  var tagsHtml = '';
+  if (task.tags && task.tags.length) {
+    tagsHtml = '<div class="kanban-card-tags">';
+    task.tags.forEach(function(tag) {
+      var cls = 'kanban-tag ' + _tagColorClass(tag);
+      tagsHtml += '<span class="' + cls.trim() + '">' + escHtml(tag) + '</span>';
+    });
+    tagsHtml += '</div>';
+  }
+
+  // Last non-pm/system agent from activity_log
+  var agentHtml = '';
+  if (task.activity_log && task.activity_log.length) {
+    for (var i = task.activity_log.length - 1; i >= 0; i--) {
+      var logAgent = task.activity_log[i].agent;
+      if (logAgent && logAgent !== 'pm' && logAgent !== 'system' && _CARD_AGENT_COLORS[logAgent]) {
+        agentHtml = '<span class="kanban-card-agent" style="color:' + _CARD_AGENT_COLORS[logAgent] + '">' + logAgent + '</span>';
+        break;
+      }
+    }
+  }
+
+  var logsHtml = task.activity_log ? '<span class="meta-logs">' + task.activity_log.length + ' logs</span>' : '';
+
+  return '<div class="merge-check"></div>' +
+    '<div class="kanban-card-title">' + escHtml(task.title || '') + '</div>' +
+    tagsHtml +
+    '<div class="kanban-card-meta">' +
+      agentHtml +
+      '<span>' + timeStr + '</span>' +
+      logsHtml +
+    '</div>';
+}
+
 function renderKanbanBoard(kanbanData, automationsData) {
   if (!_kanbanVisible) return;
 
@@ -5705,7 +5859,6 @@ function renderKanbanBoard(kanbanData, automationsData) {
   Object.keys(colMap).forEach(function(col) {
     var cfg = colMap[col];
     var container = document.getElementById(cfg.el);
-    container.innerHTML = '';
     var items = groups[col] || [];
     // Sort: newest first for done, oldest first for others
     if (col === 'done') {
@@ -5723,40 +5876,65 @@ function renderKanbanBoard(kanbanData, automationsData) {
     var DONE_FOLD_LIMIT = 10;
     var folded = (col === 'done' && items.length > DONE_FOLD_LIMIT);
 
+    // --- Keyed DOM diffing ---
+    // Build map of existing DOM cards by task ID
+    var existingCards = {};
+    var existingEls = container.querySelectorAll('.kanban-card[data-task-id]');
+    existingEls.forEach(function(el) {
+      existingCards[el.getAttribute('data-task-id')] = el;
+    });
+
+    // Set of new task IDs
+    var newIds = {};
+    items.forEach(function(t) { newIds[t.id] = true; });
+
+    // Remove cards no longer in data
+    Object.keys(existingCards).forEach(function(id) {
+      if (!newIds[id]) existingCards[id].remove();
+    });
+    // Remove empty-state and old toggle
+    var emptyEl = container.querySelector('.kanban-col-empty');
+    if (emptyEl) emptyEl.remove();
+    var oldToggle = container.querySelector('.kanban-done-toggle');
+    if (oldToggle) oldToggle.remove();
+
+    // Build/update cards in order
     items.forEach(function(task, idx) {
-      var card = document.createElement('div');
-      card.className = 'kanban-card';
-      card.onclick = function() { openKanbanModal(task); };
+      var cardHtml = _buildCardInnerHTML(task);
+      var existing = existingCards[task.id];
 
-      // Hide overflow cards in Done column
+      if (existing) {
+        // Update content only if changed
+        if (existing._lastHTML !== cardHtml) {
+          existing.innerHTML = cardHtml;
+          existing._lastHTML = cardHtml;
+          // Rebind click
+          existing.onclick = function() { _onCardClick(this, task); };
+        }
+        // Ensure correct position
+        if (container.children[idx] !== existing) {
+          container.insertBefore(existing, container.children[idx] || null);
+        }
+      } else {
+        // Create new card
+        var card = document.createElement('div');
+        card.className = 'kanban-card';
+        card.setAttribute('data-task-id', task.id);
+        card.innerHTML = cardHtml;
+        card._lastHTML = cardHtml;
+        card.onclick = function() { _onCardClick(this, task); };
+        container.insertBefore(card, container.children[idx] || null);
+      }
+
+      // Done folding visibility
+      var el = container.children[idx];
       if (folded && idx >= DONE_FOLD_LIMIT) {
-        card.style.display = 'none';
-        card.classList.add('done-folded');
+        el.style.display = 'none';
+        el.classList.add('done-folded');
+      } else {
+        el.style.display = '';
+        el.classList.remove('done-folded');
       }
-
-      var timeStr = (task.updated_at || task.created_at || '').split(' ')[1] || '';
-      if (timeStr) timeStr = timeStr.slice(0, 5);
-
-      var tagsHtml = '';
-      if (task.tags && task.tags.length) {
-        tagsHtml = '<div class="kanban-card-tags">';
-        task.tags.forEach(function(tag) {
-          var cls = 'kanban-tag ' + _tagColorClass(tag);
-          tagsHtml += '<span class="' + cls.trim() + '">' + escHtml(tag) + '</span>';
-        });
-        tagsHtml += '</div>';
-      }
-
-      var logsHtml = task.activity_log ? '<span class="meta-logs">' + task.activity_log.length + ' logs</span>' : '';
-
-      card.innerHTML =
-        '<div class="kanban-card-title">' + escHtml(task.title || '') + '</div>' +
-        tagsHtml +
-        '<div class="kanban-card-meta">' +
-          '<span>' + timeStr + '</span>' +
-          logsHtml +
-        '</div>';
-      container.appendChild(card);
     });
 
     // Done column: fold toggle button
@@ -5858,6 +6036,8 @@ function openKanbanModal(task) {
   sel.disabled = isSkill;
   sel.style.opacity = isSkill ? '0.7' : '1';
   document.querySelector('.kanban-modal-btn-delete').style.display = isSkill ? 'none' : '';
+  document.getElementById('kanbanBtnMerge').style.display = isSkill ? 'none' : '';
+  document.getElementById('kanbanMergeWrap').style.display = 'none';
 
   // Automation edit form
   var editWrap = document.getElementById('kanbanModalEditWrap');
@@ -5999,7 +6179,7 @@ function sendKanbanFeedback() {
   fetch('/api/kanban/feedback', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({task_id: taskId, message: msg})
+    body: JSON.stringify({task_id: taskId, message: msg, title: _currentModalTask.title || ''})
   }).then(function() {
     // Add to local log immediately
     var entry = {time: new Date().toTimeString().slice(0,8), agent: 'pm', message: msg};
@@ -6025,6 +6205,132 @@ function deleteKanbanTask() {
     _lastKanbanJSON = '';
     if (_lastKanbanData) {
       _lastKanbanData.tasks = (_lastKanbanData.tasks || []).filter(function(t) { return t.id !== taskId; });
+      renderKanbanBoard(_lastKanbanData, window._lastAutomationsRaw);
+    }
+  });
+}
+
+function toggleMergePicker() {
+  var wrap = document.getElementById('kanbanMergeWrap');
+  if (wrap.style.display !== 'none') {
+    wrap.style.display = 'none';
+    return;
+  }
+  if (!_currentModalTask || !_lastKanbanData) return;
+  var list = document.getElementById('kanbanMergeList');
+  list.innerHTML = '';
+  var cur = _currentModalTask;
+  var candidates = (_lastKanbanData.tasks || []).filter(function(t) {
+    return t.id !== cur.id && t.column !== 'done' && !t._isSkill;
+  });
+  if (!candidates.length) {
+    list.innerHTML = '<div class="kanban-col-empty">No other cards to merge into</div>';
+    wrap.style.display = '';
+    return;
+  }
+  var colLabel = {in_progress: 'PROG', todo: 'TODO', waiting: 'WAIT', automation: 'AUTO'};
+  candidates.forEach(function(t) {
+    var item = document.createElement('div');
+    item.className = 'merge-target-item';
+    item.innerHTML = '<span class="merge-target-col c-' + t.column + '">' +
+      (colLabel[t.column] || t.column) + '</span>' +
+      '<span class="merge-target-title">' + escHtml(t.title || '') + '</span>';
+    item.onclick = function() { executeMerge(cur.id, t.id, t.title); };
+    list.appendChild(item);
+  });
+  wrap.style.display = '';
+}
+
+function executeMerge(sourceId, targetId, targetTitle) {
+  if (!confirm('Merge this card into [' + targetTitle.slice(0,40) + ']?')) return;
+  fetch('/api/kanban/merge', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({source_id: sourceId, target_id: targetId})
+  }).then(function() {
+    closeKanbanModal();
+    _lastKanbanJSON = '';
+    if (_lastKanbanData) {
+      _lastKanbanData.tasks = (_lastKanbanData.tasks || []).filter(function(t) { return t.id !== sourceId; });
+      renderKanbanBoard(_lastKanbanData, window._lastAutomationsRaw);
+    }
+  });
+}
+
+// --- Merge Mode (multi-select) ---
+var _mergeMode = false;
+var _mergeSelected = new Set();
+
+function _onCardClick(cardEl, task) {
+  if (_mergeMode && task.column !== 'done') {
+    var tid = task.id;
+    if (_mergeSelected.has(tid)) {
+      _mergeSelected.delete(tid);
+      cardEl.classList.remove('merge-selected');
+    } else {
+      _mergeSelected.add(tid);
+      cardEl.classList.add('merge-selected');
+    }
+    _updateMergeBar();
+    return;
+  }
+  openKanbanModal(task);
+}
+
+function toggleMergeMode() {
+  _mergeMode = !_mergeMode;
+  _mergeSelected.clear();
+  document.body.classList.toggle('merge-mode', _mergeMode);
+  document.getElementById('kanbanMergeToggle').classList.toggle('active', _mergeMode);
+  // Clear selections
+  document.querySelectorAll('.kanban-card.merge-selected').forEach(function(el) {
+    el.classList.remove('merge-selected');
+  });
+  _updateMergeBar();
+}
+
+function _updateMergeBar() {
+  var bar = document.getElementById('kanbanMergeBar');
+  var count = _mergeSelected.size;
+  if (_mergeMode && count >= 2) {
+    document.getElementById('mergeBarCount').textContent = count + ' selected';
+    bar.classList.add('visible');
+  } else {
+    bar.classList.remove('visible');
+  }
+}
+
+function executeMergeSelected() {
+  if (_mergeSelected.size < 2) return;
+  var ids = Array.from(_mergeSelected);
+  // Find oldest card as target (earliest created_at)
+  var tasks = (_lastKanbanData && _lastKanbanData.tasks) || [];
+  var selected = tasks.filter(function(t) { return ids.indexOf(t.id) >= 0; });
+  selected.sort(function(a, b) { return (a.created_at || '').localeCompare(b.created_at || ''); });
+  var target = selected[0];
+  var sources = selected.slice(1);
+
+  if (!confirm('Merge ' + sources.length + ' card(s) into [' + (target.title || '').slice(0,40) + ']?')) return;
+
+  // Sequential merge (source → target)
+  var chain = Promise.resolve();
+  sources.forEach(function(src) {
+    chain = chain.then(function() {
+      return fetch('/api/kanban/merge', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({source_id: src.id, target_id: target.id})
+      });
+    });
+  });
+  chain.then(function() {
+    toggleMergeMode();
+    _lastKanbanJSON = '';
+    var sourceIds = sources.map(function(s) { return s.id; });
+    if (_lastKanbanData) {
+      _lastKanbanData.tasks = _lastKanbanData.tasks.filter(function(t) {
+        return sourceIds.indexOf(t.id) < 0;
+      });
       renderKanbanBoard(_lastKanbanData, window._lastAutomationsRaw);
     }
   });
