@@ -38,6 +38,30 @@ EXECUTOR_SCRIPT = os.path.join(ROOT, "scripts", "executor.sh")
 DASHBOARD_HTML = os.path.join(ROOT, "data", "dashboard.html")
 INTERRUPTED_FILE = os.path.join(ROOT, "data", "interrupted.json")
 WORKING_LOCK_FILE = os.path.join(ROOT, "data", "working.json")
+CLAUDE_PIDFILE = os.path.join(ROOT, "data", "claude.pid")
+
+
+def _is_pm_alive() -> bool:
+    """PM(claude) 프로세스 생존 확인 — executor.sh is_pm_alive와 동일 로직"""
+    # 1차: caffeinate 패턴
+    if subprocess.run(
+        ["pgrep", "-f", "caffeinate.*append-system-prompt-file"],
+        capture_output=True,
+    ).returncode == 0:
+        return True
+    # 2차: PID 파일
+    if os.path.exists(CLAUDE_PIDFILE):
+        try:
+            with open(CLAUDE_PIDFILE, "r") as f:
+                for line in f:
+                    pid = line.strip()
+                    if pid and subprocess.run(
+                        ["kill", "-0", pid], capture_output=True
+                    ).returncode == 0:
+                        return True
+        except Exception:
+            pass
+    return False
 
 # .env에서 BOT_TOKEN 로드
 try:
@@ -348,11 +372,7 @@ def _resume_executor() -> tuple[bool, str]:
 def _clean_stale_lock_and_resume():
     """executor.lock이 있으면 실제 프로세스 확인, stale이면 제거 후 재시작"""
     if os.path.exists(EXECUTOR_LOCK):
-        has_claude = subprocess.run(
-            ["pgrep", "-f", "claude.*append-system-prompt-file"],
-            capture_output=True,
-        ).returncode == 0
-        if not has_claude:
+        if not _is_pm_alive():
             try:
                 os.remove(EXECUTOR_LOCK)
             except OSError:
@@ -462,11 +482,7 @@ def _run_doctor() -> str:
 
     # 2. Executor lock 확인
     if os.path.exists(EXECUTOR_LOCK):
-        has_claude = subprocess.run(
-            ["pgrep", "-f", "claude.*append-system-prompt-file"],
-            capture_output=True,
-        ).returncode == 0
-        if has_claude:
+        if _is_pm_alive():
             lines.append("✅ Lock: active (executor running)")
         else:
             try:
