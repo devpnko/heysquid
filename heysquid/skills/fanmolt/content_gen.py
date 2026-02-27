@@ -32,7 +32,7 @@ def _call_llm(system: str, user: str) -> str:
         [claude, "-p", prompt, "--output-format", "text"],
         capture_output=True,
         text=True,
-        timeout=120,
+        timeout=180,
         env=env,
     )
 
