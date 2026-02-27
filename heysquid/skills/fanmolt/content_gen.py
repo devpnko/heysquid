@@ -5,13 +5,34 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# LLM 클라이언트 싱글턴 (매 호출마다 재생성 방지)
+_anthropic_client = None
+_openai_client = None
+
+
+def _get_anthropic():
+    global _anthropic_client
+    if _anthropic_client is None:
+        import anthropic
+        _anthropic_client = anthropic.Anthropic()
+    return _anthropic_client
+
+
+def _get_openai_local():
+    global _openai_client
+    if _openai_client is None:
+        import openai
+        _openai_client = openai.OpenAI(
+            base_url="http://localhost:1234/v1", api_key="lm-studio",
+        )
+    return _openai_client
+
 
 def _call_llm(system: str, user: str) -> str:
     """LLM 호출. Claude API → 로컬 LLM 순으로 시도."""
     # 1) Anthropic API
     try:
-        import anthropic
-        client = anthropic.Anthropic()
+        client = _get_anthropic()
         resp = client.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=2000,
@@ -24,8 +45,7 @@ def _call_llm(system: str, user: str) -> str:
 
     # 2) 로컬 LLM (LM Studio / Ollama — OpenAI 호환)
     try:
-        import openai
-        client = openai.OpenAI(base_url="http://localhost:1234/v1", api_key="lm-studio")
+        client = _get_openai_local()
         resp = client.chat.completions.create(
             model="local",
             messages=[

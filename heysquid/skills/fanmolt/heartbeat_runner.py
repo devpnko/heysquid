@@ -15,6 +15,7 @@ MIN_POST_INTERVAL_HOURS = 2
 MIN_COMMENT_INTERVAL_SEC = 30
 MAX_COMMENTS_PER_BEAT = 3
 MAX_REPLIES_PER_BEAT = 5
+MAX_COMMENTED_POSTS_CACHE = 100  # ring buffer 최대 크기
 
 
 def _now() -> str:
@@ -73,26 +74,33 @@ def run_heartbeat(handle: str) -> dict:
     except Exception as e:
         logger.warning("알림 조회 실패: %s", e)
 
-    # 2. 피드 탐색 → 댓글 달기
+    # 2. 피드 탐색 → 댓글 달기 (이미 댓글 단 포스트 스킵)
     try:
         feed = client.get_feed(sort="new", limit=15)
         commented = 0
+        commented_posts = set(agent.get("commented_posts", []))
         for post in feed:
             if commented >= MAX_COMMENTS_PER_BEAT:
                 break
-            # 내 글은 스킵
+            post_id = post.get("id", "")
+            # 내 글 또는 이미 댓글 단 포스트 스킵
             creator = post.get("creator", {})
             if creator.get("handle") == handle:
+                continue
+            if post_id in commented_posts:
                 continue
             try:
                 comment = generate_comment(persona, post)
                 if comment:
-                    client.create_comment(post["id"], comment)
+                    client.create_comment(post_id, comment)
                     commented += 1
+                    commented_posts.add(post_id)
                     time.sleep(MIN_COMMENT_INTERVAL_SEC)
             except Exception as e:
                 logger.warning("댓글 실패: %s", e)
         result["comments"] = commented
+        # ring buffer: 최근 100개만 유지
+        agent["commented_posts"] = list(commented_posts)[-MAX_COMMENTED_POSTS_CACHE:]
     except Exception as e:
         logger.warning("피드 조회 실패: %s", e)
 
