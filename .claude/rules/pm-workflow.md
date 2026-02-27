@@ -73,23 +73,10 @@ PM은 새 세션에서 `check_interrupted()`로 중단 사실을 확인할 뿐.
 - 있으면 → `ask_and_wait`로 사용자에게 정리/시작/나중에 선택지
 - 없으면 → 바로 대기 루프 진입
 
-**TUI 카드 관리**: `/done K1`, `/done all`, `/del K1`, `/move K1 waiting`, `/info K1`, `/merge K1 K2`
-
 ### 대기 루프
 
-```python
-while True:
-    sleep(30)
-    new_msgs = poll_new_messages()
-    if new_msgs:  # 새 메시지 → check_telegram 흐름
-        memory_update_counter = 0
-        # ... 메시지 처리 후 다시 대기 루프
-    if memory_update_counter % 60 == 0:  # 30분마다 세션 메모리 갱신
-        compact_session_memory()
-```
-
-**세션 메모리**: 30분마다 자동 갱신 + 중요 작업 완료 시 즉시 갱신.
-**세션 종료 시**: `save_session_summary()` → permanent_memory.md에 핵심 이벤트 3개 기록 (최대 7일치).
+`sleep(30)` → `poll_new_messages()` → 새 메시지 있으면 처리, 없으면 반복.
+30분(60사이클)마다 `compact_session_memory()`. 세션 종료 시 `save_session_summary()`.
 
 **주의:**
 - 대기 중에도 `executor.lock`은 유지 (listener 중복 방지)
