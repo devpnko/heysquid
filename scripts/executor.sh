@@ -120,6 +120,8 @@ is_pm_alive() {
 cleanup() {
     local exit_code=${?:-0}
     log "[CLEANUP] executor.sh exiting (code=$exit_code)"
+    # Kill watchdog first (prevent it from firing during cleanup)
+    [ -n "${WATCHDOG_PID:-}" ] && kill "$WATCHDOG_PID" 2>/dev/null || true
     # Clean up stream_viewer + tail (both spawned by this session and orphan processes)
     [ -n "${VIEWER_PID:-}" ] && kill "$VIEWER_PID" 2>/dev/null || true
     pkill -f "stream_viewer.py" 2>/dev/null || true
@@ -277,18 +279,71 @@ Use reply_telegram() from heysquid/telegram_bot.py for quick conversational repl
 # Set working directory to project root
 cd "$ROOT"
 
-# Conditional stream log reset (only reset if stale 30m+, otherwise keep)
+# Always reset stream log for new session (clean slate for watchdog detection)
 if [ -f "$STREAM_LOG" ]; then
     LOG_AGE=$(( $(date +%s) - $(stat -f%m "$STREAM_LOG" 2>/dev/null || echo 0) ))
-    if [ "$LOG_AGE" -gt 1800 ]; then
-        > "$STREAM_LOG"
-        log "[INFO] Stream log reset (stale ${LOG_AGE}s)"
-    fi
-else
-    > "$STREAM_LOG"
+    log "[INFO] Stream log reset (was ${LOG_AGE}s old)"
 fi
+> "$STREAM_LOG"
 
 VIEWER="$ROOT/scripts/stream_viewer.py"
+
+# ========================================
+# Session-end watchdog
+# ========================================
+# Problem: Claude spawns child processes (standby loops) via Bash tool.
+# These children keep Claude alive even after the AI session ends,
+# so `wait $PIPE_PID` never returns and executor hangs forever.
+# Fix: monitor stream log for session-end marker, then kill orphan children.
+_session_watchdog() {
+    local GRACE=15      # seconds to wait after session end before killing
+    local POLL=10       # seconds between checks
+    local INITIAL=60    # seconds to wait before first check (session startup)
+
+    sleep "$INITIAL"
+
+    while kill -0 "$PIPE_PID" 2>/dev/null; do
+        # Check for session-end marker in stream log
+        if grep -q '"type":"result"' "$STREAM_LOG" 2>/dev/null; then
+            log "[WATCHDOG] Session end detected (type:result). Waiting ${GRACE}s grace period..."
+            sleep "$GRACE"
+
+            # Double-check: is the pipeline still alive?
+            if ! kill -0 "$PIPE_PID" 2>/dev/null; then
+                log "[WATCHDOG] Pipeline already exited. No action needed."
+                return 0
+            fi
+
+            # Kill Claude's orphan children (standby loops, reply scripts)
+            if [ -n "${CLAUDE_PID:-}" ] && kill -0 "$CLAUDE_PID" 2>/dev/null; then
+                log "[WATCHDOG] Killing children of claude PID=$CLAUDE_PID..."
+                pkill -P "$CLAUDE_PID" 2>/dev/null || true
+                sleep 3
+            fi
+
+            # If still alive, escalate
+            if kill -0 "$PIPE_PID" 2>/dev/null; then
+                log "[WATCHDOG] Pipeline still alive after child kill. Running kill_all_pm..."
+                kill_all_pm
+                sleep 2
+            fi
+
+            # Final: force-kill the pipeline itself
+            if kill -0 "$PIPE_PID" 2>/dev/null; then
+                log "[WATCHDOG] Force-killing pipeline PID=$PIPE_PID"
+                kill "$PIPE_PID" 2>/dev/null || true
+                sleep 1
+                kill -9 "$PIPE_PID" 2>/dev/null || true
+            fi
+
+            log "[WATCHDOG] Cleanup complete."
+            return 0
+        fi
+
+        sleep "$POLL"
+    done
+    log "[WATCHDOG] Pipeline exited normally. No intervention needed."
+}
 
 # Always start a new session (no session resume -- context recovered via memory system)
 log "[INFO] Starting new session (permanent memory + session memory)..."
@@ -335,6 +390,11 @@ fi
 [ -n "$CLAUDE_PID" ] && echo "$CLAUDE_PID" >> "$PIDFILE"
 [ -n "$CAFE_PID" ] && [ "$CAFE_PID" != "$CLAUDE_PID" ] && echo "$CAFE_PID" >> "$PIDFILE"
 log "[INFO] Saved PIDs: claude=$CLAUDE_PID cafe=$CAFE_PID"
+
+# Start session-end watchdog (kills orphan children after session ends)
+_session_watchdog &
+WATCHDOG_PID=$!
+log "[INFO] Watchdog started: PID=$WATCHDOG_PID"
 
 # Wait for pipeline to complete
 EC=0
