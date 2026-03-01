@@ -585,7 +585,12 @@ def _cleanup_zombie_pm():
 
 
 def _retry_unprocessed():
-    """Check unprocessed messages + re-trigger executor if retry_count < 3 — uses flock"""
+    """Check unprocessed messages + re-trigger executor if retry_count < 3 — uses flock
+
+    Key fix: if executor is NOT running but messages have seen=True,
+    they are stale (PM exited without processing). Reset seen flag
+    so they become retryable.
+    """
     # No retry needed if PM/executor is running
     if os.path.exists(EXECUTOR_LOCK_FILE):
         return
@@ -599,11 +604,21 @@ def _retry_unprocessed():
 
     def _bump_retry(data):
         nonlocal should_trigger, retry_info
+        # Reset stale seen flags — executor is not running so no PM is processing these
+        stale_count = 0
+        for msg in data.get("messages", []):
+            if (msg.get("type") == "user"
+                    and not msg.get("processed", False)
+                    and msg.get("seen", False)):
+                msg["seen"] = False
+                stale_count += 1
+        if stale_count:
+            print(f"[RETRY] Reset {stale_count} stale seen flag(s)")
+
         retryable = [
             msg for msg in data.get("messages", [])
             if msg.get("type") == "user"
             and not msg.get("processed", False)
-            and not msg.get("seen", False)  # seen messages are being processed by PM
             and msg.get("retry_count", 0) < RETRY_MAX
         ]
         if not retryable:

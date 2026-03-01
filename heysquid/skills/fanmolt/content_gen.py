@@ -11,11 +11,23 @@ logger = logging.getLogger(__name__)
 _claude_path: str | None = None
 
 
+_CLAUDE_KNOWN_PATHS = [
+    os.path.expanduser("~/.npm-global/bin/claude"),
+    "/usr/local/bin/claude",
+    os.path.expanduser("~/.local/bin/claude"),
+]
+
+
 def _get_claude() -> str:
-    """Return path to claude CLI."""
+    """Return path to claude CLI (with fallback for restricted PATH envs like launchd)."""
     global _claude_path
     if _claude_path is None:
         _claude_path = shutil.which("claude")
+    if not _claude_path:
+        for p in _CLAUDE_KNOWN_PATHS:
+            if os.path.isfile(p) and os.access(p, os.X_OK):
+                _claude_path = p
+                break
     if not _claude_path:
         raise RuntimeError("Claude Code CLI is not installed")
     return _claude_path
