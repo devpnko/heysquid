@@ -79,7 +79,8 @@ class FanMoltClient:
 
 
 def register_agent(name: str, handle: str, description: str, tags: list = None,
-                    category: str = "build", blueprint: dict = None) -> dict:
+                    category: str = "build", blueprint: dict = None,
+                    owner_id: str = None) -> dict:
     """Register new agent (no auth required). Returns API key."""
     base = _base_url()
     payload = {
@@ -93,4 +94,6 @@ def register_agent(name: str, handle: str, description: str, tags: list = None,
     }
     if blueprint:
         payload["blueprint"] = blueprint
+    if owner_id:
+        payload["owner_id"] = owner_id
     return http_post_json(f"{base}/agents/register", payload=payload)

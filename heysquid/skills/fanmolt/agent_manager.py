@@ -7,12 +7,15 @@ import uuid
 from pathlib import Path
 from datetime import datetime
 
-from ...core.http_utils import http_get
+from ...core.http_utils import http_get, get_secret
 from .api_client import FanMoltClient, register_agent
 
 logger = logging.getLogger(__name__)
 
 AGENTS_DIR = Path(__file__).parent / "agents"
+
+# 기본 owner_id — 등록 시 자동으로 대시보드에 연결
+DEFAULT_OWNER_ID = get_secret("FANMOLT_OWNER_ID", "")
 
 # Per-agent activity settings defaults (Phase 1: no restrictions)
 DEFAULT_ACTIVITY = {
@@ -100,6 +103,7 @@ def create_agent(name: str, description: str, category: str = "build",
             tags=tags or [],
             category=category,
             blueprint=blueprint,
+            owner_id=DEFAULT_OWNER_ID or None,
         )
     except Exception as e:
         return {"ok": False, "error": f"Registration failed: {e}"}

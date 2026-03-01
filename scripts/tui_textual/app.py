@@ -17,6 +17,7 @@ from scripts.tui_textual.screens.skill import SkillScreen
 from scripts.tui_textual.widgets.chat_input import ChatInput
 from scripts.tui_textual.widgets.command_input import CommandInput
 from scripts.tui_textual.widgets.kanban_input import KanbanInput
+from scripts.tui_textual.widgets.auto_input import AutoInput
 from scripts.tui_textual.widgets.tab_bar import TabBar
 from scripts.tui_textual.commands import send_chat_message, execute_command
 from scripts.tui_textual.data_poller import load_stream_lines, STREAM_BUFFER_SIZE
@@ -123,7 +124,7 @@ class SquidApp(App):
             tab_bar.set_active(new_mode)
         except Exception:
             pass
-        # Focus input when switching to Chat/Kanban mode
+        # Focus input when switching to Chat/Kanban/Skill mode
         if new_mode == MODE_CHAT:
             try:
                 self.screen.query_one(ChatInput).focus()
@@ -132,6 +133,12 @@ class SquidApp(App):
         elif new_mode == MODE_KANBAN:
             try:
                 self.screen.query_one(KanbanInput).focus()
+            except Exception:
+                pass
+        elif new_mode == MODE_SKILL:
+            try:
+                from scripts.tui_textual.widgets.auto_view import AutoMasterList
+                self.screen.query_one(AutoMasterList).focus()
             except Exception:
                 pass
         # Immediately load data after switch
@@ -179,7 +186,7 @@ class SquidApp(App):
                     return
 
     def action_quit_app(self) -> None:
-        """q -> quit (ignored if typing in Chat/Kanban input)"""
+        """q -> quit (ignored if typing in Chat/Kanban/Auto input)"""
         if isinstance(self.screen, ChatScreen):
             try:
                 input_widget = self.screen.query_one(ChatInput)
@@ -194,14 +201,26 @@ class SquidApp(App):
                     return
             except Exception:
                 pass
+        elif isinstance(self.screen, SkillScreen):
+            try:
+                input_widget = self.screen.query_one(AutoInput)
+                if input_widget.value:
+                    return
+            except Exception:
+                pass
         self.exit()
 
     def action_command_mode(self) -> None:
-        """/ command mode in Squad/Log/Skill modes (kanban uses dedicated input)"""
-        if isinstance(self.screen, (SquadScreen, LogScreen, SkillScreen)):
+        """/ command mode in Squad/Log modes (kanban/skill use dedicated inputs)"""
+        if isinstance(self.screen, (SquadScreen, LogScreen)):
             try:
                 cmd_input = self.screen.query_one(CommandInput)
                 cmd_input.show()
+            except Exception:
+                pass
+        elif isinstance(self.screen, SkillScreen):
+            try:
+                self.screen.query_one(AutoInput).focus()
             except Exception:
                 pass
 
@@ -241,6 +260,13 @@ class SquidApp(App):
 
     def on_command_input_command_submitted(self, event: CommandInput.CommandSubmitted) -> None:
         """Command input submitted (Squad/Log/Skill)."""
+        result = execute_command(event.value, self._stream_buffer)
+        if result:
+            self._set_flash(result)
+        self._poll_data()
+
+    def on_auto_input_auto_command_submitted(self, event: AutoInput.AutoCommandSubmitted) -> None:
+        """Auto command submitted (AUTO screen)."""
         result = execute_command(event.value, self._stream_buffer)
         if result:
             self._set_flash(result)

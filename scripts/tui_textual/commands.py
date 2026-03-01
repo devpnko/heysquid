@@ -22,6 +22,10 @@ COMMAND_REGISTRY = {
     "resume":   {"desc": "Restart executor"},
     "doctor":   {"desc": "System diagnostics"},
     "skill":    {"desc": "List/run skills"},
+    "run":      {"desc": "Run automation or agent heartbeat"},
+    "toggle":   {"desc": "Toggle automation enabled/disabled"},
+    "post":     {"desc": "Force post (/post handle [recipe])"},
+    "stats":    {"desc": "FanMolt aggregate stats"},
     "merge":    {"desc": "Merge kanban cards (/merge K1 K2)"},
     "done":     {"desc": "Mark card as Done (/done K1 or /done all)"},
     "clean":    {"desc": "Mark all active cards as Done"},
@@ -590,6 +594,113 @@ def _run_skill_command(args_str: str) -> str:
         return f"Skill '{name}' failed: {result['error']}"
 
 
+def _run_automation(args_str: str) -> str:
+    """Run an automation skill or FanMolt agent heartbeat."""
+    name = args_str.strip()
+    if not name:
+        return "Usage: run <automation_name> or run <agent_handle>"
+
+    # Try automation skill first
+    try:
+        from heysquid.skills import get_skill_registry, run_skill, SkillContext
+        registry = get_skill_registry()
+        if name in registry:
+            ctx = SkillContext(triggered_by="manual")
+            result = run_skill(name, ctx)
+            if result["ok"]:
+                return f"✓ Automation '{name}' completed"
+            return f"✗ Automation '{name}' failed: {result.get('error', '?')}"
+    except Exception:
+        pass
+
+    # Try FanMolt agent heartbeat
+    try:
+        from heysquid.skills.fanmolt.agent_manager import load_agent
+        from heysquid.skills.fanmolt.heartbeat_runner import run_heartbeat
+        agent = load_agent(name)
+        if agent:
+            result = run_heartbeat(name)
+            if result.get("ok"):
+                r = result.get("replies", 0)
+                c = result.get("comments", 0)
+                p = "yes" if result.get("posted") else "no"
+                return f"✓ Heartbeat '{name}': {r}r {c}c post={p}"
+            return f"✗ Heartbeat '{name}' failed: {result.get('error', '?')}"
+    except Exception as e:
+        return f"✗ Run failed: {e}"
+
+    return f"Not found: '{name}' (not an automation or agent handle)"
+
+
+def _toggle_automation(args_str: str) -> str:
+    """Toggle automation enabled/disabled."""
+    name = args_str.strip()
+    if not name:
+        return "Usage: toggle <automation_name>"
+
+    automations_file = os.path.join(ROOT, "data", "automations.json")
+    try:
+        with open(automations_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:
+        return "Failed to read automations.json"
+
+    if name not in data:
+        return f"Automation '{name}' not found"
+
+    current = data[name].get("enabled", True)
+    data[name]["enabled"] = not current
+    new_state = "enabled" if not current else "disabled"
+
+    try:
+        with open(automations_file, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
+    except Exception:
+        return "Failed to write automations.json"
+
+    return f"✓ {name} → {new_state}"
+
+
+def _force_post(args_str: str) -> str:
+    """Force post for a FanMolt agent."""
+    parts = args_str.strip().split(None, 1)
+    if not parts:
+        return "Usage: post <agent_handle> [recipe_name]"
+
+    handle = parts[0]
+    recipe = parts[1] if len(parts) > 1 else None
+
+    try:
+        from heysquid.skills.fanmolt.heartbeat_runner import force_post
+        result = force_post(handle, recipe_name=recipe)
+        if result.get("ok"):
+            title = result.get("title", "?")
+            return f"✓ Posted: {title}"
+        return f"✗ Post failed: {result.get('error', '?')}"
+    except Exception as e:
+        return f"✗ Post failed: {e}"
+
+
+def _show_fanmolt_stats() -> str:
+    """Show FanMolt aggregate stats."""
+    try:
+        from heysquid.skills.fanmolt.agent_manager import get_stats
+        stats = get_stats()
+        agents = stats.get("agent_count", 0)
+        posts = stats.get("total_posts", 0)
+        comments = stats.get("total_comments", 0)
+        replies = stats.get("total_replies", 0)
+        return (
+            f"FanMolt Stats\n"
+            f"  Agents:   {agents}\n"
+            f"  Posts:    {posts}\n"
+            f"  Comments: {comments}\n"
+            f"  Replies:  {replies}"
+        )
+    except Exception as e:
+        return f"Failed to load stats: {e}"
+
+
 def _open_dashboard() -> str:
     """Open dashboard in default macOS browser (localhost server)."""
     subprocess.Popen(["open", "http://localhost:8420/dashboard.html"])
@@ -801,6 +912,18 @@ def dispatch_command(raw: str, stream_buffer: deque) -> str | None:
 
     if name == "skill":
         return _run_skill_command(args)
+
+    if name == "run":
+        return _run_automation(args)
+
+    if name == "toggle":
+        return _toggle_automation(args)
+
+    if name == "post":
+        return _force_post(args)
+
+    if name == "stats":
+        return _show_fanmolt_stats()
 
     if name == "merge":
         return _merge_kanban_cards(args)

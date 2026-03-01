@@ -69,7 +69,7 @@ class LogScreen(Screen):
         if live:
             indicator = f"[bold green]● LIVE[/bold green] [dim]({up}/4)[/dim]"
         else:
-            indicator = f"[bold red]● OFFLINE[/bold red] [dim]({up}/4)[/dim]"
+            indicator = f"[dim]● STANDBY[/dim] [dim]({up}/4)[/dim]"
         return f"[bold]🦑 SQUID[/bold]  [bold {pm_color}]\\[LOG][/bold {pm_color}]  {indicator}"
 
     def _process_status_text(self) -> str:

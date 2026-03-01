@@ -172,7 +172,24 @@ def poll_chat_messages() -> list[dict]:
     return _chat_cache["messages"]
 
 
+_fanmolt_agents_cache: dict = {"ts": 0.0, "data": []}
 _squad_history_cache: dict = {"mtime": 0.0, "data": []}
+
+
+def load_fanmolt_agents() -> list[dict]:
+    """Load FanMolt agents (5-second cache, self-healing)."""
+    now = time.time()
+    if now - _fanmolt_agents_cache["ts"] < 5:
+        return _fanmolt_agents_cache["data"]
+    try:
+        from heysquid.skills.fanmolt.agent_manager import list_agents
+        agents = list_agents()
+        _fanmolt_agents_cache["ts"] = now
+        _fanmolt_agents_cache["data"] = agents
+        return agents
+    except Exception as e:
+        log.debug("Failed to load fanmolt agents: %s", e)
+        return _fanmolt_agents_cache["data"]
 
 
 def load_squad_history() -> list[dict]:

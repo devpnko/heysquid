@@ -150,7 +150,7 @@ class KanbanScreen(Screen):
         if live:
             indicator = f"[bold green]\u25cf LIVE[/bold green] [dim]({up}/4)[/dim]"
         else:
-            indicator = f"[bold red]\u25cf OFFLINE[/bold red] [dim]({up}/4)[/dim]"
+            indicator = f"[dim]\u25cf STANDBY[/dim] [dim]({up}/4)[/dim]"
         return f"[bold]\U0001f991 SQUID[/bold]  [bold {pm_color}]\\[KANBAN][/bold {pm_color}]  {indicator}"
 
     def show_info(self, text: str) -> None:

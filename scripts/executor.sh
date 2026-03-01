@@ -267,7 +267,7 @@ PROMPT="Act as a PM following the instructions in CLAUDE.md.
    - Task request -> explain the plan and ask for confirmation.
    - Confirmation/approval -> switch to execution mode and perform the task.
 7) After completing a task/response, do not exit immediately. Follow the 'standby mode' instructions in CLAUDE.md to run a permanent wait loop.
-   - sleep 30 -> poll_new_messages() -> process if new messages exist
+   - sleep 5 -> poll_new_messages() -> process if new messages exist
    - No timeout. The session is permanent. Never terminate on your own.
    - Auto-refresh session_memory.md every 30 minutes (intermediate save).
 8) If important decisions/lessons/preferences arise during the session, record them in data/permanent_memory.md.

@@ -67,7 +67,7 @@ class ChatScreen(Screen):
         if live:
             indicator = f"[bold green]● LIVE[/bold green] [dim]({up}/4)[/dim]"
         else:
-            indicator = f"[bold red]● OFFLINE[/bold red] [dim]({up}/4)[/dim]"
+            indicator = f"[dim]● STANDBY[/dim] [dim]({up}/4)[/dim]"
         # PM status indicator
         pm_indicator = ""
         if pm_status == "chatting":
