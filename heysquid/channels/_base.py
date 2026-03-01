@@ -76,6 +76,15 @@ def trigger_executor():
                 with open(executor_pidfile) as f:
                     pid = int(f.read().strip())
                 os.kill(pid, 0)  # signal 0 = liveness check only (does not kill)
+                # Check for zombie (defunct) process — os.kill(0) succeeds on zombies
+                ps_result = subprocess.run(
+                    ["ps", "-o", "state=", "-p", str(pid)],
+                    capture_output=True, text=True,
+                )
+                state = ps_result.stdout.strip()
+                if state.startswith("Z"):
+                    print(f"[TRIGGER] executor PID {pid} is zombie — cleaning up")
+                    raise ProcessLookupError("zombie process")
                 print(f"[TRIGGER] executor already running (PID {pid}) — skipping")
                 return
             except (ProcessLookupError, ValueError, OSError):

@@ -661,6 +661,15 @@ async def listen_loop():
                 if cycle_count % 30 == 0:
                     print(f"[{now}] #{cycle_count} - Waiting...")
 
+            # Reap zombie child processes (executor.sh) to prevent <defunct> accumulation
+            try:
+                while True:
+                    pid, _ = os.waitpid(-1, os.WNOHANG)
+                    if pid == 0:
+                        break
+            except ChildProcessError:
+                pass  # No child processes
+
             # Every 60 cycles (~10 min): re-trigger unprocessed messages + zombie PM scan
             if cycle_count % 60 == 0:
                 _cleanup_zombie_pm()
