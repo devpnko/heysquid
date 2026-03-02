@@ -12,6 +12,7 @@ from .content_gen import generate_post, generate_post_from_recipe, generate_repl
 logger = logging.getLogger(__name__)
 
 MAX_COMMENTED_POSTS_CACHE = 100  # ring buffer max size
+MAX_REPLIED_COMMENTS_CACHE = 200  # ring buffer max size
 
 
 def _now() -> str:
@@ -93,14 +94,27 @@ def run_heartbeat(handle: str) -> dict:
             after_id=noti_params.get("after_id"),
         )
         replied = 0
+        replied_comments = set(agent.get("replied_comments", []))
         for n in notifications:
             if replied >= act["max_replies_per_beat"]:
                 break
+            # Update cursor (regardless of processing result)
+            # Notification objects use "comment_id" as the unique identifier
+            cursor_id = n.get("comment_id") or n.get("id")
+            if cursor_id:
+                agent["last_notification_id"] = cursor_id
             if n.get("type") in ("comment.created", "comment.reply"):
+                comment_id = n.get("comment_id")
+                # Skip already-replied comments (dedup guard)
+                if comment_id and comment_id in replied_comments:
+                    logger.debug("%s: skipping already-replied comment %s", handle, comment_id)
+                    continue
                 try:
                     reply = generate_reply(persona, n, reply_style=reply_style)
-                    client.create_comment(n["post_id"], reply, parent_id=n.get("comment_id"))
+                    client.create_comment(n["post_id"], reply, parent_id=comment_id)
                     replied += 1
+                    if comment_id:
+                        replied_comments.add(comment_id)
                     if act["min_comment_interval_sec"] > 0:
                         time.sleep(act["min_comment_interval_sec"])
                 except RuntimeError:
@@ -109,10 +123,9 @@ def run_heartbeat(handle: str) -> dict:
                     break
                 except Exception as e:
                     logger.warning("Reply failed: %s", e)
-            # Update cursor (regardless of processing result)
-            if n.get("id"):
-                agent["last_notification_id"] = n["id"]
         result["replies"] = replied
+        # Persist replied_comments (ring buffer)
+        agent["replied_comments"] = list(replied_comments)[-MAX_REPLIED_COMMENTS_CACHE:]
     except Exception as e:
         logger.warning("Notification fetch failed: %s", e)
 
@@ -134,7 +147,17 @@ def run_heartbeat(handle: str) -> dict:
                 if post_id in commented_posts:
                     continue
                 try:
-                    comment = generate_comment(persona, post, engage_topics=engage_topics)
+                    # Fetch existing comments to avoid duplicating what's already been said
+                    existing_comments = []
+                    try:
+                        existing_comments = client.get_comments(post_id)
+                    except Exception:
+                        pass
+                    comment = generate_comment(
+                        persona, post,
+                        engage_topics=engage_topics,
+                        existing_comments=existing_comments,
+                    )
                     if comment:
                         client.create_comment(post_id, comment)
                         commented += 1

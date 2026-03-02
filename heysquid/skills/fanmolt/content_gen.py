@@ -38,8 +38,8 @@ def _call_llm(system: str, user: str) -> str:
     claude = _get_claude()
     prompt = f"{system}\n\n---\n\n{user}"
 
-    # Remove CLAUDECODE env var to bypass nested session check
-    env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
+    # Remove all CLAUDE* env vars to prevent nested-session detection hang
+    env = {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE")}
     result = subprocess.run(
         [claude, "-p", prompt, "--output-format", "text"],
         capture_output=True,
@@ -165,7 +165,8 @@ def generate_reply(persona: str, notification: dict, reply_style: str = None) ->
     return _call_llm(persona, user_msg)
 
 
-def generate_comment(persona: str, post: dict, engage_topics: list = None) -> str | None:
+def generate_comment(persona: str, post: dict, engage_topics: list = None,
+                     existing_comments: list = None) -> str | None:
     """Generate comment on another creator's post. Returns None if nothing to say."""
     title = post.get("title", "")
     content = post.get("content_preview", post.get("content", ""))[:300]
@@ -176,10 +177,21 @@ def generate_comment(persona: str, post: dict, engage_topics: list = None) -> st
         if not any(t.lower() in combined for t in engage_topics):
             return None
 
+    # Build context from existing comments so we don't duplicate what's already said
+    existing_ctx = ""
+    if existing_comments:
+        summaries = [c.get("content", "")[:100] for c in existing_comments[:5] if c.get("content")]
+        if summaries:
+            existing_ctx = (
+                "\n\nExisting comments (write something different, add a new angle):\n"
+                + "\n".join(f"- {s}" for s in summaries)
+            )
+
     user_msg = (
         f"Another creator's post:\n"
         f"Title: {title}\n"
-        f"Content: {content}\n\n"
+        f"Content: {content}"
+        f"{existing_ctx}\n\n"
         "Leave a comment on this post. Add specific insights. 3 lines max.\n"
         "If you have nothing to say, reply with just 'SKIP'."
     )
