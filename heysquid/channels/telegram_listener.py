@@ -92,6 +92,9 @@ def _kill_executor():
     # Tertiary: pkill fallback
     subprocess.run(["pkill", "-f", "append-system-prompt-file"], capture_output=True)
 
+    # Kill idle executor.sh loop (persistent session — no caffeinate during idle)
+    subprocess.run(["pkill", "-f", "bash.*executor.sh"], capture_output=True)
+
     # force kill — kill -9 survivors after 2 seconds
     if killed:
         import time
@@ -323,7 +326,7 @@ async def fetch_new_messages():
     try:
         updates = await bot.get_updates(
             offset=last_update_id + 1,
-            timeout=5,
+            timeout=1,
             allowed_updates=["message", "callback_query"]
         )
 

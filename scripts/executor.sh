@@ -25,6 +25,13 @@ LOCKFILE="$ROOT/data/executor.lock"
 PIDFILE="$ROOT/data/claude.pid"
 EXECUTOR_PIDFILE="$ROOT/data/executor.pid"
 
+# Persistent session loop config
+IDLE_POLL_INTERVAL=2        # seconds between message checks during idle
+IDLE_TIMEOUT=1800           # 30min inactivity -> exit session
+CONTINUE_PROMPT="New messages arrived. Process them now.
+Call check_telegram() to get the new messages, then handle them following PM workflow.
+Do not re-read identity.json or memory files — your context is preserved from this session."
+
 # Create log directories
 mkdir -p "$LOG_DIR"
 mkdir -p "$ROOT/data"
@@ -266,15 +273,13 @@ PROMPT="Act as a PM following the instructions in CLAUDE.md.
    - Conversation (greetings/questions/chat) -> reply naturally via reply_telegram().
    - Task request -> explain the plan and ask for confirmation.
    - Confirmation/approval -> switch to execution mode and perform the task.
-7) After completing a task/response, do not exit immediately. Follow the 'standby mode' instructions in CLAUDE.md to run a permanent wait loop.
-   - sleep 5 -> poll_new_messages() -> process if new messages exist
-   - No timeout. The session is permanent. Never terminate on your own.
-   - Auto-refresh session_memory.md every 30 minutes (intermediate save).
+7) After completing the task/response, save session_memory.md, then finish and exit cleanly.
+   The executor handles session persistence externally — do NOT run standby loops or sleep commands.
 8) If important decisions/lessons/preferences arise during the session, record them in data/permanent_memory.md.
    - Only things worth permanently keeping (user preferences, key decisions, recurring lessons)
    - Keep under 200 lines.
-Use send_message_sync() from heysquid/telegram_sender.py for all Telegram responses.
-Use reply_telegram() from heysquid/telegram_bot.py for quick conversational replies."
+IMPORTANT: Always use reply_telegram() from heysquid/telegram_bot.py for ALL responses.
+Never call send_message_sync() directly — it only sends to one channel and causes duplicate messages."
 
 # Set working directory to project root
 cd "$ROOT"
@@ -296,7 +301,7 @@ VIEWER="$ROOT/scripts/stream_viewer.py"
 # so `wait $PIPE_PID` never returns and executor hangs forever.
 # Fix: monitor stream log for session-end marker, then kill orphan children.
 _session_watchdog() {
-    local GRACE=15      # seconds to wait after session end before killing
+    local GRACE=5       # seconds to wait after session end before killing
     local POLL=10       # seconds between checks
     local INITIAL=60    # seconds to wait before first check (session startup)
 
@@ -345,18 +350,6 @@ _session_watchdog() {
     log "[WATCHDOG] Pipeline exited normally. No intervention needed."
 }
 
-# Always start a new session (no session resume -- context recovered via memory system)
-log "[INFO] Starting new session (permanent memory + session memory)..."
-
-# Claude -> tee -> log file (stream_viewer is separated -- its crash does not affect claude)
-caffeinate -ims "$CLAUDE_EXE" -p --dangerously-skip-permissions \
-    --model sonnet \
-    --output-format stream-json --verbose \
-    --append-system-prompt-file "$SPF" \
-    "$PROMPT" \
-    2>> "$LOG" | tee -a "$STREAM_LOG" > /dev/null &
-PIPE_PID=$!
-
 # stream_viewer: independent process (auto-restart on crash, decoupled from claude pipe)
 _run_stream_viewer() {
     sleep 1  # Wait for tee to start writing to file
@@ -368,40 +361,134 @@ _run_stream_viewer() {
         sleep 2
     done
 }
-_run_stream_viewer &
-VIEWER_PID=$!
 
-# Record caffeinate PID + actual claude PID
-# Process structure: claude (parent) -> caffeinate (child)
-# claude CLI rewrites cmdline to "claude", so PID file is the only tracking method
-sleep 2
-CAFE_PID=$(pgrep -f "caffeinate.*append-system-prompt-file" 2>/dev/null | head -1 || true)
-CLAUDE_PID=""
-if [ -n "$CAFE_PID" ]; then
-    # claude is the parent of caffeinate (PPID)
-    CLAUDE_PID=$(ps -p "$CAFE_PID" -o ppid= 2>/dev/null | tr -d ' ')
+# ========================================
+# Claude iteration runner (single invocation)
+# ========================================
+_run_claude_iteration() {
+    local MODE="$1"       # "new" or "continue"
+    local ITER_PROMPT="$2"
+
+    # Kill previous watchdog/viewer if any
+    [ -n "${WATCHDOG_PID:-}" ] && kill "$WATCHDOG_PID" 2>/dev/null || true
+    [ -n "${VIEWER_PID:-}" ] && kill "$VIEWER_PID" 2>/dev/null || true
+    WATCHDOG_PID=""
+    VIEWER_PID=""
+
+    # Reset stream log for clean watchdog detection
+    > "$STREAM_LOG"
+
+    # Launch Claude
+    if [ "$MODE" = "continue" ]; then
+        log "[INFO] Continuing session (hot start)..."
+        caffeinate -ims "$CLAUDE_EXE" -p -c --dangerously-skip-permissions \
+            --model sonnet \
+            --output-format stream-json --verbose \
+            --append-system-prompt-file "$SPF" \
+            "$ITER_PROMPT" \
+            2>> "$LOG" | tee -a "$STREAM_LOG" > /dev/null &
+    else
+        log "[INFO] Starting new session (permanent memory + session memory)..."
+        caffeinate -ims "$CLAUDE_EXE" -p --dangerously-skip-permissions \
+            --model sonnet \
+            --output-format stream-json --verbose \
+            --append-system-prompt-file "$SPF" \
+            "$ITER_PROMPT" \
+            2>> "$LOG" | tee -a "$STREAM_LOG" > /dev/null &
+    fi
+    PIPE_PID=$!
+
+    # Start stream viewer
+    _run_stream_viewer &
+    VIEWER_PID=$!
+
+    # Record caffeinate PID + actual claude PID
+    sleep 2
+    CAFE_PID=$(pgrep -f "caffeinate.*append-system-prompt-file" 2>/dev/null | head -1 || true)
+    CLAUDE_PID=""
+    if [ -n "$CAFE_PID" ]; then
+        CLAUDE_PID=$(ps -p "$CAFE_PID" -o ppid= 2>/dev/null | tr -d ' ')
+    fi
+    if [ -z "$CLAUDE_PID" ]; then
+        CLAUDE_PID=$(pgrep -f "append-system-prompt-file" 2>/dev/null | head -1 || true)
+    fi
+    : > "$PIDFILE"
+    [ -n "$CLAUDE_PID" ] && echo "$CLAUDE_PID" >> "$PIDFILE"
+    [ -n "$CAFE_PID" ] && [ "$CAFE_PID" != "$CLAUDE_PID" ] && echo "$CAFE_PID" >> "$PIDFILE"
+    log "[INFO] Saved PIDs: claude=$CLAUDE_PID cafe=$CAFE_PID"
+
+    # Start session-end watchdog
+    _session_watchdog &
+    WATCHDOG_PID=$!
+    log "[INFO] Watchdog started: PID=$WATCHDOG_PID"
+
+    # Wait for Claude to complete
+    local EC=0
+    wait $PIPE_PID || EC=$?
+
+    # Clean up watchdog/viewer for this iteration
+    [ -n "$WATCHDOG_PID" ] && kill "$WATCHDOG_PID" 2>/dev/null || true
+    [ -n "$VIEWER_PID" ] && kill "$VIEWER_PID" 2>/dev/null || true
+    WATCHDOG_PID=""
+    VIEWER_PID=""
+
+    log "[INFO] Claude iteration done (exit=$EC, mode=$MODE)"
+    return $EC
+}
+
+# ========================================
+# Main execution loop
+# ========================================
+
+# First invocation (cold start)
+_run_claude_iteration "new" "$PROMPT"
+FIRST_EC=$?
+if [ "$FIRST_EC" -ne 0 ]; then
+    log "[ERROR] First session failed (exit=$FIRST_EC). Exiting."
+    exit $FIRST_EC
 fi
-# fallback: save caffeinate PID itself at minimum
-if [ -z "$CLAUDE_PID" ]; then
-    CLAUDE_PID=$(pgrep -f "append-system-prompt-file" 2>/dev/null | head -1 || true)
-fi
-# Save both to PID file (one per line, deduplicated)
-: > "$PIDFILE"
-[ -n "$CLAUDE_PID" ] && echo "$CLAUDE_PID" >> "$PIDFILE"
-[ -n "$CAFE_PID" ] && [ "$CAFE_PID" != "$CLAUDE_PID" ] && echo "$CAFE_PID" >> "$PIDFILE"
-log "[INFO] Saved PIDs: claude=$CLAUDE_PID cafe=$CAFE_PID"
 
-# Start session-end watchdog (kills orphan children after session ends)
-_session_watchdog &
-WATCHDOG_PID=$!
-log "[INFO] Watchdog started: PID=$WATCHDOG_PID"
+# Enter idle loop — wait for new messages, hot-restart with -c
+log "[IDLE] Entering idle loop (poll=${IDLE_POLL_INTERVAL}s, timeout=${IDLE_TIMEOUT}s)..."
+IDLE_START=$(date +%s)
+LAST_TOUCH=$(date +%s)
 
-# Wait for pipeline to complete
-EC=0
-wait $PIPE_PID || EC=$?
+while true; do
+    sleep "$IDLE_POLL_INTERVAL"
 
-log "EXITCODE=$EC"
-log ""
+    # Check idle timeout (30min)
+    NOW=$(date +%s)
+    IDLE_ELAPSED=$((NOW - IDLE_START))
+    if [ "$IDLE_ELAPSED" -ge "$IDLE_TIMEOUT" ]; then
+        log "[IDLE] Timeout reached (${IDLE_TIMEOUT}s). Ending session."
+        break
+    fi
 
+    # Touch stream log every 5 minutes (prevent staleness false-positive)
+    TOUCH_ELAPSED=$((NOW - LAST_TOUCH))
+    if [ "$TOUCH_ELAPSED" -ge 300 ]; then
+        touch "$STREAM_LOG"
+        LAST_TOUCH=$NOW
+    fi
+
+    # Check for new messages
+    CHECK_RESULT=0
+    "$VENV_PYTHON" -m heysquid.quick_check >> "$LOG" 2>&1 || CHECK_RESULT=$?
+
+    if [ "$CHECK_RESULT" -ne 0 ]; then
+        log "[IDLE] New messages detected! Hot-starting Claude..."
+        _run_claude_iteration "continue" "$CONTINUE_PROMPT"
+        ITER_EC=$?
+        if [ "$ITER_EC" -ne 0 ]; then
+            log "[ERROR] Continue session failed (exit=$ITER_EC). Exiting loop."
+            break
+        fi
+        IDLE_START=$(date +%s)
+        LAST_TOUCH=$(date +%s)
+        log "[IDLE] Back to idle loop..."
+    fi
+done
+
+log "[IDLE] Session loop ended."
 # cleanup runs automatically via trap EXIT
-exit $EC
+exit 0
