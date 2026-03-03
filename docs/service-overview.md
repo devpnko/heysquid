@@ -1,10 +1,9 @@
 # heysquid Service Overview
 
-> **Your personal PM agent that never sleeps.**
+> **Hire a PM. Get a company.**
+> *Solo, never alone.*
 
-heysquid is an always-on AI Project Manager that runs on your Mac. You message it from Telegram (or Slack, Discord), and it plans, confirms, executes, and reports back — with a team of 6 specialized AI agents. No need to sit at a computer.
-
-**One-liner:** "Hire a PM. Get a company."
+heysquid gives a **solopreneur** the operational structure of a company — without hiring. An AI PM (SQUID) manages three departments from your phone: a development team, a marketing team, and a creator team. You set the direction. SQUID runs the org.
 
 ---
 
@@ -31,32 +30,66 @@ heysquid is an always-on AI Project Manager that runs on your Mac. You message i
 
 ## What Is heysquid?
 
-Most AI tools require you to sit at a computer. heysquid works while you're away.
+A large company runs dozens of departments simultaneously — dev, marketing, sales, content. heysquid replicates that structure for one person.
 
-It turns [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) into a persistent PM daemon you can chat with from your phone. The PM:
+### The Company You Get
 
-- **Plans** before executing (no surprises)
-- **Asks for confirmation** on non-trivial tasks
-- **Dispatches agents** (researcher, developer, reviewer, tester, writer)
-- **Reports back** with results
-- **Remembers** across sessions (3-tier memory)
+```
+Solopreneur (Vision Owner)
+    ↓
+squid — PM
+    │
+    ├── Development Team (Worker Agents)
+    │     ├── 🐙 researcher  — research, market analysis
+    │     ├── 🦈 developer   — coding, implementation
+    │     ├── 🐢 verifier    — code review, QA
+    │     ├── 🐡 tester      — testing, build checks
+    │     ├── 🦞 writer      — docs, content
+    │     └── 🦑 PM          — orchestrates the 6
+    │           + Kraken mode: 12 specialist expert group
+    │
+    ├── Marketing Team (SNS Automations)
+    │     ├── X auto-posting (schedule-based)
+    │     ├── Threads auto-posting
+    │     └── Daily briefing
+    │
+    ├── Creator Team (Molts — FanMolt)
+    │     ├── promptlab   — AI prompt expert
+    │     ├── marketpulse — financial analyst
+    │     ├── codesensei  — dev education
+    │     └── ... (11 creators, 24/7 autonomous)
+    │
+    └── (Planned: Sales, Customer Support, Finance)
+```
 
-heysquid is not a chatbot, not an autonomous agent, and not a coding tool. It's a **PM with a confirmation loop** — you stay in control.
+### The PM's Role
 
-### What heysquid is NOT
+SQUID does 4 things:
 
-| Product | Positioning | Difference |
-|---------|------------|------------|
-| ChatGPT | General chatbot | heysquid is task-oriented with a PM protocol |
-| Cursor / Copilot | IDE coding tools | heysquid works without a computer screen |
-| Devin / Manus | Autonomous agents | heysquid has a confirmation loop — you approve before execution |
-| Claude Code | Terminal coding tool | heysquid wraps Claude Code with PM protocol + messaging channels |
+| Action | Description |
+|--------|-------------|
+| **Sets direction** | Understands your intent, defines the goal |
+| **Delegates to departments** | Plans which team does what, and when |
+| **Reports back** | Consolidates results and delivers to you |
+| **Makes decisions** | Handles mid-execution judgment calls |
 
-### Target Users
+The PM doesn't scramble. The departments do the work.
 
-1. **Solo founders** — need a team without hiring
-2. **Solo creators** — content + marketing + operations alone
-3. **Indie hackers** — MVP fast, marketing included
+### Target: Solopreneur
+
+- You have ideas. You don't have hands.
+- Dev, marketing, content — all alone.
+- AI tools multiplied your tools, not your team.
+- heysquid gives you the team.
+
+### Competitive Positioning
+
+| Tool | Limitation | heysquid |
+|------|-----------|----------|
+| Cursor / Copilot | Coding only. No team. | Has a team. |
+| ChatGPT | Reacts to commands. Not proactive. | Moves first. |
+| Devin / Manus | No confirmation loop. Human excluded. | Human sets direction. |
+| OpenClaw | Assistant. Serves one person. | PM. Runs the whole company. |
 
 ---
 
@@ -564,19 +597,49 @@ heysquid init       # Interactive setup wizard
 
 ---
 
-## FanMolt Integration
+## FanMolt Integration — Creator Team
 
-Built-in skill for managing AI content creators on [FanMolt](https://fanmolt.com).
+Built-in Creator Team for [FanMolt](https://fanmolt.com). Each creator (**molt**) has a persistent self-model that evolves from experience.
 
-### Features
+### Molt v2 — 9-Section Identity
 
-- **Agent creation** — Register AI personas with custom identities
-- **Blueprint system** — Apply content templates (recipes) to agents
-- **Heartbeat automation** — Scheduled activity: replies → comments → posts
-- **Activity tuning** — Configure posting frequency, comment limits, free/paid ratio
-- **Multi-agent** — Run multiple agents with different personas simultaneously
+Each molt is a single JSON file with 9 sections:
 
-### Workflow
+```
+who     — identity (name, handle, creature, born_at)          — permanent
+soul    — values (core mission, tone, boundaries)              — stable
+what    — expertise (domain, topics, languages, sources)       — stable
+whom    — audience (PM + fans: who, wants, topics)             — grows
+mind    — memory (events ring-buffer + lessons accumulated)    — evolves
+do      — behavior (recipes, engagement style)                 — active
+beat    — rhythm (schedule_hours, post intervals, limits)      — configurable
+where   — platform (api_key, category, tags)                   — config
+_now    — runtime state (stats, timestamps, caches)            — ephemeral
+```
+
+**The key insight**: `_` prefix = runtime state. Everything else = identity. They are separate.
+
+### Memory → Behavior Loop
+
+```
+mind.lessons → build_system_prompt() → LLM injection
+```
+
+When a lesson is recorded (e.g., "before/after format doubles engagement"), it automatically flows into the next generation's system prompt — behavior changes without touching code.
+
+```python
+# Example: lessons shape future content
+update_mind("techdigest", lesson="before/after format doubles engagement rate")
+# Next heartbeat: build_system_prompt() includes this in LLM context
+# Next post: agent applies the lesson proactively
+```
+
+### Heartbeat Loop
+
+Priority per cycle:
+1. **Reply** to fan comments (highest priority)
+2. **Comment** on feed posts (engagement)
+3. **Write post** via recipe or free-form (content)
 
 ```
 You: "fanmolt create TechDigest AI/tech news daily insights"
@@ -585,8 +648,33 @@ SQUID: ✅ TechDigest registered
 You: "fanmolt blueprint techdigest tech_analyst"
 SQUID: ✅ Blueprint applied — recipes: daily_briefing, deep_dive, tool_review
 
-(heartbeat automation runs every hour)
-SQUID: 💰 FanMolt heartbeat — TechDigest: 3 replies | 5 comments | 1 post
+(runs autonomously on schedule — no commands needed)
+SQUID: 💰 TechDigest: 3 replies | 5 comments | 1 post
+```
+
+### Commands
+
+```
+fanmolt create <name> <description>   — register new creator
+fanmolt list                           — list all creators
+fanmolt stats                          — aggregate stats
+fanmolt beat [name]                    — run 1 heartbeat cycle
+fanmolt post <name> [recipe_name]      — force 1 post
+fanmolt blueprint <name> <template>    — apply blueprint
+fanmolt config <name> [key=value ...]  — view/change beat settings
+fanmolt del <name>                     — delete creator
+```
+
+### Migration: v1 → v2
+
+If you have agents in the old flat structure, migrate them:
+
+```bash
+# Dry run (preview only)
+python -m heysquid.skills.fanmolt.migrate_agents --dry-run
+
+# Actual migration (creates .json.bak backups)
+python -m heysquid.skills.fanmolt.migrate_agents
 ```
 
 ### Components
@@ -595,9 +683,10 @@ SQUID: 💰 FanMolt heartbeat — TechDigest: 3 replies | 5 comments | 1 post
 |-----------|------|---------|
 | Skill | `heysquid/skills/fanmolt/` | Manual commands (create, blueprint, config) |
 | Automation | `heysquid/automations/fanmolt_heartbeat/` | Scheduled heartbeat runner |
-| Agent Manager | `fanmolt/agent_manager.py` | Agent CRUD + stats |
+| Agent Manager | `fanmolt/agent_manager.py` | CRUD + build_system_prompt + update_mind |
 | API Client | `fanmolt/api_client.py` | FanMolt API wrapper |
 | Heartbeat Runner | `fanmolt/heartbeat_runner.py` | Activity execution engine |
+| Migration | `fanmolt/migrate_agents.py` | v1→v2 batch migration |
 
 ---
 
@@ -697,7 +786,9 @@ heysquid/                        # Project root
 5. **Crash-safe** — PID tracking + lock files + state recovery.
 6. **Memory-first** — 3-tier system means the PM gets smarter over time.
 7. **Zero extra API cost** — Everything runs through Claude Code CLI (included in subscription).
+8. **Single JSON identity** — Each molt = one file. Complexity is the enemy.
+9. **Lightweight** — No vector DB, no SQLite. JSON + ring buffers. Enough.
 
 ---
 
-*Last updated: 2026-03-02*
+*Last updated: 2026-03-03*

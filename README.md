@@ -1,8 +1,10 @@
 # heysquid 🦑
 
-**Your personal PM agent that never sleeps.**
+**Hire a PM. Get a company.**
 
-heysquid turns [Claude Code](https://docs.anthropic.com/en/docs/claude-code) into an always-on project manager you can message from **Telegram, Slack, or Discord**. Send a message, and your PM will plan, confirm, execute, and report back — with a team of specialized AI agents at its disposal.
+*Solo, never alone.*
+
+heysquid turns [Claude Code](https://docs.anthropic.com/en/docs/claude-code) into a full company run by an AI PM — **development team, marketing team, and creator team**, all managed from your phone. You set the direction. SQUID runs the departments.
 
 <p align="center">
   <img src="assets/demo.gif" alt="heysquid demo" width="880">
@@ -10,16 +12,36 @@ heysquid turns [Claude Code](https://docs.anthropic.com/en/docs/claude-code) int
 
 ## Why heysquid?
 
-Most AI coding tools wait for you to sit at a computer. heysquid works while you're away:
+A big company runs multiple departments in parallel. heysquid gives a **solopreneur** the same structure — without hiring.
 
-- **PM Protocol** — Every task follows Plan → Confirm → Execute → Report. No surprises.
-- **3-Tier Memory** — Permanent memory (lessons learned), session memory (current context), workspace memory (per-project). Your PM remembers everything.
-- **Agent Team** — 6 specialists auto-dispatched by the PM. The right model for the right job.
-- **FanMolt Built-in** — Create AI content creators on [FanMolt](https://fanmolt.com) that post, reply, and earn subscription revenue — all on autopilot.
-- **Plugin System** — Drop a folder into `skills/` or `automations/` and it just works. Auto-discovery, zero config.
-- **Multi-Channel** — Telegram, Slack, Discord, X, Threads. Message your PM from wherever you work.
-- **Always-On** — Daemon-based architecture. Send a message at 3am, get a response in seconds.
-- **Crash Recovery** — If a session dies mid-task, the next session picks up where it left off.
+```
+Solopreneur (Vision Owner)
+    ↓
+squid — PM
+    │
+    ├── Development Team    — 6 specialist agents + Kraken mode (12 experts)
+    ├── Marketing Team      — X + Threads auto-posting, daily briefings
+    └── Creator Team        — 11 AI creators on FanMolt, 24/7 autonomous
+```
+
+The PM does 4 things:
+1. **Sets direction** — understands your intent and defines the goal
+2. **Delegates to departments** — plans which team does what
+3. **Reports back** — consolidates results and delivers to you
+4. **Makes decisions** — handles mid-execution judgment calls
+
+The PM doesn't scramble. The departments do the work.
+
+---
+
+- **Confirmation Loop** — Every task: Plan → Confirm → Execute → Report. No autonomous surprises.
+- **3-Tier Memory** — Permanent (lessons learned), session (current context), workspace (per-project).
+- **Agent Team** — 6 specialists auto-dispatched. Kraken mode: 12 expert personas for deep work.
+- **FanMolt Built-in** — AI creators that post, comment, and earn subscription revenue autonomously.
+- **Plugin System** — Drop a folder into `skills/` or `automations/`. Auto-discovery, zero config.
+- **Multi-Channel** — Telegram, Slack, Discord, X, Threads. Message from wherever you work.
+- **Always-On** — Daemon-based. Send a message at 3am, get a response in seconds.
+- **Open Source** — `$0` extra cost. Runs on your Claude Max subscription ($100/mo).
 
 ## Quick Start
 
@@ -52,21 +74,21 @@ That's it. Send a message to your Telegram bot and start working.
 ## How It Works
 
 ```
-You (Telegram) → Listener → Executor → Claude Code (PM mode) → You (Telegram)
-                                              ↕
-                                    Agent Team (6 specialists)
-                                              ↕
-                                    Memory (permanent / session / workspace)
+You (Telegram/Slack/Discord)
+      ↓  "마케팅 전략 세워줘"
+SQUID PM — plans, confirms, delegates
+      ├── Development Team → researcher + developer + writer execute in parallel
+      ├── Marketing Team   → SNS posts go out on schedule
+      └── Creator Team     → FanMolt molts post, reply, earn — without being asked
 ```
 
 1. You send a message on Telegram
 2. The **listener** daemon detects it within 10 seconds
-3. **executor.sh** launches Claude Code in PM mode
-4. The PM reads your message and decides:
+3. **SQUID PM** reads your message and decides:
    - Chat → responds naturally
    - Task request → explains plan, asks for confirmation
    - Approval → dispatches agents, executes, reports back
-5. After completing work, enters **standby loop** (polls every 30s, stays alive indefinitely)
+4. After completing work, enters **standby loop** (polls every 30s, stays alive indefinitely)
 
 ## Agent Team
 
@@ -124,9 +146,23 @@ def execute(**kwargs) -> dict:
 
 Plugins are auto-discovered at startup. See [skills/GUIDE.md](heysquid/skills/GUIDE.md) for the full reference.
 
-## FanMolt Integration
+## Creator Team — FanMolt Integration
 
-heysquid ships with a built-in [FanMolt](https://fanmolt.com) skill — manage AI content creators that post, reply to comments, and engage with the community automatically.
+heysquid's Creator Team runs on [FanMolt](https://fanmolt.com). Each AI creator (**molt**) has a persistent identity with a 9-section self structure:
+
+```
+who     — who they are          (identity, permanent)
+soul    — how they live         (values, evolves with experience)
+what    — what they're expert in (domain, topics)
+whom    — who they serve        (PM + fans)
+mind    — what they remember    (events ring-buffer + accumulated lessons)
+do      — what they do          (recipes + engagement style)
+beat    — how often             (schedule, posting cadence)
+where   — where they are        (platform, API key)
+_now    — runtime state         (stats, timestamps — separate from identity)
+```
+
+The `mind.lessons` feed into `build_system_prompt()` — experience shapes future content.
 
 ```
 You: "fanmolt create TechDigest AI/tech news daily insights"
@@ -135,16 +171,15 @@ SQUID: ✅ TechDigest registered
 You: "fanmolt blueprint techdigest tech_analyst"
 SQUID: ✅ Blueprint applied — recipes: daily_briefing, deep_dive, tool_review
 
-(4 hours later...)
+(runs autonomously — no command needed)
 SQUID: 💰 FanMolt heartbeat — TechDigest: 3 replies | 5 comments | 1 post
 ```
 
 **What you get:**
-- AI creators that write structured content via Blueprint recipes
-- Automatic heartbeat (replies → comments → posts) on configurable schedules
-- Per-agent activity tuning (posting frequency, comment limits, free/paid ratio)
-- Telegram reports after every activity cycle
-- Multiple agents with different personas running simultaneously
+- AI creators with persistent identity that evolves from experience
+- Automatic heartbeat: reply to fans → engage feed → publish posts
+- Recipe system: structured daily/weekly content on schedule
+- Multiple creators running simultaneously, 24/7
 
 No extra API costs — uses your existing Claude subscription.
 
@@ -273,17 +308,18 @@ heysquid is a thin orchestration layer on top of Claude Code:
 ## Roadmap
 
 - [x] PM protocol (plan → confirm → execute → report)
-- [x] Agent team with auto-escalation
+- [x] Agent team with auto-escalation (6 specialists + Kraken 12)
 - [x] 3-tier memory system
 - [x] Crash recovery
 - [x] `pip install heysquid`
 - [x] Multi-channel (Telegram + Slack + Discord)
-- [x] SNS channels (X + Threads)
+- [x] SNS channels (X + Threads) — Marketing Team
 - [x] Plugin system (skills + automations)
-- [x] FanMolt integration (Blueprint + Activity Config)
+- [x] FanMolt integration — Creator Team (molt v2 self-system, 9-section identity)
 - [x] Real-time dashboard + TUI
 - [ ] Linux support (systemd)
-- [ ] Department mode (parallel Claude Code processes)
+- [ ] Sales Team — outbound prospecting agents
+- [ ] Customer Support Team — automated reply agents
 - [ ] Voice input (Whisper → task instruction)
 
 ## Contributing
