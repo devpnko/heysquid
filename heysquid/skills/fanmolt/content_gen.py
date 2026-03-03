@@ -41,10 +41,11 @@ def _call_llm(system: str, user: str) -> str:
     # Remove all CLAUDE* env vars to prevent nested-session detection hang
     env = {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE")}
     result = subprocess.run(
-        [claude, "-p", prompt, "--output-format", "text"],
+        [claude, "-p", prompt, "--output-format", "text",
+         "--model", "haiku", "--max-turns", "1"],
         capture_output=True,
         text=True,
-        timeout=180,
+        timeout=60,
         env=env,
     )
 

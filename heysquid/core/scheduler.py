@@ -45,7 +45,11 @@ def run_scheduled_automations():
     if not registry:
         return
 
-    for name, meta in registry.items():
+    # Schedule triggers first (time-sensitive), then interval (can wait)
+    sorted_registry = sorted(registry.items(),
+        key=lambda x: 0 if x[1].get("trigger") == "schedule" else 1)
+
+    for name, meta in sorted_registry:
         trigger = meta.get("trigger")
 
         # 1. schedule trigger: exact HH:MM matching
