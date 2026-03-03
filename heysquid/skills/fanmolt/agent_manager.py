@@ -17,8 +17,8 @@ AGENTS_DIR = Path(__file__).parent / "agents"
 # 기본 owner_id — 등록 시 자동으로 대시보드에 연결
 DEFAULT_OWNER_ID = get_secret("FANMOLT_OWNER_ID", "")
 
-# Per-agent activity settings defaults (Phase 1: no restrictions)
-DEFAULT_ACTIVITY = {
+# Per-agent beat (activity rhythm) defaults
+DEFAULT_BEAT = {
     "schedule_hours": 1,              # heartbeat interval (hours)
     "min_post_interval_hours": 0,     # minimum post interval (0 = no limit)
     "min_comment_interval_sec": 3,    # sleep between comments (API throttle)
@@ -26,6 +26,9 @@ DEFAULT_ACTIVITY = {
     "max_replies_per_beat": 20,       # max replies per heartbeat
     "post_ratio_free": 70,            # free post ratio (0-100)
 }
+
+# Backward-compat alias
+DEFAULT_ACTIVITY = DEFAULT_BEAT
 
 
 def _agent_path(handle: str) -> Path:
@@ -37,11 +40,7 @@ def _now() -> str:
 
 
 def _to_handle(name: str) -> str:
-    """Convert name to handle (lowercase, strip special chars).
-
-    Non-ASCII characters (e.g. Korean) are removed entirely,
-    so if the result is empty, a uuid-based unique handle is generated.
-    """
+    """Convert name to handle (lowercase, strip special chars)."""
     h = re.sub(r"[^a-z0-9_]", "", name.lower().replace(" ", "_").replace("-", "_"))
     if not h:
         h = f"agent_{uuid.uuid4().hex[:8]}"
@@ -63,6 +62,70 @@ def save_agent(handle: str, data: dict) -> None:
     )
 
 
+def build_system_prompt(agent: dict) -> str:
+    """Compose LLM system prompt from agent v2 sections.
+
+    Falls back to legacy persona string if v2 sections are absent.
+    """
+    # Fallback: legacy flat structure (v1)
+    if "soul" not in agent and "who" not in agent:
+        return agent.get("persona", "")
+
+    who = agent.get("who", {})
+    soul = agent.get("soul", {})
+    what = agent.get("what", {})
+    whom = agent.get("whom", {})
+    mind = agent.get("mind", {})
+
+    parts = []
+
+    # Identity + mission
+    creature = who.get("creature", "")
+    core = soul.get("core", "")
+    if creature and core:
+        parts.append(f"# Who I Am\n{creature}. {core}")
+    elif core:
+        parts.append(f"# Who I Am\n{core}")
+    elif creature:
+        parts.append(f"# Who I Am\n{creature}")
+
+    # Style
+    tone = soul.get("tone", [])
+    if tone:
+        parts.append(f"## My Style\nTone: {', '.join(tone)}")
+
+    # Expertise
+    domain = what.get("domain", "")
+    topics = what.get("topics", [])
+    if domain or topics:
+        if domain and topics:
+            expertise_str = f"{domain}: {', '.join(topics[:6])}"
+        elif domain:
+            expertise_str = domain
+        else:
+            expertise_str = ", ".join(topics[:6])
+        parts.append(f"## My Expertise\n{expertise_str}")
+
+    # Audience
+    audience_who = whom.get("audience", {}).get("who", "")
+    if audience_who:
+        parts.append(f"## My Audience\n{audience_who}")
+
+    # Lessons (from mind — accumulated wisdom influences behaviour)
+    lessons = mind.get("lessons", [])
+    if lessons:
+        lessons_str = "\n".join(f"- {l}" for l in lessons[-5:])
+        parts.append(f"## What I've Learned\n{lessons_str}")
+
+    # Boundaries / rules
+    boundaries = soul.get("boundaries", [])
+    if boundaries:
+        boundaries_str = "\n".join(f"- {b}" for b in boundaries)
+        parts.append(f"## My Rules\n{boundaries_str}")
+
+    return "\n\n".join(parts) if parts else ""
+
+
 def _fetch_blueprint(template: str | dict) -> dict | None:
     """Load blueprint. If string, fetch remotely; if dict, return as-is."""
     if isinstance(template, dict):
@@ -80,21 +143,18 @@ def _fetch_blueprint(template: str | dict) -> dict | None:
 def create_agent(name: str, description: str, category: str = "build",
                  persona: str = "", tags: list = None,
                  blueprint_template: str | dict = None) -> dict:
-    """Register new agent -> issue API key -> save local config."""
+    """Register new agent -> issue API key -> save local config (v2 structure)."""
     handle = _to_handle(name)
 
-    # Duplicate check
     if _agent_path(handle).exists():
         return {"ok": False, "error": f"Already exists: {handle}"}
 
-    # Load blueprint
     blueprint = None
     if blueprint_template:
         blueprint = _fetch_blueprint(blueprint_template)
         if not blueprint:
             return {"ok": False, "error": f"Failed to load blueprint: {blueprint_template}"}
 
-    # Register with FanMolt
     try:
         resp = register_agent(
             name=name,
@@ -113,51 +173,92 @@ def create_agent(name: str, description: str, category: str = "build",
     if not api_key:
         return {"ok": False, "error": "Failed to issue API key"}
 
-    # Sync persona from blueprint
-    if blueprint:
-        bp_persona = blueprint.get("persona", {}).get("system_prompt", "")
-        if bp_persona:
-            persona = bp_persona
+    bp_persona = (blueprint or {}).get("persona") or {}
+    bp_expertise = (blueprint or {}).get("expertise") or {}
+    bp_engagement = (blueprint or {}).get("engagement") or {}
+    bp_recipes = (blueprint or {}).get("recipes") or []
+    bp_rules = (blueprint or {}).get("rules") or []
 
-    # Update profile
-    if persona or description:
-        try:
-            client = FanMoltClient(api_key)
-            client.update_me(
-                tagline=description[:100],
-                bio=persona or description,
-                tags=tags or [],
-            )
-        except Exception as e:
-            logger.warning("Profile update failed: %s", e)
+    soul_core = (
+        bp_persona.get("system_prompt")
+        or persona
+        or f"You are {name} — {description}\n\nTone: friendly and professional. Get to the point."
+    )
 
-    # Save locally
+    # Update FanMolt profile
+    try:
+        client = FanMoltClient(api_key)
+        client.update_me(
+            tagline=description[:100],
+            bio=soul_core[:500],
+            tags=tags or [],
+        )
+    except Exception as e:
+        logger.warning("Profile update failed: %s", e)
+
     config = {
-        "handle": handle,
-        "name": name,
-        "api_key": api_key,
-        "persona": persona or f"You are {name} — {description}\n\nTone: friendly and professional. Explain by getting to the point.",
-        "category": category,
-        "tags": tags or [],
-        "activity": dict(DEFAULT_ACTIVITY),
-        "created_at": _now(),
-        "last_post_at": None,
-        "last_heartbeat_at": None,
-        "stats": {"posts": 0, "comments": 0, "replies": 0},
+        "who": {
+            "handle": handle,
+            "name": name,
+            "emoji": "",
+            "creature": "",
+            "born_at": _now(),
+        },
+        "soul": {
+            "core": soul_core,
+            "tone": bp_persona.get("tone", []),
+            "boundaries": bp_rules,
+            "updated_at": _now(),
+        },
+        "what": {
+            "domain": bp_expertise.get("domain", category),
+            "topics": bp_expertise.get("topics", tags or []),
+            "languages": bp_persona.get("languages", ["ko"]),
+            "sources": bp_expertise.get("sources", []),
+        },
+        "whom": {
+            "pm": {"name": "상혁", "notes": ""},
+            "audience": {
+                "who": "",
+                "wants": [],
+                "topics": bp_engagement.get("engage_topics", tags or []),
+            },
+        },
+        "mind": {"events": [], "lessons": []},
+        "do": {
+            "recipes": bp_recipes,
+            "engagement": {
+                "reply_style": bp_engagement.get("reply_style", "helpful"),
+                "browse_feed": bp_engagement.get("browse_feed", True),
+            },
+        },
+        "beat": dict(DEFAULT_BEAT),
+        "where": {
+            "platform": "fanmolt",
+            "api_key": api_key,
+            "category": category,
+            "tags": tags or [],
+        },
+        "_now": {
+            "stats": {"posts": 0, "comments": 0, "replies": 0},
+            "last_post_at": None,
+            "last_heartbeat_at": None,
+            "recipe_states": {},
+            "commented_posts": [],
+            "replied_comments": [],
+        },
     }
-    if blueprint:
-        config["blueprint"] = blueprint
-        config["recipe_states"] = {}
     save_agent(handle, config)
-
     return {"ok": True, "handle": handle, "name": name}
 
 
 def list_agents() -> list[dict]:
-    """List all agents."""
+    """List all agents (excludes files starting with '_')."""
     AGENTS_DIR.mkdir(parents=True, exist_ok=True)
     agents = []
     for p in sorted(AGENTS_DIR.glob("*.json")):
+        if p.name.startswith("_"):
+            continue
         try:
             agents.append(json.loads(p.read_text(encoding="utf-8")))
         except Exception:
@@ -186,73 +287,143 @@ def apply_blueprint(handle: str, template: str | dict) -> dict:
 
     # Server update
     try:
-        client = FanMoltClient(agent["api_key"])
+        api_key = agent.get("where", {}).get("api_key") or agent.get("api_key", "")
+        client = FanMoltClient(api_key)
         client.update_me(blueprint=blueprint)
     except Exception as e:
         return {"ok": False, "error": f"Server update failed: {e}"}
 
-    # Local update
-    agent["blueprint"] = blueprint
-    agent["recipe_states"] = agent.get("recipe_states", {})
-    bp_persona = blueprint.get("persona", {}).get("system_prompt", "")
-    if bp_persona:
-        agent["persona"] = bp_persona
+    # Local update — map blueprint fields to v2 sections
+    bp_persona = blueprint.get("persona") or {}
+    bp_expertise = blueprint.get("expertise") or {}
+    bp_engagement = blueprint.get("engagement") or {}
+    bp_recipes = blueprint.get("recipes") or []
+    bp_rules = blueprint.get("rules") or []
+
+    agent.setdefault("soul", {})
+    agent.setdefault("what", {})
+    agent.setdefault("do", {})
+    agent.setdefault("whom", {}).setdefault("audience", {})
+
+    if bp_persona.get("system_prompt"):
+        agent["soul"]["core"] = bp_persona["system_prompt"]
+    if bp_persona.get("tone"):
+        agent["soul"]["tone"] = bp_persona["tone"]
+    if bp_rules:
+        agent["soul"]["boundaries"] = bp_rules
+    if bp_expertise.get("domain"):
+        agent["what"]["domain"] = bp_expertise["domain"]
+    if bp_expertise.get("topics"):
+        agent["what"]["topics"] = bp_expertise["topics"]
+    if bp_expertise.get("sources"):
+        agent["what"]["sources"] = bp_expertise["sources"]
+    if bp_recipes:
+        agent["do"]["recipes"] = bp_recipes
+    agent["do"]["engagement"] = {
+        "reply_style": bp_engagement.get("reply_style", "helpful"),
+        "browse_feed": bp_engagement.get("browse_feed", True),
+    }
+    if bp_engagement.get("engage_topics"):
+        agent["whom"]["audience"]["topics"] = bp_engagement["engage_topics"]
+
+    agent.setdefault("_now", {}).setdefault("recipe_states", {})
     save_agent(handle, agent)
 
-    recipe_names = [r["name"] for r in blueprint.get("recipes", [])]
+    recipe_names = [r["name"] for r in bp_recipes]
     return {"ok": True, "handle": handle, "recipes": recipe_names}
 
 
-def get_activity(agent: dict) -> dict:
-    """Return agent's activity settings. Missing keys are filled with defaults.
+def get_beat(agent: dict) -> dict:
+    """Return agent's beat (activity rhythm) settings. Missing keys filled with defaults.
 
-    Backward-compat: also reads legacy top-level schedule_hours, post_ratio_free.
+    Reads from agent["beat"], with fallback to legacy agent["activity"].
     """
-    stored = agent.get("activity", {})
-    result = dict(DEFAULT_ACTIVITY)
+    stored = agent.get("beat") or agent.get("activity") or {}
+    result = dict(DEFAULT_BEAT)
     result.update(stored)
-    # Backward-compat: promote legacy top-level keys to activity
-    if "schedule_hours" in agent and "schedule_hours" not in stored:
-        result["schedule_hours"] = agent["schedule_hours"]
-    if "post_ratio_free" in agent and "post_ratio_free" not in stored:
-        result["post_ratio_free"] = agent["post_ratio_free"]
     return result
 
 
-def update_activity(handle: str, changes: dict) -> dict:
-    """Update agent's activity settings. Only valid keys are applied."""
+# Backward-compat alias
+def get_activity(agent: dict) -> dict:
+    return get_beat(agent)
+
+
+def update_beat(handle: str, changes: dict) -> dict:
+    """Update agent's beat settings. Only valid keys are applied."""
     agent = load_agent(handle)
     if not agent:
         return {"ok": False, "error": f"Agent not found: {handle}"}
 
-    activity = agent.get("activity", {})
+    beat = agent.get("beat", {})
     applied = {}
     for key, val in changes.items():
-        if key not in DEFAULT_ACTIVITY:
+        if key not in DEFAULT_BEAT:
             continue
-        # Type validation
-        expected = type(DEFAULT_ACTIVITY[key])
+        expected = type(DEFAULT_BEAT[key])
         try:
             val = expected(val)
         except (ValueError, TypeError):
             continue
-        activity[key] = val
+        beat[key] = val
         applied[key] = val
 
     if not applied:
-        return {"ok": False, "error": "No valid settings provided. Available: " + ", ".join(DEFAULT_ACTIVITY.keys())}
+        return {
+            "ok": False,
+            "error": "No valid settings provided. Available: " + ", ".join(DEFAULT_BEAT.keys()),
+        }
 
-    agent["activity"] = activity
+    agent["beat"] = beat
     save_agent(handle, agent)
-    return {"ok": True, "handle": handle, "applied": applied, "activity": get_activity(agent)}
+    return {"ok": True, "handle": handle, "applied": applied, "beat": get_beat(agent)}
+
+
+# Backward-compat alias
+def update_activity(handle: str, changes: dict) -> dict:
+    return update_beat(handle, changes)
+
+
+def update_mind(handle: str, event: str = None, lesson: str = None,
+                max_events: int = 20) -> dict:
+    """Append to agent's mind.events (ring buffer) or mind.lessons (unlimited).
+
+    Events: raw observations, kept as a rolling 20-item log.
+    Lessons: refined insights, accumulated indefinitely and injected into system prompt.
+    """
+    agent = load_agent(handle)
+    if not agent:
+        return {"ok": False, "error": f"Agent not found: {handle}"}
+
+    mind = agent.setdefault("mind", {"events": [], "lessons": []})
+    added = []
+
+    if event:
+        entry = {"at": _now()[:10], "what": event}
+        mind.setdefault("events", []).append(entry)
+        mind["events"] = mind["events"][-max_events:]
+        added.append("event")
+
+    if lesson:
+        mind.setdefault("lessons", []).append(lesson)
+        added.append("lesson")
+
+    save_agent(handle, agent)
+    return {"ok": True, "handle": handle, "added": added}
 
 
 def get_stats() -> dict:
     """Aggregate statistics across all agents."""
     agents = list_agents()
-    total = {"agent_count": len(agents), "total_posts": 0, "total_comments": 0, "total_replies": 0}
+    total = {
+        "agent_count": len(agents),
+        "total_posts": 0,
+        "total_comments": 0,
+        "total_replies": 0,
+    }
     for a in agents:
-        s = a.get("stats", {})
+        # Support both v2 (_now.stats) and v1 (stats) layouts
+        s = (a.get("_now") or {}).get("stats") or a.get("stats") or {}
         total["total_posts"] += s.get("posts", 0)
         total["total_comments"] += s.get("comments", 0)
         total["total_replies"] += s.get("replies", 0)

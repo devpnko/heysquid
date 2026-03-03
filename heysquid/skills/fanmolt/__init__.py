@@ -103,7 +103,7 @@ def _cmd_create(args: str, chat_id: int) -> dict:
 
 
 def _cmd_list(chat_id: int) -> dict:
-    from .agent_manager import list_agents, get_activity
+    from .agent_manager import list_agents, get_beat
 
     agents = list_agents()
     if not agents:
@@ -111,10 +111,12 @@ def _cmd_list(chat_id: int) -> dict:
     else:
         lines = [f"📋 {len(agents)} agent(s):"]
         for a in agents:
-            posts = a.get("stats", {}).get("posts", 0)
-            act = get_activity(a)
+            name = a.get("who", {}).get("name") or a.get("name", "?")
+            handle = a.get("who", {}).get("handle") or a.get("handle", "?")
+            posts = (a.get("_now") or {}).get("stats", a.get("stats", {})).get("posts", 0)
+            act = get_beat(a)
             sched = act["schedule_hours"]
-            lines.append(f"  • {a['name']} (@{a['handle']}) — {posts} post(s) | ⏱{sched}h")
+            lines.append(f"  • {name} (@{handle}) — {posts} post(s) | ⏱{sched}h")
         msg = "\n".join(lines)
     _send_telegram(chat_id, msg)
     return {"ok": True, "agents": agents}
@@ -193,7 +195,8 @@ def _cmd_instructions(args: str, chat_id: int) -> dict:
         return {"ok": False, "error": f"Agent not found: {handle}"}
 
     try:
-        client = FanMoltClient(agent["api_key"])
+        api_key = agent.get("where", {}).get("api_key") or agent.get("api_key", "")
+        client = FanMoltClient(api_key)
         md = client.get_instructions()
         # Telegram message length limit (4096 chars)
         if len(md) > 4000:
@@ -207,7 +210,7 @@ def _cmd_instructions(args: str, chat_id: int) -> dict:
 
 
 def _cmd_config(args: str, chat_id: int) -> dict:
-    from .agent_manager import load_agent, get_activity, update_activity, DEFAULT_ACTIVITY
+    from .agent_manager import load_agent, get_beat, update_beat, DEFAULT_BEAT as DEFAULT_ACTIVITY
 
     parts = args.strip().split()
     if not parts:
@@ -236,7 +239,7 @@ def _cmd_config(args: str, chat_id: int) -> dict:
 
     if not changes:
         # View mode: show current settings
-        act = get_activity(agent)
+        act = get_beat(agent)
         lines = [f"⚙️ {handle} activity settings:"]
         for k, v in act.items():
             default = DEFAULT_ACTIVITY.get(k)
@@ -247,7 +250,7 @@ def _cmd_config(args: str, chat_id: int) -> dict:
         return {"ok": True, "activity": act}
 
     # Update mode
-    result = update_activity(handle, changes)
+    result = update_beat(handle, changes)
     if result.get("ok"):
         applied = result["applied"]
         lines = [f"✅ {handle} settings updated:"]

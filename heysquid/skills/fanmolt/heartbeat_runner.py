@@ -5,13 +5,13 @@ import random
 import time
 from datetime import datetime, timedelta
 
-from .agent_manager import load_agent, save_agent, list_agents, get_activity
+from .agent_manager import load_agent, save_agent, list_agents, get_beat, build_system_prompt
 from .api_client import FanMoltClient
 from .content_gen import generate_post, generate_post_from_recipe, generate_reply, generate_comment
 
 logger = logging.getLogger(__name__)
 
-MAX_COMMENTED_POSTS_CACHE = 100  # ring buffer max size
+MAX_COMMENTED_POSTS_CACHE = 100   # ring buffer max size
 MAX_REPLIED_COMMENTS_CACHE = 200  # ring buffer max size
 
 
@@ -37,16 +37,39 @@ _TRIGGER_INTERVALS = {
 }
 
 
+def _rt(agent: dict) -> dict:
+    """Get (and lazily create) the _now runtime state dict."""
+    return agent.setdefault("_now", {
+        "stats": {"posts": 0, "comments": 0, "replies": 0},
+        "last_post_at": None,
+        "last_heartbeat_at": None,
+        "recipe_states": {},
+        "commented_posts": [],
+        "replied_comments": [],
+    })
+
+
+def _handle(agent: dict) -> str:
+    """Get agent handle, supporting both v2 (who.handle) and v1 (handle)."""
+    return agent.get("who", {}).get("handle") or agent.get("handle", "?")
+
+
+def _api_key(agent: dict) -> str:
+    """Get agent API key, supporting both v2 (where.api_key) and v1 (api_key)."""
+    return agent.get("where", {}).get("api_key") or agent.get("api_key", "")
+
+
 def _get_due_recipes(agent: dict) -> list[dict]:
-    """Return list of blueprint recipes that are due for execution."""
-    blueprint = agent.get("blueprint")
-    if not blueprint:
+    """Return list of do.recipes that are due for execution."""
+    do = agent.get("do") or {}
+    recipes = do.get("recipes", [])
+    if not recipes:
         return []
 
-    recipe_states = agent.get("recipe_states", {})
+    recipe_states = _rt(agent).get("recipe_states", {})
     due = []
 
-    for recipe in blueprint.get("recipes", []):
+    for recipe in recipes:
         trigger = recipe.get("trigger", "on_demand")
         if trigger == "on_demand":
             continue
@@ -67,17 +90,17 @@ def run_heartbeat(handle: str) -> dict:
     """One heartbeat cycle for a single agent.
 
     Priority: reply to comments > engage in feed > write post
-    Activity settings are read from per-agent JSON config.
+    Beat settings are read from per-agent JSON config.
     """
     agent = load_agent(handle)
     if not agent:
         return {"ok": False, "error": f"Agent not found: {handle}", "handle": handle}
 
-    act = get_activity(agent)
-    client = FanMoltClient(agent["api_key"])
-    persona = agent.get("persona", "")
-    blueprint = agent.get("blueprint")
-    engagement = blueprint.get("engagement", {}) if blueprint else {}
+    act = get_beat(agent)
+    rt = _rt(agent)
+    client = FanMoltClient(_api_key(agent))
+    persona = build_system_prompt(agent)
+    engagement = agent.get("do", {}).get("engagement", {})
     result = {"handle": handle, "replies": 0, "comments": 0, "posted": False}
 
     llm_failed = False
@@ -85,8 +108,8 @@ def run_heartbeat(handle: str) -> dict:
     # 1. Check notifications -> reply to comments (highest priority)
     reply_style = engagement.get("reply_style")
     try:
-        last_noti_id = agent.get("last_notification_id")
-        noti_params = {"since": agent.get("last_heartbeat_at")}
+        last_noti_id = rt.get("last_notification_id")
+        noti_params = {"since": rt.get("last_heartbeat_at")}
         if last_noti_id:
             noti_params = {"after_id": last_noti_id}
         notifications = client.get_notifications(
@@ -94,15 +117,14 @@ def run_heartbeat(handle: str) -> dict:
             after_id=noti_params.get("after_id"),
         )
         replied = 0
-        replied_comments = set(agent.get("replied_comments", []))
+        replied_comments = set(rt.get("replied_comments", []))
         for n in notifications:
             if replied >= act["max_replies_per_beat"]:
                 break
             # Update cursor (regardless of processing result)
-            # Notification objects use "comment_id" as the unique identifier
             cursor_id = n.get("comment_id") or n.get("id")
             if cursor_id:
-                agent["last_notification_id"] = cursor_id
+                rt["last_notification_id"] = cursor_id
             if n.get("type") in ("comment.created", "comment.reply"):
                 comment_id = n.get("comment_id")
                 # Skip already-replied comments (dedup guard)
@@ -125,17 +147,17 @@ def run_heartbeat(handle: str) -> dict:
                     logger.warning("Reply failed: %s", e)
         result["replies"] = replied
         # Persist replied_comments (ring buffer)
-        agent["replied_comments"] = list(replied_comments)[-MAX_REPLIED_COMMENTS_CACHE:]
+        rt["replied_comments"] = list(replied_comments)[-MAX_REPLIED_COMMENTS_CACHE:]
     except Exception as e:
         logger.warning("Notification fetch failed: %s", e)
 
     # 2. Browse feed -> leave comments (skip already commented posts)
-    engage_topics = engagement.get("engage_topics")
+    engage_topics = agent.get("whom", {}).get("audience", {}).get("topics")
     if not llm_failed:
         try:
             feed = client.get_feed(sort="new", limit=15)
             commented = 0
-            commented_posts = set(agent.get("commented_posts", []))
+            commented_posts = set(rt.get("commented_posts", []))
             for post in feed:
                 if commented >= act["max_comments_per_beat"]:
                     break
@@ -172,22 +194,22 @@ def run_heartbeat(handle: str) -> dict:
                     logger.warning("Comment failed: %s", e)
             result["comments"] = commented
             # ring buffer: keep only the last 100
-            agent["commented_posts"] = list(commented_posts)[-MAX_COMMENTED_POSTS_CACHE:]
+            rt["commented_posts"] = list(commented_posts)[-MAX_COMMENTED_POSTS_CACHE:]
         except Exception as e:
             logger.warning("Feed fetch failed: %s", e)
 
     # 3. Write post (cooldown check, skip if LLM failed)
     post_interval = act["min_post_interval_hours"]
-    can_post = post_interval <= 0 or _hours_since(agent.get("last_post_at")) >= post_interval
+    can_post = post_interval <= 0 or _hours_since(rt.get("last_post_at")) >= post_interval
     if not llm_failed and can_post:
         try:
             prev_titles = _get_prev_titles(client)
             due_recipes = _get_due_recipes(agent)
 
             if due_recipes:
-                # Blueprint mode: run due recipes sequentially
-                rules = blueprint.get("rules") if blueprint else None
-                recipe_states = agent.get("recipe_states", {})
+                # Recipe mode: run due recipes sequentially
+                rules = agent.get("soul", {}).get("boundaries") or None
+                recipe_states = rt.get("recipe_states", {})
                 for recipe in due_recipes:
                     try:
                         post_data = generate_post_from_recipe(
@@ -196,23 +218,26 @@ def run_heartbeat(handle: str) -> dict:
                         client.create_post(**post_data)
                         recipe_states.setdefault(recipe["name"], {})["last_run"] = _now()
                         result["posted"] = True
-                        agent["last_post_at"] = _now()
+                        rt["last_post_at"] = _now()
                         prev_titles.append(post_data.get("title", ""))
                     except RuntimeError:
                         llm_failed = True
-                        logger.warning("%s: LLM unavailable — skipping recipe %s", handle, recipe["name"])
+                        logger.warning(
+                            "%s: LLM unavailable — skipping recipe %s", handle, recipe["name"]
+                        )
                         break
                     except Exception as e:
                         logger.warning("Recipe %s execution failed: %s", recipe["name"], e)
-                agent["recipe_states"] = recipe_states
+                rt["recipe_states"] = recipe_states
             else:
-                # Legacy mode: no blueprint or no due recipes
-                post_data = generate_post(persona, agent.get("category", "build"), prev_titles)
+                # Legacy mode: no recipes or none due
+                category = agent.get("where", {}).get("category", "build")
+                post_data = generate_post(persona, category, prev_titles)
                 ratio = act["post_ratio_free"]
                 post_data["is_free"] = random.random() * 100 < ratio
                 client.create_post(**post_data)
                 result["posted"] = True
-                agent["last_post_at"] = _now()
+                rt["last_post_at"] = _now()
         except RuntimeError:
             llm_failed = True
             logger.warning("%s: LLM unavailable — skipping post", handle)
@@ -223,13 +248,12 @@ def run_heartbeat(handle: str) -> dict:
         result["llm_unavailable"] = True
 
     # 4. Save state
-    agent["last_heartbeat_at"] = _now()
-    stats = agent.get("stats", {})
+    rt["last_heartbeat_at"] = _now()
+    stats = rt.setdefault("stats", {"posts": 0, "comments": 0, "replies": 0})
     stats["replies"] = stats.get("replies", 0) + result["replies"]
     stats["comments"] = stats.get("comments", 0) + result["comments"]
     if result["posted"]:
         stats["posts"] = stats.get("posts", 0) + 1
-    agent["stats"] = stats
     save_agent(handle, agent)
 
     result["ok"] = True
@@ -241,70 +265,70 @@ def run_all() -> list[dict]:
     agents = list_agents()
     results = []
     for agent in agents:
+        h = _handle(agent)
         try:
-            r = run_heartbeat(agent["handle"])
+            r = run_heartbeat(h)
             results.append(r)
         except Exception as e:
-            results.append({"handle": agent.get("handle", "?"), "ok": False, "error": str(e)})
+            results.append({"handle": h, "ok": False, "error": str(e)})
     return results
 
 
 def run_due_agents() -> list[dict]:
-    """Run heartbeat only for agents whose schedule_hours have elapsed.
-
-    Each agent's activity.schedule_hours is checked individually.
-    """
+    """Run heartbeat only for agents whose beat.schedule_hours have elapsed."""
     agents = list_agents()
     results = []
     for agent in agents:
-        handle = agent.get("handle", "?")
-        act = get_activity(agent)
+        h = _handle(agent)
+        act = get_beat(agent)
         interval = act["schedule_hours"]
-        elapsed = _hours_since(agent.get("last_heartbeat_at"))
+        elapsed = _hours_since(_rt(agent).get("last_heartbeat_at"))
         if elapsed < interval:
             continue
         try:
-            r = run_heartbeat(handle)
+            r = run_heartbeat(h)
             results.append(r)
         except Exception as e:
-            results.append({"handle": handle, "ok": False, "error": str(e)})
+            results.append({"handle": h, "ok": False, "error": str(e)})
     return results
 
 
 def force_post(handle: str, recipe_name: str = None) -> dict:
-    """Force write 1 post immediately, ignoring cooldown. If recipe_name is given, use that recipe."""
+    """Force write 1 post immediately, ignoring cooldown."""
     agent = load_agent(handle)
     if not agent:
         return {"ok": False, "error": f"Agent not found: {handle}"}
 
-    client = FanMoltClient(agent["api_key"])
-    persona = agent.get("persona", "")
-    blueprint = agent.get("blueprint")
+    client = FanMoltClient(_api_key(agent))
+    persona = build_system_prompt(agent)
+    rt = _rt(agent)
 
     try:
         prev_titles = _get_prev_titles(client)
+        do = agent.get("do") or {}
 
-        if recipe_name and blueprint:
-            # Generate using specific recipe
-            recipes = {r["name"]: r for r in blueprint.get("recipes", [])}
+        if recipe_name and do.get("recipes"):
+            recipes = {r["name"]: r for r in do.get("recipes", [])}
             recipe = recipes.get(recipe_name)
             if not recipe:
                 available = ", ".join(recipes.keys()) or "none"
-                return {"ok": False, "error": f"Recipe '{recipe_name}' not found. Available: {available}"}
-            rules = blueprint.get("rules")
+                return {
+                    "ok": False,
+                    "error": f"Recipe '{recipe_name}' not found. Available: {available}",
+                }
+            rules = agent.get("soul", {}).get("boundaries") or None
             post_data = generate_post_from_recipe(persona, recipe, rules=rules, prev_titles=prev_titles)
-            # Update recipe_states
-            recipe_states = agent.get("recipe_states", {})
+            recipe_states = rt.get("recipe_states", {})
             recipe_states.setdefault(recipe_name, {})["last_run"] = _now()
-            agent["recipe_states"] = recipe_states
+            rt["recipe_states"] = recipe_states
         else:
-            post_data = generate_post(persona, agent.get("category", "build"), prev_titles)
+            category = agent.get("where", {}).get("category", "build")
+            post_data = generate_post(persona, category, prev_titles)
 
         resp = client.create_post(**post_data)
-        agent["last_post_at"] = _now()
-        stats = agent.get("stats", {})
+        rt["last_post_at"] = _now()
+        stats = rt.setdefault("stats", {"posts": 0, "comments": 0, "replies": 0})
         stats["posts"] = stats.get("posts", 0) + 1
-        agent["stats"] = stats
         save_agent(handle, agent)
         return {"ok": True, "title": post_data.get("title"), "response": resp}
     except Exception as e:
