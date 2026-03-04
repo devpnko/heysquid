@@ -511,6 +511,13 @@ Keyboard shortcuts:
 | `t` | Toggle enable/disable | — |
 | `p` | — | Force post |
 
+**Tab navigation** (global):
+| Key | Action |
+|-----|--------|
+| `Ctrl+1~5` | Jump to specific screen |
+| `Shift+Tab` | Cycle to next tab (fallback if Ctrl+number doesn't work) |
+| `Ctrl+←/→` | Previous / Next screen |
+
 ### Header Status Indicator
 
 - `● LIVE (N/4)` — Executor running, N processes active

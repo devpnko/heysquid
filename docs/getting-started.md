@@ -335,6 +335,8 @@ heysquid tui         # Full terminal UI (Chat + Kanban + Squad + Log)
 
 The TUI's **Ctrl+4 Log screen** shows the same stream as `logs -f`, and **Ctrl+3 Squad screen** shows the agent team's internal discussion.
 
+> **Tab navigation**: Use `Ctrl+1~5` to jump to a specific screen, or **`Shift+Tab`** to cycle through tabs one by one. If `Ctrl+number` doesn't work in your terminal, `Shift+Tab` is the fallback.
+
 ---
 
 ### Things to try on Telegram

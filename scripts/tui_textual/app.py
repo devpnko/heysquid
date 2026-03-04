@@ -48,6 +48,7 @@ class SquidApp(App):
         Binding("ctrl+5", "mode_skill", "Skill", priority=True),
         Binding("ctrl+left", "mode_prev", "Prev", priority=True),
         Binding("ctrl+right", "mode_next", "Next", priority=True),
+        Binding("shift+tab", "mode_next", "Next Tab", priority=True),
         Binding("ctrl+q", "quit_app", "Quit", priority=True),
         Binding("q", "quit_app", "Quit", priority=False),
         Binding("slash", "command_mode", "Command", priority=False),

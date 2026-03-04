@@ -53,6 +53,7 @@ TUI 헤더에 `● LIVE`와 `● STANDBY`가 표시됨.
 | 키 | 기능 |
 |----|------|
 | `Ctrl+1~5` | 화면 전환 (Chat, Kanban, Squad, Log, Auto) |
+| `Shift+Tab` | 다음 탭으로 이동 (Ctrl+숫자가 안 될 때 대안) |
 | `Ctrl+←/→` | 이전/다음 화면 |
 | `Tab` | 입력창 포커스 |
 | `q` | 종료 (입력창에 텍스트 없을 때) |
