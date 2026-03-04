@@ -272,22 +272,84 @@ Hello!
 
 SQUID should respond within 10 seconds. You now have a personal PM agent. 🎉
 
-### Things to try
+---
 
-On Telegram:
+## Step 7: Run Your First Task (and See the Logs)
+
+**Everything comes back to Telegram — no extra setup needed.**
+
+When you give SQUID a task, all of this flows to your Telegram automatically:
+- The plan (before anything runs)
+- Your confirmation prompt
+- Progress updates while agents are working
+- The final report when done
+
+Here's what a real session looks like:
+
+**You →**
+```
+Research what makes a good landing page. Give me 5 actionable points.
+```
+
+**SQUID → (within ~10 seconds)**
+```
+🦑 Got it. Here's my plan:
+
+1. 🐙 Researcher searches for landing page best practices
+2. 🦞 Writer synthesizes into 5 actionable points
+
+Shall I proceed?
+```
+
+**You →**
+```
+Yes
+```
+
+**SQUID → (progress update, sent automatically)**
+```
+🐙 Researcher is on it...
+```
+
+**SQUID → (final report)**
+```
+✅ Done! Here are 5 actionable landing page principles:
+
+1. Hero headline must state the value in one sentence...
+2. Single CTA above the fold...
+[...]
+
+(Researcher finished in 45s. Writer synthesized in 20s.)
+```
+
+---
+
+### What you'll see when agents are working
+
+Every status update comes to Telegram — you don't need to watch logs in a terminal. But if you want to see the raw stream:
+
+```bash
+heysquid logs -f     # Follow execution logs in real-time
+heysquid tui         # Full terminal UI (Chat + Kanban + Squad + Log)
+```
+
+The TUI's **Ctrl+4 Log screen** shows the same stream as `logs -f`, and **Ctrl+3 Squad screen** shows the agent team's internal discussion.
+
+---
+
+### Things to try on Telegram
+
 ```
 "What can you do?"
 
+"Write 3 tweet-length posts about productivity for solopreneurs"
+
+"Research the top 5 open-source PM tools and compare them"
+
 "fanmolt create TechDigest AI/tech news creator"
-
-"fanmolt list"
 ```
 
-From your terminal:
-```bash
-heysquid tui       # Interactive terminal UI
-heysquid logs -f   # Follow live logs
-```
+> **Tip**: SQUID always plans before executing and asks for your OK. If the plan looks wrong, just say "no" or describe what you want instead — SQUID will revise.
 
 ---
 

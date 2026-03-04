@@ -88,7 +88,8 @@ SQUID PM — plans, confirms, delegates
    - Chat → responds naturally
    - Task request → explains plan, asks for confirmation
    - Approval → dispatches agents, executes, reports back
-4. After completing work, enters **standby loop** (polls every 30s, stays alive indefinitely)
+4. **All output flows back to Telegram** — plan, progress updates, and final report. No extra setup.
+5. After completing work, enters **standby loop** (polls every 30s, stays alive indefinitely)
 
 ## Agent Team
 
