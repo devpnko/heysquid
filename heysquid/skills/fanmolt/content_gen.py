@@ -34,19 +34,20 @@ def _get_claude() -> str:
 
 
 def _call_llm(system: str, user: str) -> str:
-    """Call LLM via Claude Code CLI (`claude -p`)."""
+    """Call LLM via Claude Code CLI (`claude -p`) — Max 구독 사용 ($0)."""
     claude = _get_claude()
     prompt = f"{system}\n\n---\n\n{user}"
 
-    # Remove all CLAUDE* env vars to prevent nested-session detection hang
-    env = {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE")}
+    # CLAUDE* + ANTHROPIC_API_KEY 제거 → Max 구독 모드 강제 (API 크레딧 소진 방지)
+    env = {k: v for k, v in os.environ.items()
+           if not k.startswith("CLAUDE") and k != "ANTHROPIC_API_KEY"}
     result = subprocess.run(
-        [claude, "-p", prompt, "--output-format", "text",
-         "--model", "haiku", "--max-turns", "1"],
+        [claude, "-p", prompt, "--output-format", "text", "--max-turns", "1"],
         capture_output=True,
         text=True,
         timeout=60,
         env=env,
+        cwd="/tmp",  # CLAUDE.md 페르소나 방지
     )
 
     if result.returncode != 0:

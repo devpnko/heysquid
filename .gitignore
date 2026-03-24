@@ -31,7 +31,10 @@ heysquid/automations/fanmolt_heartbeat/_state.json
 # 개인 런타임 데이터
 data/
 tasks/
-workspaces/
+# workspaces context.md는 추적, 런타임 데이터는 무시
+workspaces/*/tasks/
+workspaces/*/_state.json
+workspaces/*/*.log
 logs/
 *.log
 
@@ -62,3 +65,4 @@ tests/screenshots/
 
 # 레거시 폴더
 mybot_ver2*/
+.vercel
