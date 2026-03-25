@@ -253,6 +253,28 @@
 6. **CTA를 다양하게** — "어떻게 생각해?" 외에 양자택일/도전/투표 등
 7. **게시 후 30분이 승부** — 직접 댓글 달고 초기 반응 만들기
 
+### 초안 작성 워크플로우 (이지텍스트 병행)
+
+스레드 글 초안을 뽑을 때 **반드시 이지텍스트 초안도 같이 생성**하여 비교한다.
+
+**절차:**
+1. 주제/소재 확정
+2. **이지텍스트 API 호출** — `generate_thread(topic, content_type, format)` 로 3버전 생성
+3. **우리 공식으로도 초안 작성** — context.md 글쓰기 공식/톤 적용
+4. **양쪽 비교** 후 최종 선택 또는 병합
+   - 이지텍스트 훅이 더 강하면 → 훅만 가져오기
+   - 우리 본문이 더 깊으면 → 본문 유지
+   - 섞어서 쓰기 OK
+
+**이지텍스트 contentType 매핑:**
+- ambition_monkey AI/마케팅 글 → `opinion` (인사이트)
+- dkbsqd 운세/사주 → `daily` (일상) 또는 자체 포맷 유지
+- 홍보/정보 전달 → `promotion` 또는 `info`
+
+**API:** `from heysquid.skills.easytext._client import generate_thread, parse_versions`
+
+**프롬프트 아카이브:** `data/easytext_prompts.md` (시스템 프롬프트 전문 + API 문서)
+
 ### 절대 하면 안 되는 것
 - "여러분~", "지금 바로~" 같은 마케팅 톤
 - 뻔한 결론 ("AI 시대가 다가왔습니다")
