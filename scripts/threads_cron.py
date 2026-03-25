@@ -284,11 +284,20 @@ def cmd_fortune():
         logger.info("Fortune posted successfully")
         _notify_telegram(
             f"✅ 스레드 운세 게시 완료\n"
-            f"{today.month}/{today.day} 띠별 운세\n"
-            f"첫댓글: ✅\n\n"
-            f"홈피드에서 공감 댓글 10개 달아줘.\n"
-            f"scripts/threads_engage.py collect → 댓글 작성 → post"
+            f"{today.month}/{today.day} 띠별 운세"
         )
+        # collect 실행
+        try:
+            import subprocess
+            subprocess.run(
+                [sys.executable, os.path.join(SCRIPT_DIR, "threads_engage.py"), "collect", "--count", "10"],
+                cwd=PROJECT_ROOT,
+                env={**os.environ, "PYTHONPATH": PROJECT_ROOT},
+                timeout=120,
+            )
+            logger.info("Engage collect completed")
+        except Exception as e:
+            logger.warning(f"Engage collect failed: {e}")
     else:
         error = result.get("error", "unknown")
         logger.error(f"Fortune post failed: {error}")
@@ -387,20 +396,28 @@ def cmd_run():
             post["posted_at"] = now.isoformat()
             logger.info(f"#{post_id} posted successfully")
             posted_any = True
+            _notify_telegram(f"✅ 스레드 게시 완료 #{post_id}\n{text[:80]}...")
         else:
             post["status"] = "failed"
             post["error"] = result.get("error", "unknown")
             logger.error(f"#{post_id} failed: {result.get('error')}")
+            _notify_telegram(f"❌ 스레드 게시 실패 #{post_id}\n{result.get('error', 'unknown')}")
 
     save_queue(queue)
 
-    # 게시 성공한 게 있으면 → SQUID에게 홈피드 댓글 요청
+    # 게시 성공 → collect 실행 (SQUID가 다음 세션에서 댓글 작성+post)
     if posted_any:
-        _notify_telegram(
-            "✅ 스레드 게시 완료!\n"
-            "홈피드에서 공감 댓글 10개 달아줘.\n"
-            "scripts/threads_engage.py collect → 댓글 작성 → post"
-        )
+        try:
+            import subprocess
+            subprocess.run(
+                [sys.executable, os.path.join(SCRIPT_DIR, "threads_engage.py"), "collect", "--count", "10"],
+                cwd=PROJECT_ROOT,
+                env={**os.environ, "PYTHONPATH": PROJECT_ROOT},
+                timeout=120,
+            )
+            logger.info("Engage collect completed — SQUID will write comments next session")
+        except Exception as e:
+            logger.warning(f"Engage collect failed: {e}")
 
 
 def cmd_list():
@@ -452,6 +469,35 @@ def cmd_add(text: str, time_str: str, first_reply: str = None, account: str = No
     print(f"Added #{new_id}: {today} {time_str} — {text[:50]}...")
 
 
+def cmd_report():
+    """오늘 예약된 게시물 전체를 텔레그램으로 보고."""
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    today = datetime.now()
+    weekday = ["월", "화", "수", "목", "금", "토", "일"][today.weekday()]
+
+    queue = load_queue()
+    posts = queue.get("posts", [])
+    todays = sorted(
+        [p for p in posts if p.get("date") == today_str],
+        key=lambda x: x.get("time", ""),
+    )
+
+    if not todays:
+        _notify_telegram(f"📋 {today.month}/{today.day}({weekday}) 스레드 예약: 없음")
+        return
+
+    lines = [f"📋 {today.month}/{today.day}({weekday}) 스레드 예약 ({len(todays)}개)\n"]
+    for p in todays:
+        status = p.get("status", "?")
+        icon = {"pending": "⏳", "posted": "✅", "failed": "❌"}.get(status, "?")
+        time_str = p.get("time", "??:??")
+        text_preview = p.get("text", "")[:60].replace("\n", " ")
+        lines.append(f"{icon} {time_str} #{p.get('id','?')} {text_preview}...")
+
+    _notify_telegram("\n".join(lines))
+    logger.info(f"Daily report sent: {len(todays)} posts")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Threads 예약 게시 cron")
     parser.add_argument("--list", action="store_true", help="오늘 예약 목록")
@@ -461,6 +507,7 @@ def main():
     parser.add_argument("--account", metavar="NAME", help="계정 (--add와 함께)")
     parser.add_argument("--fortune", action="store_true", help="오늘 운세 자동 생성 + 게시")
     parser.add_argument("--generate-week", action="store_true", help="이번 주 운세 큐에 일괄 등록")
+    parser.add_argument("--report", action="store_true", help="오늘 예약 보고서 (텔레그램)")
 
     args = parser.parse_args()
 
@@ -468,6 +515,8 @@ def main():
         cmd_fortune()
     elif args.generate_week:
         cmd_generate_week()
+    elif args.report:
+        cmd_report()
     elif args.list:
         cmd_list()
     elif args.add:
