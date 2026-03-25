@@ -7,6 +7,8 @@ Threads 예약 게시 cron 스크립트.
   python3 scripts/threads_cron.py --list       — 오늘 예약된 게시물 목록
   python3 scripts/threads_cron.py --add "텍스트" --time 08:00  — 게시물 추가
   python3 scripts/threads_cron.py --add "텍스트" --time 08:00 --reply "첫댓글" --account user
+  python3 scripts/threads_cron.py --fortune    — 오늘 운세 자동 생성 + 게시 + 텔레그램 알림
+  python3 scripts/threads_cron.py --generate-week — 이번 주 운세 큐에 일괄 등록
 """
 
 import argparse
@@ -15,13 +17,17 @@ import logging
 import os
 import sys
 import time
-from datetime import datetime
+from datetime import date, datetime, timedelta
 
 # Project paths
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 QUEUE_FILE = os.path.join(PROJECT_ROOT, "data", "threads_queue.json")
 BROWSER_DATA = os.path.join(PROJECT_ROOT, "data", "threads_browser_data")
+
+# Add project root to sys.path for heysquid imports
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -228,7 +234,119 @@ def post_to_threads(text: str, first_reply: str = None, image: str = None) -> di
         return {"ok": False, "error": str(e)}
 
 
+# --- Telegram notification ---
+
+
+def _notify_telegram(text: str):
+    """Send a notification to Telegram. Silently fails if telegram is unavailable."""
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(os.path.join(PROJECT_ROOT, "heysquid", ".env"))
+
+        chat_id = os.getenv("TELEGRAM_ALLOWED_USERS")
+        if not chat_id:
+            logger.warning("TELEGRAM_ALLOWED_USERS not set, skipping notification")
+            return
+
+        from heysquid.channels.telegram import send_message_sync
+        send_message_sync(chat_id, text, parse_mode=None, _save=False)
+        logger.info("Telegram notification sent")
+    except Exception as e:
+        logger.warning(f"Telegram notification failed: {e}")
+
+
 # --- Commands ---
+
+
+def cmd_fortune():
+    """Generate today's fortune and post to Threads immediately."""
+    today = date.today()
+    today_str = today.strftime("%Y-%m-%d")
+
+    logger.info(f"Generating fortune for {today_str}...")
+
+    try:
+        from heysquid.skills.threads_fortune._generator import generate_daily_fortune
+    except ImportError as e:
+        err = f"Fortune generator import failed: {e}"
+        logger.error(err)
+        _notify_telegram(f"❌ 스레드 운세 게시 실패\n{err}")
+        return
+
+    fortune_text = generate_daily_fortune(today)
+    first_reply = "👇가장 정확한 오늘의 운세는 여기 DKBSQD.com 🔮"
+
+    logger.info(f"Fortune generated ({len(fortune_text)} chars), posting...")
+
+    result = post_to_threads(fortune_text, first_reply=first_reply)
+
+    if result.get("ok"):
+        logger.info("Fortune posted successfully")
+        _notify_telegram(
+            f"✅ 스레드 운세 게시 완료\n"
+            f"{today.month}/{today.day} 띠별 운세\n"
+            f"첫댓글: ✅"
+        )
+    else:
+        error = result.get("error", "unknown")
+        logger.error(f"Fortune post failed: {error}")
+        _notify_telegram(f"❌ 스레드 운세 게시 실패\n{error}")
+
+
+def cmd_generate_week():
+    """Generate fortunes for the rest of this week and enqueue at 08:00 each day."""
+    today = date.today()
+    # Find remaining days: today through Sunday
+    days_until_sunday = 6 - today.weekday()  # weekday: 0=Mon, 6=Sun
+    if days_until_sunday < 0:
+        days_until_sunday = 0  # today is Sunday, just do today
+
+    dates = [today + timedelta(days=i) for i in range(days_until_sunday + 1)]
+
+    try:
+        from heysquid.skills.threads_fortune._generator import generate_daily_fortune
+    except ImportError as e:
+        logger.error(f"Fortune generator import failed: {e}")
+        return
+
+    queue = load_queue()
+    posts = queue.get("posts", [])
+    max_id = max((p.get("id", 0) for p in posts), default=0)
+
+    added = 0
+    for d in dates:
+        date_str = d.strftime("%Y-%m-%d")
+
+        # Skip if already queued for this date
+        already = any(
+            p.get("date") == date_str and "운세" in p.get("text", "")[:20]
+            for p in posts
+        )
+        if already:
+            logger.info(f"Skipping {date_str} — already queued")
+            continue
+
+        fortune_text = generate_daily_fortune(d)
+        first_reply = "👇가장 정확한 오늘의 운세는 여기 DKBSQD.com 🔮"
+
+        max_id += 1
+        new_post = {
+            "id": max_id,
+            "date": date_str,
+            "time": "08:00",
+            "text": fortune_text,
+            "first_reply": first_reply,
+            "image": None,
+            "status": "pending",
+            "account": "default",
+        }
+        posts.append(new_post)
+        added += 1
+        logger.info(f"Queued #{max_id}: {date_str} 08:00 — {fortune_text[:50]}...")
+
+    queue["posts"] = posts
+    save_queue(queue)
+    print(f"Added {added} fortune posts ({dates[0]} ~ {dates[-1]})")
 
 
 def cmd_run():
@@ -329,10 +447,16 @@ def main():
     parser.add_argument("--time", metavar="HH:MM", help="예약 시간 (--add와 함께)")
     parser.add_argument("--reply", metavar="TEXT", help="첫댓글 (--add와 함께)")
     parser.add_argument("--account", metavar="NAME", help="계정 (--add와 함께)")
+    parser.add_argument("--fortune", action="store_true", help="오늘 운세 자동 생성 + 게시")
+    parser.add_argument("--generate-week", action="store_true", help="이번 주 운세 큐에 일괄 등록")
 
     args = parser.parse_args()
 
-    if args.list:
+    if args.fortune:
+        cmd_fortune()
+    elif args.generate_week:
+        cmd_generate_week()
+    elif args.list:
         cmd_list()
     elif args.add:
         if not args.time:
