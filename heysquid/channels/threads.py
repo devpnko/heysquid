@@ -204,7 +204,7 @@ class ThreadsChannel(ChannelAdapter):
             dict: {"ok": bool, "error": str | None}
         """
         first_reply = kwargs.get("first_reply")
-        headless = kwargs.get("headless", True)
+        headless = kwargs.get("headless", False)
 
         if not os.path.exists(BROWSER_DATA):
             return {
@@ -272,7 +272,7 @@ class ThreadsChannel(ChannelAdapter):
         if not text:
             return {"ok": False, "error": "text is required for image posts"}
 
-        headless = kwargs.get("headless", True)
+        headless = kwargs.get("headless", False)
         first_reply = kwargs.get("first_reply")
 
         if not os.path.exists(file_path):
