@@ -66,3 +66,15 @@ tests/screenshots/
 # 레거시 폴더
 mybot_ver2*/
 .vercel
+
+# Private content (managed in heysquid-private)
+workspaces/threads/context.md
+workspaces/threads/draft_*.md
+workspaces/threads/drafts_*.md
+heysquid/skills/threads_fortune/_content_bank.py
+heysquid/skills/threads_fortune/_content_generator.py
+heysquid/skills/threads_fortune/_engage_persona.py
+heysquid/skills/easytext/
+scripts/generate_weekly_drafts.py
+data/easytext_prompts.md
+data/threads_engage.json
