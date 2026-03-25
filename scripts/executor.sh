@@ -381,7 +381,7 @@ _run_claude_iteration() {
     # Launch Claude
     if [ "$MODE" = "continue" ]; then
         log "[INFO] Continuing session (hot start)..."
-        caffeinate -ims "$CLAUDE_EXE" -p -c --dangerously-skip-permissions \
+        "$CLAUDE_EXE" -p -c --dangerously-skip-permissions \
             --model sonnet \
             --output-format stream-json --verbose \
             --append-system-prompt-file "$SPF" \
@@ -389,7 +389,7 @@ _run_claude_iteration() {
             2>> "$LOG" | tee -a "$STREAM_LOG" > /dev/null &
     else
         log "[INFO] Starting new session (permanent memory + session memory)..."
-        caffeinate -ims "$CLAUDE_EXE" -p --dangerously-skip-permissions \
+        "$CLAUDE_EXE" -p --dangerously-skip-permissions \
             --model sonnet \
             --output-format stream-json --verbose \
             --append-system-prompt-file "$SPF" \
