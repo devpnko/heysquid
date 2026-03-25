@@ -285,7 +285,9 @@ def cmd_fortune():
         _notify_telegram(
             f"✅ 스레드 운세 게시 완료\n"
             f"{today.month}/{today.day} 띠별 운세\n"
-            f"첫댓글: ✅"
+            f"첫댓글: ✅\n\n"
+            f"홈피드에서 공감 댓글 10개 달아줘.\n"
+            f"scripts/threads_engage.py collect → 댓글 작성 → post"
         )
     else:
         error = result.get("error", "unknown")
@@ -369,6 +371,7 @@ def cmd_run():
         logger.info(f"No pending posts for {today} {current_time}")
         return
 
+    posted_any = False
     for post in targets:
         post_id = post.get("id", "?")
         text = post.get("text", "")
@@ -383,12 +386,21 @@ def cmd_run():
             post["status"] = "posted"
             post["posted_at"] = now.isoformat()
             logger.info(f"#{post_id} posted successfully")
+            posted_any = True
         else:
             post["status"] = "failed"
             post["error"] = result.get("error", "unknown")
             logger.error(f"#{post_id} failed: {result.get('error')}")
 
     save_queue(queue)
+
+    # 게시 성공한 게 있으면 → SQUID에게 홈피드 댓글 요청
+    if posted_any:
+        _notify_telegram(
+            "✅ 스레드 게시 완료!\n"
+            "홈피드에서 공감 댓글 10개 달아줘.\n"
+            "scripts/threads_engage.py collect → 댓글 작성 → post"
+        )
 
 
 def cmd_list():
