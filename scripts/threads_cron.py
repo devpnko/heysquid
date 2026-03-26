@@ -149,33 +149,57 @@ def _click_post(page) -> bool:
     return False
 
 
-def _post_first_reply(page, reply_text: str) -> bool:
-    time.sleep(3)
-    for selector in (
-        '[contenteditable="true"]',
-        'div[role="textbox"]',
-        'p[data-placeholder]',
-    ):
-        try:
-            el = page.wait_for_selector(selector, timeout=5000)
-            if el:
-                el.click()
-                time.sleep(0.5)
-                page.keyboard.type(reply_text, delay=30)
-                time.sleep(1)
-                reply_btns = page.query_selector_all('div[role="button"]')
-                for btn in reply_btns:
-                    try:
-                        txt = btn.inner_text().strip()
-                        if txt in ("Reply", "답글", "Post", "게시") and btn.is_visible():
-                            btn.click()
-                            time.sleep(3)
-                            return True
-                    except Exception:
-                        continue
-        except Exception:
-            continue
-    return False
+def _post_first_reply(page, reply_text: str, account: str = "dkbsqd.official") -> bool:
+    """Post first reply by navigating to profile and clicking reply on the latest post."""
+    try:
+        page.goto(f"https://www.threads.net/@{account}", timeout=30000)
+        time.sleep(4)
+
+        # Click reply SVG on the first (latest) post
+        replied = False
+        for sel in ('svg[aria-label="Reply"]', 'svg[aria-label="답글"]'):
+            btns = page.query_selector_all(sel)
+            if btns:
+                btns[0].click()
+                time.sleep(2)
+                replied = True
+                break
+
+        if not replied:
+            return False
+
+        editor = page.wait_for_selector('[contenteditable="true"]', timeout=5000)
+        if not editor:
+            page.keyboard.press("Escape")
+            return False
+
+        editor.click()
+        time.sleep(0.3)
+        page.keyboard.type(reply_text, delay=30)
+        time.sleep(1)
+
+        # Reversed search for Post button (same approach as threads_engage.py)
+        post_btns = page.query_selector_all('div[role="button"]')
+        target = None
+        for btn in reversed(post_btns):
+            try:
+                txt = btn.inner_text().strip()
+                if txt in ("Post", "게시") and btn.is_visible():
+                    target = btn
+                    break
+            except Exception:
+                continue
+
+        if target:
+            target.click()
+            time.sleep(3)
+            return True
+
+        page.keyboard.press("Escape")
+        return False
+
+    except Exception:
+        return False
 
 
 def post_to_threads(text: str, first_reply: str = None, image: str = None) -> dict:

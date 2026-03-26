@@ -48,7 +48,7 @@ def create_context(playwright):
     clean_locks()
     return playwright.chromium.launch_persistent_context(
         BROWSER_DATA,
-        headless=False,
+        headless=True,
         viewport={"width": 1280, "height": 900},
         args=["--disable-blink-features=AutomationControlled"],
         user_agent=(
