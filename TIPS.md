@@ -78,3 +78,50 @@ toggle <name>           automation 활성/비활성 토글
 post <handle> [recipe]  에이전트 강제 포스팅
 stats                   FanMolt 전체 통계
 ```
+
+---
+
+## WSL2 환경 Playwright 주의사항
+
+Mac과 달리 WSL2에는 물리 모니터가 없어서 `headless=False`로 실행하면 크롬이 뜨지 않음.
+
+### 증상
+
+```
+Looks like you launched a headed browser without having a XServer running.
+Set either 'headless: true' or use 'xvfb-run <your-playwright-app>'
+playwright._impl._errors.TargetClosedError: BrowserType.launch_persistent_context
+```
+
+### 규칙
+
+| 파일 | 설정 | 이유 |
+|------|------|------|
+| `scripts/threads_cron.py` | `headless=True` | cron 환경, X서버 없음 |
+| `scripts/threads_engage.py` | `headless=True` | cron 환경, X서버 없음 |
+| `scripts/threads_upload.py` | `headless=True`로 바꿔야 함 | 현재 False (수동 실행 시에만 사용) |
+
+> Mac에서 테스트할 때는 `headless=False`도 됨. WSL2(에코비/리눅스 서버)에 배포할 땐 반드시 `True`로.
+
+### 첫댓글(first_reply) 방식
+
+게시 직후 피드에서 입력창을 찾으면 엉뚱한 입력창이 잡힘.
+→ 반드시 **프로필 이동 후 최신 글에서 Reply 버튼** 클릭 방식으로.
+
+```python
+# ✅ 올바른 방식
+page.goto(f"https://www.threads.net/@{account}")
+btns = page.query_selector_all('svg[aria-label="Reply"]')
+btns[0].click()  # 최신 글의 첫 번째 reply 버튼
+
+# ❌ 게시 직후 피드에서 찾는 방식 (실패함)
+page.wait_for_selector('[contenteditable="true"]')  # 작성창이 잡힘
+```
+
+### xvfb-run 대안
+
+어쩔 수 없이 headed가 필요하면 `xvfb-run` 사용:
+
+```bash
+xvfb-run -a python3 scripts/threads_engage.py collect
+```
