@@ -36,3 +36,7 @@ echo ""
 crontab -l | grep "threads_cron"
 echo ""
 echo "복원 완료. 검증: crontab -l"
+
+# 추가: 06:30 트렌드 수집
+(crontab -l 2>/dev/null; echo "# 06:30 트렌드 수집 (signal.bz + 구글 + 스레드)
+30 6 * * * cd $PROJECT_DIR && /usr/bin/python3 scripts/trend_collector.py >> logs/trends.log 2>&1") | crontab -
