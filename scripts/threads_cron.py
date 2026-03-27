@@ -319,7 +319,7 @@ def cmd_fortune():
             f"✅ 스레드 운세 게시 완료\n"
             f"{today.month}/{today.day} 띠별 운세"
         )
-        # collect 실행
+        # collect + SQUID 트리거
         try:
             import subprocess
             subprocess.run(
@@ -331,6 +331,31 @@ def cmd_fortune():
             logger.info("Engage collect completed")
         except Exception as e:
             logger.warning(f"Engage collect failed: {e}")
+
+        # SQUID 트리거
+        try:
+            import fcntl
+            now = datetime.now()
+            msg_file = os.path.join(PROJECT_ROOT, "data", "messages.json")
+            msg = {
+                "message_id": f"engage_{now.strftime('%Y%m%d%H%M%S')}",
+                "chat_id": os.environ.get("TELEGRAM_ALLOWED_USERS", ""),
+                "text": "스레드 게시 완료. 홈피드 댓글 10개 달아줘. data/threads_engage.json 읽고 각 글에 맞는 공감 댓글 작성해서 post해줘.",
+                "date": now.isoformat(),
+                "from_user": "system",
+                "channel": "system",
+            }
+            with open(msg_file, "r+") as f:
+                fcntl.flock(f, fcntl.LOCK_EX)
+                data = json.load(f)
+                data.setdefault("messages", []).append(msg)
+                f.seek(0)
+                f.truncate()
+                json.dump(data, f, ensure_ascii=False, indent=2)
+                fcntl.flock(f, fcntl.LOCK_UN)
+            logger.info("SQUID trigger inserted")
+        except Exception as e:
+            logger.warning(f"SQUID trigger failed: {e}")
     else:
         error = result.get("error", "unknown")
         logger.error(f"Fortune post failed: {error}")
@@ -439,7 +464,7 @@ def cmd_run():
 
     save_queue(queue)
 
-    # 게시 성공 → collect 실행 (SQUID가 다음 세션에서 댓글 작성+post)
+    # 게시 성공 → collect + SQUID 트리거
     if posted_any:
         try:
             import subprocess
@@ -449,9 +474,38 @@ def cmd_run():
                 env={**os.environ, "PYTHONPATH": PROJECT_ROOT},
                 timeout=120,
             )
-            logger.info("Engage collect completed — SQUID will write comments next session")
+            logger.info("Engage collect completed")
         except Exception as e:
             logger.warning(f"Engage collect failed: {e}")
+
+        # messages.json에 메시지 삽입 → listener가 감지 → executor → SQUID
+        try:
+            import fcntl
+            from datetime import timezone
+            msg_file = os.path.join(PROJECT_ROOT, "data", "messages.json")
+
+            msg = {
+                "message_id": f"engage_{now.strftime('%Y%m%d%H%M%S')}",
+                "chat_id": os.environ.get("TELEGRAM_ALLOWED_USERS", ""),
+                "text": "스레드 게시 완료. 홈피드 댓글 10개 달아줘. data/threads_engage.json 읽고 각 글에 맞는 공감 댓글 작성해서 post해줘.",
+                "date": now.isoformat(),
+                "from_user": "system",
+                "channel": "system",
+            }
+
+            # flock으로 atomic write
+            with open(msg_file, "r+") as f:
+                fcntl.flock(f, fcntl.LOCK_EX)
+                data = json.load(f)
+                data.setdefault("messages", []).append(msg)
+                f.seek(0)
+                f.truncate()
+                json.dump(data, f, ensure_ascii=False, indent=2)
+                fcntl.flock(f, fcntl.LOCK_UN)
+
+            logger.info("SQUID trigger message inserted into messages.json")
+        except Exception as e:
+            logger.warning(f"SQUID trigger failed: {e}")
 
 
 def cmd_list():
