@@ -23,7 +23,16 @@ from datetime import date, datetime, timedelta
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 QUEUE_FILE = os.path.join(PROJECT_ROOT, "data", "threads_queue.json")
-BROWSER_DATA = os.path.join(PROJECT_ROOT, "data", "threads_browser_data")
+BROWSER_DATA_MAP = {
+    "dkbsqd.official": os.path.join(PROJECT_ROOT, "data", "threads_browser_data"),
+    "ambition_monkey": os.path.join(PROJECT_ROOT, "data", "threads_browser_data_ambition"),
+    "default": os.path.join(PROJECT_ROOT, "data", "threads_browser_data"),
+}
+BROWSER_DATA = BROWSER_DATA_MAP["default"]  # 기본값
+
+
+def _get_browser_data(account: str = "default") -> str:
+    return BROWSER_DATA_MAP.get(account, BROWSER_DATA_MAP["default"])
 
 # Add project root to sys.path for heysquid imports
 if PROJECT_ROOT not in sys.path:
@@ -58,9 +67,10 @@ def save_queue(data: dict) -> None:
 # --- Threads posting (Playwright, from threads_upload.py pattern) ---
 
 
-def _clean_locks():
+def _clean_locks(browser_data: str = None):
+    bd = browser_data or BROWSER_DATA
     for name in ("SingletonLock", "SingletonCookie", "SingletonSocket"):
-        path = os.path.join(BROWSER_DATA, name)
+        path = os.path.join(bd, name)
         try:
             if os.path.exists(path):
                 os.remove(path)
@@ -68,11 +78,12 @@ def _clean_locks():
             pass
 
 
-def _create_context(playwright, headless=True):
-    os.makedirs(BROWSER_DATA, exist_ok=True)
-    _clean_locks()
+def _create_context(playwright, headless=True, browser_data: str = None):
+    bd = browser_data or BROWSER_DATA
+    os.makedirs(bd, exist_ok=True)
+    _clean_locks(bd)
     return playwright.chromium.launch_persistent_context(
-        BROWSER_DATA,
+        bd,
         headless=headless,
         viewport={"width": 1280, "height": 900},
         args=["--disable-blink-features=AutomationControlled"],
@@ -202,10 +213,11 @@ def _post_first_reply(page, reply_text: str, account: str = "dkbsqd.official") -
         return False
 
 
-def post_to_threads(text: str, first_reply: str = None, image: str = None, reply_chain: list = None) -> dict:
+def post_to_threads(text: str, first_reply: str = None, image: str = None, reply_chain: list = None, account: str = "dkbsqd.official") -> dict:
     """Post to Threads using Playwright persistent context."""
-    if not os.path.exists(BROWSER_DATA):
-        return {"ok": False, "error": "No browser session. Run: python3 scripts/threads_upload.py --login"}
+    bd = _get_browser_data(account)
+    if not os.path.exists(bd):
+        return {"ok": False, "error": f"No browser session for {account}. Login first."}
 
     try:
         from playwright.sync_api import sync_playwright
@@ -214,7 +226,7 @@ def post_to_threads(text: str, first_reply: str = None, image: str = None, reply
 
     try:
         with sync_playwright() as p:
-            context = _create_context(p, headless=True)
+            context = _create_context(p, headless=True, browser_data=bd)
             page = context.pages[0] if context.pages else context.new_page()
 
             try:
@@ -244,7 +256,7 @@ def post_to_threads(text: str, first_reply: str = None, image: str = None, reply
                     return {"ok": False, "error": "Failed to click Post"}
 
                 if first_reply:
-                    if _post_first_reply(page, first_reply):
+                    if _post_first_reply(page, first_reply, account=account):
                         logger.info("First reply posted")
                     else:
                         logger.warning("First reply failed")
@@ -253,7 +265,7 @@ def post_to_threads(text: str, first_reply: str = None, image: str = None, reply
                 if reply_chain:
                     for idx, reply_text in enumerate(reply_chain):
                         time.sleep(2)
-                        if _post_first_reply(page, reply_text):
+                        if _post_first_reply(page, reply_text, account=account):
                             logger.info(f"Reply chain [{idx+1}/{len(reply_chain)}] posted")
                         else:
                             logger.warning(f"Reply chain [{idx+1}/{len(reply_chain)}] failed")
@@ -445,10 +457,11 @@ def cmd_run():
         first_reply = post.get("first_reply")
         image = post.get("image")
         reply_chain = post.get("reply_chain")
+        account = post.get("account", "dkbsqd.official")
 
-        logger.info(f"Posting #{post_id}: {text[:50]}...")
+        logger.info(f"Posting #{post_id} (@{account}): {text[:50]}...")
 
-        result = post_to_threads(text, first_reply=first_reply, image=image, reply_chain=reply_chain)
+        result = post_to_threads(text, first_reply=first_reply, image=image, reply_chain=reply_chain, account=account)
 
         if result.get("ok"):
             post["status"] = "posted"
