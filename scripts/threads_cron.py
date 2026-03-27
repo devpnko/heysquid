@@ -331,43 +331,8 @@ def cmd_fortune():
             f"✅ 스레드 운세 게시 완료\n"
             f"{today.month}/{today.day} 띠별 운세"
         )
-        # collect + SQUID 트리거
-        try:
-            import subprocess
-            subprocess.run(
-                [sys.executable, os.path.join(SCRIPT_DIR, "threads_engage.py"), "collect", "--count", "10"],
-                cwd=PROJECT_ROOT,
-                env={**os.environ, "PYTHONPATH": PROJECT_ROOT},
-                timeout=120,
-            )
-            logger.info("Engage collect completed")
-        except Exception as e:
-            logger.warning(f"Engage collect failed: {e}")
-
-        # SQUID 트리거
-        try:
-            import fcntl
-            now = datetime.now()
-            msg_file = os.path.join(PROJECT_ROOT, "data", "messages.json")
-            msg = {
-                "message_id": f"engage_{now.strftime('%Y%m%d%H%M%S')}",
-                "chat_id": os.environ.get("TELEGRAM_ALLOWED_USERS", ""),
-                "text": "스레드 게시 완료. 홈피드 댓글 10개 달아줘. data/threads_engage.json 읽고 각 글에 맞는 공감 댓글 작성해서 post해줘.",
-                "date": now.isoformat(),
-                "from_user": "system",
-                "channel": "system",
-            }
-            with open(msg_file, "r+") as f:
-                fcntl.flock(f, fcntl.LOCK_EX)
-                data = json.load(f)
-                data.setdefault("messages", []).append(msg)
-                f.seek(0)
-                f.truncate()
-                json.dump(data, f, ensure_ascii=False, indent=2)
-                fcntl.flock(f, fcntl.LOCK_UN)
-            logger.info("SQUID trigger inserted")
-        except Exception as e:
-            logger.warning(f"SQUID trigger failed: {e}")
+        # collect + SQUID 자동 댓글 (Claude CLI)
+        _run_squid_engage()
     else:
         error = result.get("error", "unknown")
         logger.error(f"Fortune post failed: {error}")
@@ -477,48 +442,56 @@ def cmd_run():
 
     save_queue(queue)
 
-    # 게시 성공 → collect + SQUID 트리거
+    # 게시 성공 → SQUID 자동 댓글
     if posted_any:
-        try:
-            import subprocess
-            subprocess.run(
-                [sys.executable, os.path.join(SCRIPT_DIR, "threads_engage.py"), "collect", "--count", "10"],
-                cwd=PROJECT_ROOT,
-                env={**os.environ, "PYTHONPATH": PROJECT_ROOT},
-                timeout=120,
-            )
-            logger.info("Engage collect completed")
-        except Exception as e:
-            logger.warning(f"Engage collect failed: {e}")
+        _run_squid_engage()
 
-        # messages.json에 메시지 삽입 → listener가 감지 → executor → SQUID
-        try:
-            import fcntl
-            from datetime import timezone
-            msg_file = os.path.join(PROJECT_ROOT, "data", "messages.json")
 
-            msg = {
-                "message_id": f"engage_{now.strftime('%Y%m%d%H%M%S')}",
-                "chat_id": os.environ.get("TELEGRAM_ALLOWED_USERS", ""),
-                "text": "스레드 게시 완료. 홈피드 댓글 10개 달아줘. data/threads_engage.json 읽고 각 글에 맞는 공감 댓글 작성해서 post해줘.",
-                "date": now.isoformat(),
-                "from_user": "system",
-                "channel": "system",
-            }
+def _run_squid_engage():
+    """collect + SQUID 댓글 작성 + post. Claude CLI -p 모드."""
+    import subprocess
 
-            # flock으로 atomic write
-            with open(msg_file, "r+") as f:
-                fcntl.flock(f, fcntl.LOCK_EX)
-                data = json.load(f)
-                data.setdefault("messages", []).append(msg)
-                f.seek(0)
-                f.truncate()
-                json.dump(data, f, ensure_ascii=False, indent=2)
-                fcntl.flock(f, fcntl.LOCK_UN)
+    # Step 1: collect
+    try:
+        subprocess.run(
+            [sys.executable, os.path.join(SCRIPT_DIR, "threads_engage.py"), "collect", "--count", "10"],
+            cwd=PROJECT_ROOT,
+            env={**os.environ, "PYTHONPATH": PROJECT_ROOT},
+            timeout=120,
+        )
+        logger.info("Engage collect completed")
+    except Exception as e:
+        logger.warning(f"Engage collect failed: {e}")
+        return
 
-            logger.info("SQUID trigger message inserted into messages.json")
-        except Exception as e:
-            logger.warning(f"SQUID trigger failed: {e}")
+    # Step 2: SQUID가 댓글 작성 + post (Claude CLI)
+    try:
+        claude_cmd = "/mnt/c/Users/hyuk/AppData/Roaming/npm/claude"
+        prompt = (
+            "data/threads_engage.json을 읽어. 10개 글이 있어. "
+            "각 글의 text를 읽고, dkbsqd.official 페르소나로 공감 댓글을 작성해. "
+            "일반 글이면 순수 공감만 (1~2줄, ㅋㅋ 자연스럽게). "
+            "사주 관련 글이면 사주 살짝 섞어도 돼. "
+            "봇 티 나면 안 돼. 홍보/CTA 절대 안 함. "
+            "각 글의 comment 필드에 채운 후 JSON 저장하고, "
+            "PYTHONPATH=. python3 scripts/threads_engage.py post 실행해서 댓글 달아."
+        )
+        result = subprocess.run(
+            [claude_cmd, "-p", "--dangerously-skip-permissions", prompt],
+            cwd=PROJECT_ROOT,
+            env={**os.environ, "PYTHONPATH": PROJECT_ROOT, "CLAUDECODE": ""},
+            timeout=600,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0:
+            logger.info("SQUID engage completed successfully")
+        else:
+            logger.warning(f"SQUID engage failed (rc={result.returncode}): {result.stderr[:200]}")
+    except subprocess.TimeoutExpired:
+        logger.warning("SQUID engage timed out (600s)")
+    except Exception as e:
+        logger.warning(f"SQUID engage failed: {e}")
 
 
 def cmd_list():
