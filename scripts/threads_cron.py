@@ -202,7 +202,7 @@ def _post_first_reply(page, reply_text: str, account: str = "dkbsqd.official") -
         return False
 
 
-def post_to_threads(text: str, first_reply: str = None, image: str = None) -> dict:
+def post_to_threads(text: str, first_reply: str = None, image: str = None, reply_chain: list = None) -> dict:
     """Post to Threads using Playwright persistent context."""
     if not os.path.exists(BROWSER_DATA):
         return {"ok": False, "error": "No browser session. Run: python3 scripts/threads_upload.py --login"}
@@ -248,6 +248,15 @@ def post_to_threads(text: str, first_reply: str = None, image: str = None) -> di
                         logger.info("First reply posted")
                     else:
                         logger.warning("First reply failed")
+
+                # reply_chain: 추가 댓글들 순서대로 달기
+                if reply_chain:
+                    for idx, reply_text in enumerate(reply_chain):
+                        time.sleep(2)
+                        if _post_first_reply(page, reply_text):
+                            logger.info(f"Reply chain [{idx+1}/{len(reply_chain)}] posted")
+                        else:
+                            logger.warning(f"Reply chain [{idx+1}/{len(reply_chain)}] failed")
 
                 return {"ok": True}
 
@@ -410,10 +419,11 @@ def cmd_run():
         text = post.get("text", "")
         first_reply = post.get("first_reply")
         image = post.get("image")
+        reply_chain = post.get("reply_chain")
 
         logger.info(f"Posting #{post_id}: {text[:50]}...")
 
-        result = post_to_threads(text, first_reply=first_reply, image=image)
+        result = post_to_threads(text, first_reply=first_reply, image=image, reply_chain=reply_chain)
 
         if result.get("ok"):
             post["status"] = "posted"
