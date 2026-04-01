@@ -50,7 +50,11 @@ def create_context(playwright):
         BROWSER_DATA,
         headless=True,
         viewport={"width": 1280, "height": 900},
-        args=["--disable-blink-features=AutomationControlled"],
+        args=[
+            "--disable-blink-features=AutomationControlled",
+            "--disable-gpu",
+            "--disable-software-rasterizer",
+        ],
         user_agent=(
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
             "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -186,6 +190,17 @@ def cmd_post(dry_run: bool = False):
                     page.goto(p["url"], timeout=30000)
                     time.sleep(4)
 
+                    # 좋아요 누르기
+                    liked = False
+                    for sel in ('svg[aria-label="Like"]', 'svg[aria-label="좋아요"]'):
+                        like_btn = page.query_selector(sel)
+                        if like_btn:
+                            like_btn.click()
+                            time.sleep(1)
+                            liked = True
+                            print("  ❤️ 좋아요", flush=True)
+                            break
+
                     # Reply 아이콘 클릭
                     replied = False
                     for sel in ('svg[aria-label="Reply"]', 'svg[aria-label="답글"]'):
@@ -232,6 +247,16 @@ def cmd_post(dry_run: bool = False):
                         posted = True
 
                     if posted:
+                        # 내 댓글에 좋아요 누르기 — 가장 마지막 Like 버튼이 내 댓글
+                        time.sleep(2)
+                        try:
+                            like_btns = page.query_selector_all('svg[aria-label="Like"], svg[aria-label="좋아요"]')
+                            if like_btns:
+                                like_btns[-1].click()
+                                time.sleep(1)
+                                print("  ❤️ 내 댓글 좋아요", flush=True)
+                        except Exception:
+                            pass
                         print("  ✅ 완료!", flush=True)
                         p["status"] = "done"
                         success += 1

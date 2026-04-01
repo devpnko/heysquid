@@ -86,7 +86,11 @@ def _create_context(playwright, headless=True, browser_data: str = None):
         bd,
         headless=headless,
         viewport={"width": 1280, "height": 900},
-        args=["--disable-blink-features=AutomationControlled"],
+        args=[
+            "--disable-blink-features=AutomationControlled",
+            "--disable-gpu",
+            "--disable-software-rasterizer",
+        ],
         user_agent=(
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
             "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -204,6 +208,15 @@ def _post_first_reply(page, reply_text: str, account: str = "dkbsqd.official") -
         if target:
             target.click()
             time.sleep(3)
+            # 내 댓글에 좋아요 누르기
+            try:
+                like_btns = page.query_selector_all('svg[aria-label="Like"], svg[aria-label="좋아요"]')
+                if like_btns:
+                    like_btns[-1].click()
+                    time.sleep(1)
+                    logger.info("Liked own reply")
+            except Exception:
+                pass
             return True
 
         page.keyboard.press("Escape")
@@ -213,7 +226,7 @@ def _post_first_reply(page, reply_text: str, account: str = "dkbsqd.official") -
         return False
 
 
-def post_to_threads(text: str, first_reply: str = None, image: str = None, reply_chain: list = None, account: str = "dkbsqd.official") -> dict:
+def post_to_threads(text: str, first_reply: str = None, image: str = None, reply_chain: list = None, account: str = "dkbsqd.official", topic: str = None) -> dict:
     """Post to Threads using Playwright persistent context."""
     bd = _get_browser_data(account)
     if not os.path.exists(bd):
@@ -239,8 +252,46 @@ def post_to_threads(text: str, first_reply: str = None, image: str = None, reply
                 if not _open_compose(page):
                     return {"ok": False, "error": "Failed to open compose"}
 
+                # 본문의 첫 번째 #해시태그 → topic으로 자동 추출 (타이핑 전에 처리)
+                import re
+                if not topic:
+                    hashtags = re.findall(r'#(\S+)', text)
+                    if hashtags:
+                        topic = hashtags[0]
+                # 해시태그는 topic으로 들어가니까 본문에서 제거
+                if topic:
+                    text = re.sub(r'\s*#\S+', '', text).rstrip()
+
                 if not _type_text(page, text):
                     return {"ok": False, "error": "Failed to type text"}
+
+                if topic:
+                    try:
+                        # "Add a topic" span을 force click → input 나타남
+                        topic_span = page.query_selector('span:has-text("Add a topic")')
+                        if not topic_span:
+                            topic_span = page.query_selector('span:has-text("주제 추가")')
+
+                        if topic_span:
+                            topic_span.click(force=True)
+                            time.sleep(1)
+                            # input[placeholder="Add a topic"] 에 타이핑
+                            topic_input = page.wait_for_selector(
+                                'input[placeholder="Add a topic"], input[placeholder="주제 추가"]',
+                                timeout=3000,
+                            )
+                            if topic_input:
+                                topic_input.click()
+                                page.keyboard.type(topic, delay=30)
+                                time.sleep(2)
+                                # 첫 번째 추천 선택 또는 Enter
+                                page.keyboard.press("Enter")
+                                time.sleep(1)
+                                logger.info(f"Topic added: {topic}")
+                        else:
+                            logger.warning("Topic button not found, posting without topic")
+                    except Exception as e:
+                        logger.warning(f"Topic add failed: {e}")
 
                 # Image attachment
                 if image and os.path.exists(image):
@@ -254,6 +305,18 @@ def post_to_threads(text: str, first_reply: str = None, image: str = None, reply
 
                 if not _click_post(page):
                     return {"ok": False, "error": "Failed to click Post"}
+
+                # 내 본문에 좋아요 — 프로필로 이동해서 최신 글 좋아요
+                try:
+                    page.goto(f"https://www.threads.net/@{account}", timeout=30000)
+                    time.sleep(4)
+                    like_btns = page.query_selector_all('svg[aria-label="Like"], svg[aria-label="좋아요"]')
+                    if like_btns:
+                        like_btns[0].click()  # 최신 글 = 첫 번째
+                        time.sleep(1)
+                        logger.info("Liked own post")
+                except Exception:
+                    pass
 
                 if first_reply:
                     if _post_first_reply(page, first_reply, account=account):
@@ -424,9 +487,10 @@ def cmd_run():
         reply_chain = post.get("reply_chain")
         account = post.get("account", "dkbsqd.official")
 
+        topic = post.get("topic")
         logger.info(f"Posting #{post_id} (@{account}): {text[:50]}...")
 
-        result = post_to_threads(text, first_reply=first_reply, image=image, reply_chain=reply_chain, account=account)
+        result = post_to_threads(text, first_reply=first_reply, image=image, reply_chain=reply_chain, account=account, topic=topic)
 
         if result.get("ok"):
             post["status"] = "posted"
@@ -468,9 +532,11 @@ def _run_squid_engage():
     try:
         claude_cmd = "/mnt/c/Users/hyuk/AppData/Roaming/npm/claude"
         prompt = (
-            "data/threads_engage.json을 읽어. 10개 글이 있어. "
-            "각 글의 text를 읽고, dkbsqd.official 페르소나로 공감 댓글을 작성해. "
+            "먼저 heysquid/skills/threads_fortune/_engage_persona.py를 읽어서 페르소나를 확인해. "
+            "그 다음 data/threads_engage.json을 읽어. 10개 글이 있어. "
+            "각 글의 text를 직접 읽고, 해당 계정 페르소나로 공감 댓글을 직접 작성해. "
             "일반 글이면 순수 공감만 (1~2줄, ㅋㅋ 자연스럽게). "
+            "AI/테크 글이면 인사이트 살짝 섞어도 돼. "
             "사주 관련 글이면 사주 살짝 섞어도 돼. "
             "봇 티 나면 안 돼. 홍보/CTA 절대 안 함. "
             "각 글의 comment 필드에 채운 후 JSON 저장하고, "
@@ -515,7 +581,7 @@ def cmd_list():
         print(f"  {icon} {p.get('time', '??:??')} | #{p.get('id', '?')} | {status} | {text_preview}{reply_mark}")
 
 
-def cmd_add(text: str, time_str: str, first_reply: str = None, account: str = None):
+def cmd_add(text: str, time_str: str, first_reply: str = None, account: str = None, topic: str = None):
     """Add a new post to the queue."""
     queue = load_queue()
     posts = queue.get("posts", [])
@@ -531,6 +597,7 @@ def cmd_add(text: str, time_str: str, first_reply: str = None, account: str = No
         "time": time_str,
         "text": text,
         "first_reply": first_reply,
+        "topic": topic,
         "image": None,
         "status": "pending",
         "account": account or "default",
