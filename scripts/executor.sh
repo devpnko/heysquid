@@ -30,7 +30,8 @@ IDLE_POLL_INTERVAL=2        # seconds between message checks during idle
 IDLE_TIMEOUT=1800           # 30min inactivity -> exit session
 CONTINUE_PROMPT="New messages arrived. Process them now.
 Call check_telegram() to get the new messages, then handle them following PM workflow.
-Do not re-read identity.json or memory files — your context is preserved from this session."
+Do not re-read identity.json or memory files — your context is preserved from this session.
+REMINDER: If the task involves threads content, ALWAYS read workspaces/threads/context.md first."
 
 # Create log directories
 mkdir -p "$LOG_DIR"
@@ -269,6 +270,10 @@ PROMPT="Act as a PM following the instructions in CLAUDE.md.
      * 'do that but change X' -> modify and apply previous context
    - If None: no interruption.
 5) Call check_telegram() from heysquid/telegram_bot.py to check for new messages.
+5.5) If the message involves threads/스레드 content (posting, drafting, engagement, suggestions, 소재),
+   ALWAYS read workspaces/threads/context.md FIRST before any writing.
+   This file contains the writing rules, hook formulas, tone guidelines, and checklist.
+   Never write threads content without reading this file.
 6) Evaluate the message content as a PM and respond appropriately.
    - Conversation (greetings/questions/chat) -> reply naturally via reply_telegram().
    - Task request -> explain the plan and ask for confirmation.

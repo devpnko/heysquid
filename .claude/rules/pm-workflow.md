@@ -60,6 +60,26 @@ check_telegram() 후 활성 카드 **3개 이상**이면 `suggest_card_merge(cha
 **중단 명령은 PM이 직접 처리하지 않음** — listener가 프로세스를 kill하고 정리한다.
 PM은 새 세션에서 `check_interrupted()`로 중단 사실을 확인할 뿐.
 
+## 소재 컨펌 모드 (스레드 자동화)
+
+매일 06:30 cron이 `scripts/threads_suggest.py`를 실행하여 TOP 5 소재를 텔레그램으로 보낸다.
+사용자가 번호로 답장하면 ("1번 3번", "1,3" 등) SQUID가 처리한다.
+
+### 감지 방법
+메시지에 숫자(1~5)만 있거나, "번" "번호" 등이 포함되면 `data/threads_suggestions.json`을 확인:
+- `status == "waiting"` → 소재 컨펌 메시지
+- `status != "waiting"` → 일반 메시지
+
+### 처리 흐름
+1. `python3 scripts/threads_suggest.py --confirm "사용자메시지"` 실행 → 선택 표시
+2. 선택된 소재의 URL과 제목을 읽는다
+3. **SQUID가 직접 초안을 작성한다** (기사를 읽고, ambition_monkey 톤으로 본문+첫댓글+CTA 작성)
+   - 절대 템플릿/풀 사용 금지. AI가 기사를 읽고 직접 쓴다.
+   - ambition_monkey 톤: "AI 업계 친구가 카톡하듯, 반말, 1줄 1생각"
+4. 초안을 사용자에게 보여주고 컨펌 받기 (ask_and_wait)
+5. 컨펌 시 `scripts/threads_suggest.py`의 `add_to_queue()` 사용하여 큐 등록
+6. 텔레그램으로 결과 보고
+
 **모든 모드(대화/계획/실행) 완료 후 → 대기 루프 진입** (바로 종료하지 않음)
 
 ## 대기 모드 (Standby Loop) — 영구 세션

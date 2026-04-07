@@ -20,18 +20,31 @@ import time
 
 from playwright.sync_api import sync_playwright
 
-BROWSER_DATA = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "data",
-    "threads_browser_data",
-)
-ENGAGE_FILE = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "data",
-    "threads_engage.json",
-)
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+BROWSER_DATA_MAP = {
+    "dkbsqd.official": os.path.join(PROJECT_ROOT, "data", "threads_browser_data"),
+    "ambition_monkey": os.path.join(PROJECT_ROOT, "data", "threads_browser_data_ambition"),
+    "default": os.path.join(PROJECT_ROOT, "data", "threads_browser_data"),
+}
+
+ENGAGE_FILE_MAP = {
+    "dkbsqd.official": os.path.join(PROJECT_ROOT, "data", "threads_engage.json"),
+    "ambition_monkey": os.path.join(PROJECT_ROOT, "data", "threads_engage_ambition.json"),
+    "default": os.path.join(PROJECT_ROOT, "data", "threads_engage.json"),
+}
+
+# 기본값 (CLI --account로 변경 가능)
+BROWSER_DATA = BROWSER_DATA_MAP["default"]
+ENGAGE_FILE = ENGAGE_FILE_MAP["default"]
 MY_USERNAME = "dkbsqd.official"
+
+
+def _set_account(account: str):
+    global BROWSER_DATA, ENGAGE_FILE, MY_USERNAME
+    BROWSER_DATA = BROWSER_DATA_MAP.get(account, BROWSER_DATA_MAP["default"])
+    ENGAGE_FILE = ENGAGE_FILE_MAP.get(account, ENGAGE_FILE_MAP["default"])
+    MY_USERNAME = account
 
 
 def clean_locks():
@@ -283,9 +296,13 @@ def cmd_post(dry_run: bool = False):
 def main():
     parser = argparse.ArgumentParser(description="Threads 공감 댓글")
     parser.add_argument("action", choices=["collect", "post"], help="collect: 수집, post: 게시")
+    parser.add_argument("--account", "-a", default="dkbsqd.official",
+                        help="계정 (dkbsqd.official, ambition_monkey)")
     parser.add_argument("--count", type=int, default=10)
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
+
+    _set_account(args.account)
 
     if args.action == "collect":
         cmd_collect(args.count)

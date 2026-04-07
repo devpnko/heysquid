@@ -164,10 +164,13 @@ def _click_post(page) -> bool:
     return False
 
 
-def _post_first_reply(page, reply_text: str, account: str = "dkbsqd.official") -> bool:
-    """Post first reply by navigating to profile and clicking reply on the latest post."""
+def _post_first_reply(page, reply_text: str, account: str = "dkbsqd.official", post_url: str = None) -> bool:
+    """Post first reply. If post_url is given, navigate directly to that post; otherwise fall back to profile."""
     try:
-        page.goto(f"https://www.threads.net/@{account}", timeout=30000)
+        if post_url:
+            page.goto(post_url, timeout=30000)
+        else:
+            page.goto(f"https://www.threads.net/@{account}", timeout=30000)
         time.sleep(4)
 
         # Click reply SVG on the first (latest) post
@@ -243,6 +246,18 @@ def post_to_threads(text: str, first_reply: str = None, image: str = None, reply
             page = context.pages[0] if context.pages else context.new_page()
 
             try:
+                # 게시 전 프로필의 기존 post URL 목록 저장
+                existing_post_urls = set()
+                try:
+                    page.goto(f"https://www.threads.net/@{account}", timeout=30000)
+                    time.sleep(4)
+                    for link in page.query_selector_all('a[href*="/post/"]'):
+                        href = link.get_attribute("href")
+                        if href:
+                            existing_post_urls.add(href)
+                except Exception:
+                    pass
+
                 page.goto("https://www.threads.net/", timeout=30000)
                 time.sleep(5)
 
@@ -306,7 +321,8 @@ def post_to_threads(text: str, first_reply: str = None, image: str = None, reply
                 if not _click_post(page):
                     return {"ok": False, "error": "Failed to click Post"}
 
-                # 내 본문에 좋아요 — 프로필로 이동해서 최신 글 좋아요
+                # 내 본문에 좋아요 + post_url 추출 — 프로필로 이동
+                post_url = None
                 try:
                     page.goto(f"https://www.threads.net/@{account}", timeout=30000)
                     time.sleep(4)
@@ -315,11 +331,25 @@ def post_to_threads(text: str, first_reply: str = None, image: str = None, reply
                         like_btns[0].click()  # 최신 글 = 첫 번째
                         time.sleep(1)
                         logger.info("Liked own post")
+                    # post_url: 기존 목록에 없는 새 URL 찾기
+                    post_links = page.query_selector_all('a[href*="/post/"]')
+                    for link in post_links:
+                        href = link.get_attribute("href")
+                        if href and href not in existing_post_urls:
+                            post_url = f"https://www.threads.net{href}" if href.startswith("/") else href
+                            logger.info(f"post_url (new): {post_url}")
+                            break
+                    if not post_url and post_links:
+                        # fallback: 새 URL을 못 찾으면 첫 번째 사용
+                        href = post_links[0].get_attribute("href")
+                        if href:
+                            post_url = f"https://www.threads.net{href}" if href.startswith("/") else href
+                            logger.info(f"post_url (fallback): {post_url}")
                 except Exception:
                     pass
 
                 if first_reply:
-                    if _post_first_reply(page, first_reply, account=account):
+                    if _post_first_reply(page, first_reply, account=account, post_url=post_url):
                         logger.info("First reply posted")
                     else:
                         logger.warning("First reply failed")
@@ -328,12 +358,15 @@ def post_to_threads(text: str, first_reply: str = None, image: str = None, reply
                 if reply_chain:
                     for idx, reply_text in enumerate(reply_chain):
                         time.sleep(2)
-                        if _post_first_reply(page, reply_text, account=account):
+                        if _post_first_reply(page, reply_text, account=account, post_url=post_url):
                             logger.info(f"Reply chain [{idx+1}/{len(reply_chain)}] posted")
                         else:
                             logger.warning(f"Reply chain [{idx+1}/{len(reply_chain)}] failed")
 
-                return {"ok": True}
+                result = {"ok": True}
+                if post_url:
+                    result["post_url"] = post_url
+                return result
 
             finally:
                 context.close()
@@ -467,18 +500,19 @@ def cmd_run():
     queue = load_queue()
     posts = queue.get("posts", [])
 
+    current_hour = now.strftime("%H")
     targets = [
         p for p in posts
         if p.get("status") == "pending"
         and p.get("date") == today
-        and p.get("time") == current_time
+        and p.get("time", "")[:2] == current_hour
     ]
 
     if not targets:
         logger.info(f"No pending posts for {today} {current_time}")
         return
 
-    posted_any = False
+    posted_accounts = set()
     for post in targets:
         post_id = post.get("id", "?")
         text = post.get("text", "")
@@ -495,9 +529,14 @@ def cmd_run():
         if result.get("ok"):
             post["status"] = "posted"
             post["posted_at"] = now.isoformat()
+            if result.get("post_url"):
+                post["post_url"] = result["post_url"]
             logger.info(f"#{post_id} posted successfully")
-            posted_any = True
+            posted_accounts.add(account)
             _notify_telegram(f"✅ 스레드 게시 완료 #{post_id}\n{text[:80]}...")
+
+            # 크로스포스트 실행 (crosspost 필드 없어도 자동 각색)
+            _run_crosspost(post)
         else:
             post["status"] = "failed"
             post["error"] = result.get("error", "unknown")
@@ -506,41 +545,252 @@ def cmd_run():
 
     save_queue(queue)
 
-    # 게시 성공 → SQUID 자동 댓글
-    if posted_any:
-        _run_squid_engage()
+    # 게시 성공한 계정별로 SQUID 자동 댓글
+    for acct in posted_accounts:
+        _run_squid_engage(acct)
 
 
-def _run_squid_engage():
+def _generate_crosspost(post: dict):
+    """Threads 원본 텍스트에서 X/Reddit/LinkedIn 각색본 자동 생성.
+
+    crosspost 필드가 없거나 비어있으면 Claude CLI로 생성.
+    X는 글자수 초과 시에도 재생성.
+    """
+    import subprocess
+
+    threads_text = post.get("text", "")
+    first_reply = post.get("first_reply", "")
+    crosspost = post.get("crosspost", {})
+    post_id = post.get("id", "?")
+
+    # X 글자수 체크
+    def x_char_count(text):
+        return sum(2 if ord(c) > 127 else 1 for c in text)
+
+    need_generate = False
+    if not crosspost:
+        need_generate = True
+    elif "x" not in crosspost or not crosspost.get("x", {}).get("text"):
+        need_generate = True
+    elif x_char_count(crosspost.get("x", {}).get("text", "")) > 280:
+        need_generate = True
+        logger.warning(f"#{post_id} X 글자수 초과, 재생성")
+
+    if not need_generate:
+        return  # 수동 각색본이 있고 글자수도 OK
+
+    logger.info(f"#{post_id} crosspost 자동 각색 시작")
+
+    prompt = f"""아래 Threads 원본 글을 X, Reddit, LinkedIn용으로 각색해줘.
+
+## 원본 (Threads)
+{threads_text}
+
+## 각색 규칙
+
+### X (한글, 반말, 임팩트)
+- 한글 1자 = 2카운트, 영문/숫자/기호 = 1카운트 기준 **절대 270자 이내** (280자 제한이므로 여유 10자)
+- 해시태그 없음, 이모지 0~1개
+- 핵심만 남기고 압축. 임팩트 있게.
+
+### Reddit (영어, casual, 토론형)
+- title: 한 줄 제목 (영어)
+- body: 영어 본문. 반말(casual). 마지막에 토론 유도 질문.
+- subreddit: "artificial"
+- reply: 영어 첫 댓글 (짧게, 개인 의견)
+
+### LinkedIn (한글, 존댓말, 전문가)
+- 존댓말로 변환. 전문가 톤.
+- 해시태그 2~3개
+- 마지막에 독자 참여 질문 (존댓말)
+
+### 공통 CTA (첫 댓글/리플)
+- X reply: "AI 소식 빠르게 보고 싶으면 팔로우! 같이 정보 나누자 👇 https://litt.ly/ambition_monkey"
+- Reddit reply: 본문 관련 개인 의견 한 줄 (영어, 링크 없음)
+- LinkedIn reply: "AI 관련 좋은 자료 빠르게 보고 싶으시면 팔로우 해주세요! 여기서 같이 정보 나눠요 👇 https://litt.ly/ambition_monkey"
+
+## 출력 형식 (반드시 이 JSON만 출력, 다른 텍스트 없이)
+```json
+{{
+  "x": {{"text": "...", "reply": "..."}},
+  "reddit": {{"title": "...", "body": "...", "subreddit": "artificial", "reply": "..."}},
+  "linkedin": {{"text": "...", "reply": "..."}}
+}}
+```"""
+
+    try:
+        claude_cmd = "/mnt/c/Users/hyuk/AppData/Roaming/npm/claude"
+        result = subprocess.run(
+            [claude_cmd, "-p", "--dangerously-skip-permissions", prompt],
+            cwd=PROJECT_ROOT,
+            env={**os.environ, "PYTHONPATH": PROJECT_ROOT, "CLAUDECODE": ""},
+            timeout=120,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            logger.warning(f"#{post_id} crosspost 자동 각색 실패 (rc={result.returncode})")
+            return
+
+        # JSON 추출 (```json ... ``` 블록 또는 순수 JSON)
+        import re
+        output = result.stdout.strip()
+        json_match = re.search(r'```json\s*\n(.*?)\n```', output, re.DOTALL)
+        if json_match:
+            output = json_match.group(1)
+        else:
+            # { 로 시작하는 부분 찾기
+            idx = output.find('{')
+            if idx >= 0:
+                output = output[idx:]
+
+        generated = json.loads(output)
+
+        # X 글자수 최종 검증
+        x_text = generated.get("x", {}).get("text", "")
+        if x_char_count(x_text) > 280:
+            logger.warning(f"#{post_id} X 자동 각색도 {x_char_count(x_text)}자 초과, 강제 트리밍")
+            # 마지막 줄 제거하면서 280자 맞추기
+            lines = x_text.split('\n')
+            while x_char_count('\n'.join(lines)) > 280 and len(lines) > 1:
+                lines.pop(-1)
+            generated["x"]["text"] = '\n'.join(lines)
+
+        post["crosspost"] = generated
+        logger.info(f"#{post_id} crosspost 자동 각색 완료 (X: {x_char_count(generated['x']['text'])}자)")
+
+    except json.JSONDecodeError as e:
+        logger.warning(f"#{post_id} crosspost JSON 파싱 실패: {e}")
+    except subprocess.TimeoutExpired:
+        logger.warning(f"#{post_id} crosspost 자동 각색 타임아웃 (120s)")
+    except Exception as e:
+        logger.warning(f"#{post_id} crosspost 자동 각색 에러: {e}")
+
+
+def _run_crosspost(post: dict):
+    """Threads 게시 성공 후 X/Reddit/LinkedIn 크로스포스트.
+
+    crosspost 필드가 없거나 X 글자수 초과 시 자동 각색 후 게시.
+    한글 인코딩 문제로 cmd.exe 인자 대신 임시 JSON 파일로 전달.
+    """
+    import subprocess
+
+    # 자동 각색 (필요 시)
+    _generate_crosspost(post)
+
+    WIN_PYTHON = r"C:\Users\hyuk\AppData\Local\Programs\Python\Python312\python.exe"
+    TEMP_DIR = "/mnt/c/Users/hyuk/heysquid_sessions"
+    crosspost = post.get("crosspost", {})
+    post_id = post.get("id", "?")
+
+    if not crosspost:
+        logger.warning(f"#{post_id} crosspost 데이터 없음, 스킵")
+        return
+
+    for platform, cp in crosspost.items():
+        try:
+            # 임시 JSON 파일에 인자 저장 (UTF-8)
+            args_file = os.path.join(TEMP_DIR, f"_crosspost_{platform}.json")
+            with open(args_file, "w", encoding="utf-8") as f:
+                json.dump(cp, f, ensure_ascii=False)
+            win_args_file = args_file.replace("/mnt/c/", "C:\\\\").replace("/", "\\\\")
+
+            if platform == "x":
+                cmd = [
+                    "/mnt/c/Windows/System32/cmd.exe", "/c", WIN_PYTHON,
+                    r"C:\Users\hyuk\x_actions.py", "post-json",
+                    win_args_file,
+                ]
+            elif platform == "reddit":
+                cmd = [
+                    "/mnt/c/Windows/System32/cmd.exe", "/c", WIN_PYTHON,
+                    r"C:\Users\hyuk\reddit_actions.py", "post-json",
+                    win_args_file,
+                ]
+            elif platform == "linkedin":
+                cmd = [
+                    "/mnt/c/Windows/System32/cmd.exe", "/c", WIN_PYTHON,
+                    r"C:\Users\hyuk\crosspost.py", "linkedin-json",
+                    win_args_file,
+                ]
+            else:
+                continue
+
+            logger.info(f"#{post_id} crosspost → {platform}")
+            proc = subprocess.run(cmd, capture_output=True, timeout=120)
+            # cmd.exe stdout/stderr 디코딩 (cp949 fallback)
+            try:
+                stdout = proc.stdout.decode("utf-8")
+            except UnicodeDecodeError:
+                stdout = proc.stdout.decode("cp949", errors="replace")
+            try:
+                stderr = proc.stderr.decode("utf-8")
+            except UnicodeDecodeError:
+                stderr = proc.stderr.decode("cp949", errors="replace")
+
+            # RESULT:{"ok":true,"post_url":"..."} 파싱
+            for line in stdout.split('\n'):
+                if line.startswith("RESULT:"):
+                    r = json.loads(line[7:])
+                    cp["status"] = "posted" if r.get("ok") else "failed"
+                    if r.get("post_url"):
+                        cp["post_url"] = r["post_url"]
+                    if r.get("error"):
+                        cp["error"] = r["error"]
+                    break
+            else:
+                cp["status"] = "posted" if proc.returncode == 0 else "failed"
+
+            status = cp.get("status", "unknown")
+            url = cp.get("post_url", "")
+            logger.info(f"#{post_id} {platform}: {status} {url}")
+            _notify_telegram(f"{'✅' if status == 'posted' else '❌'} #{post_id} {platform} {status}\n{url}")
+
+        except subprocess.TimeoutExpired:
+            cp["status"] = "failed"
+            cp["error"] = "timeout"
+            logger.warning(f"#{post_id} {platform} timeout")
+        except Exception as e:
+            cp["status"] = "failed"
+            cp["error"] = str(e)
+            logger.warning(f"#{post_id} {platform} error: {e}")
+
+
+def _run_squid_engage(account: str = "dkbsqd.official"):
     """collect + SQUID 댓글 작성 + post. Claude CLI -p 모드."""
     import subprocess
+
+    engage_file = {
+        "dkbsqd.official": "data/threads_engage.json",
+        "ambition_monkey": "data/threads_engage_ambition.json",
+    }.get(account, "data/threads_engage.json")
 
     # Step 1: collect
     try:
         subprocess.run(
-            [sys.executable, os.path.join(SCRIPT_DIR, "threads_engage.py"), "collect", "--count", "10"],
+            [sys.executable, os.path.join(SCRIPT_DIR, "threads_engage.py"), "collect", "--account", account, "--count", "10"],
             cwd=PROJECT_ROOT,
             env={**os.environ, "PYTHONPATH": PROJECT_ROOT},
             timeout=120,
         )
-        logger.info("Engage collect completed")
+        logger.info(f"Engage collect completed ({account})")
     except Exception as e:
-        logger.warning(f"Engage collect failed: {e}")
+        logger.warning(f"Engage collect failed ({account}): {e}")
         return
 
     # Step 2: SQUID가 댓글 작성 + post (Claude CLI)
     try:
         claude_cmd = "/mnt/c/Users/hyuk/AppData/Roaming/npm/claude"
         prompt = (
-            "먼저 heysquid/skills/threads_fortune/_engage_persona.py를 읽어서 페르소나를 확인해. "
-            "그 다음 data/threads_engage.json을 읽어. 10개 글이 있어. "
+            f"먼저 heysquid/skills/threads_fortune/_engage_persona.py를 읽어서 {account} 페르소나를 확인해. "
+            f"그 다음 {engage_file}을 읽어. 10개 글이 있어. "
             "각 글의 text를 직접 읽고, 해당 계정 페르소나로 공감 댓글을 직접 작성해. "
             "일반 글이면 순수 공감만 (1~2줄, ㅋㅋ 자연스럽게). "
             "AI/테크 글이면 인사이트 살짝 섞어도 돼. "
             "사주 관련 글이면 사주 살짝 섞어도 돼. "
             "봇 티 나면 안 돼. 홍보/CTA 절대 안 함. "
             "각 글의 comment 필드에 채운 후 JSON 저장하고, "
-            "PYTHONPATH=. python3 scripts/threads_engage.py post 실행해서 댓글 달아."
+            f"PYTHONPATH=. python3 scripts/threads_engage.py post --account {account} 실행해서 댓글 달아."
         )
         result = subprocess.run(
             [claude_cmd, "-p", "--dangerously-skip-permissions", prompt],
@@ -551,13 +801,13 @@ def _run_squid_engage():
             text=True,
         )
         if result.returncode == 0:
-            logger.info("SQUID engage completed successfully")
+            logger.info(f"SQUID engage completed successfully ({account})")
         else:
-            logger.warning(f"SQUID engage failed (rc={result.returncode}): {result.stderr[:200]}")
+            logger.warning(f"SQUID engage failed ({account}, rc={result.returncode}): {result.stderr[:200]}")
     except subprocess.TimeoutExpired:
-        logger.warning("SQUID engage timed out (600s)")
+        logger.warning(f"SQUID engage timed out ({account}, 600s)")
     except Exception as e:
-        logger.warning(f"SQUID engage failed: {e}")
+        logger.warning(f"SQUID engage failed ({account}): {e}")
 
 
 def cmd_list():

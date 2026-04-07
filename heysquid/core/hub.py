@@ -223,6 +223,8 @@ def get_24h_context(messages, current_message_id):
         if msg.get("channel") == "broadcast":
             continue
 
+        if "timestamp" not in msg:
+            continue
         msg_time = datetime.strptime(msg["timestamp"], "%Y-%m-%d %H:%M:%S")
         if msg_time < cutoff_time:
             continue

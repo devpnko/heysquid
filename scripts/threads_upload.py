@@ -5,9 +5,11 @@ Threads 게시물 업로드 자동화
 사용법:
   # 최초 로그인 (브라우저 열려서 수동 로그인)
   python3 scripts/threads_upload.py --login
+  python3 scripts/threads_upload.py --login --account ambition_monkey
 
   # 텍스트 게시
   python3 scripts/threads_upload.py "게시할 텍스트"
+  python3 scripts/threads_upload.py --account ambition_monkey "게시할 텍스트"
 
   # 이미지 + 텍스트
   python3 scripts/threads_upload.py --image /path/to/image.jpg "텍스트"
@@ -23,27 +25,35 @@ import time
 
 from playwright.sync_api import sync_playwright
 
-BROWSER_DATA = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "data",
-    "threads_browser_data",
-)
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BROWSER_DATA_MAP = {
+    "dkbsqd.official": os.path.join(PROJECT_ROOT, "data", "threads_browser_data"),
+    "ambition_monkey": os.path.join(PROJECT_ROOT, "data", "threads_browser_data_ambition"),
+    "default": os.path.join(PROJECT_ROOT, "data", "threads_browser_data"),
+}
+BROWSER_DATA = BROWSER_DATA_MAP["default"]
 
 
-def clean_locks():
+def _get_browser_data(account: str = "default") -> str:
+    return BROWSER_DATA_MAP.get(account, BROWSER_DATA_MAP["default"])
+
+
+def clean_locks(browser_data: str = None):
     """브라우저 lock 파일 제거."""
+    bd = browser_data or BROWSER_DATA
     for name in ["SingletonLock", "SingletonCookie", "SingletonSocket"]:
-        path = os.path.join(BROWSER_DATA, name)
+        path = os.path.join(bd, name)
         if os.path.exists(path):
             os.remove(path)
 
 
-def create_context(playwright, headless=False):
+def create_context(playwright, headless=False, browser_data: str = None):
     """persistent context 생성."""
-    os.makedirs(BROWSER_DATA, exist_ok=True)
-    clean_locks()
+    bd = browser_data or BROWSER_DATA
+    os.makedirs(bd, exist_ok=True)
+    clean_locks(bd)
     return playwright.chromium.launch_persistent_context(
-        BROWSER_DATA,
+        bd,
         headless=headless,
         viewport={"width": 1280, "height": 900},
         args=["--disable-blink-features=AutomationControlled"],
@@ -192,10 +202,12 @@ def click_post(page):
     return False
 
 
-def do_login():
+def do_login(account: str = "default"):
     """수동 로그인 모드."""
+    bd = _get_browser_data(account)
+    print(f"계정: {account} (세션: {bd})", flush=True)
     with sync_playwright() as p:
-        context = create_context(p, headless=False)
+        context = create_context(p, headless=False, browser_data=bd)
         page = context.pages[0] if context.pages else context.new_page()
         page.goto("https://www.threads.net/login", timeout=30000)
         print("Chromium 창에서 로그인해주세요.", flush=True)
@@ -205,10 +217,11 @@ def do_login():
     print("세션 저장 완료!", flush=True)
 
 
-def upload_thread(text: str, image_path: str | None = None, dry_run: bool = False):
+def upload_thread(text: str, image_path: str | None = None, dry_run: bool = False, account: str = "default"):
     """메인 업로드 함수."""
+    bd = _get_browser_data(account)
     with sync_playwright() as p:
-        context = create_context(p, headless=False)
+        context = create_context(p, headless=False, browser_data=bd)
         page = context.pages[0] if context.pages else context.new_page()
 
         try:
@@ -247,19 +260,21 @@ def main():
     parser.add_argument("text", nargs="?", help="게시할 텍스트")
     parser.add_argument("--image", "-i", help="첨부할 이미지 경로")
     parser.add_argument("--login", action="store_true", help="로그인 모드")
+    parser.add_argument("--account", "-a", default="default",
+                        help="계정 선택 (dkbsqd.official, ambition_monkey 등)")
     parser.add_argument(
         "--dry-run", action="store_true", help="게시하지 않고 미리보기만"
     )
     args = parser.parse_args()
 
     if args.login:
-        do_login()
+        do_login(args.account)
         return
 
     if not args.text:
         parser.error("게시할 텍스트를 입력하세요 (또는 --login으로 먼저 로그인)")
 
-    success = upload_thread(args.text, args.image, args.dry_run)
+    success = upload_thread(args.text, args.image, args.dry_run, args.account)
     sys.exit(0 if success else 1)
 
 
