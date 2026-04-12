@@ -91,6 +91,47 @@ def load_and_modify(modifier_fn):
             fcntl.flock(lock_fd, fcntl.LOCK_UN)
 
 
+def _sync_to_supabase(type_: str, text: str, trace_id: str = "",
+                      room: str = "", sender: str = "", elapsed: float = None,
+                      ok: bool = None, task_name: str = None) -> None:
+    """Supabase snspilot_messages에 동기화 (실패해도 무시)."""
+    try:
+        import requests as _req
+        sb_url = os.environ.get("SUPABASE_URL", "")
+        sb_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+        asst_id = os.environ.get("HEYSQUID_ASSISTANT_ID", "")
+        if not (sb_url and sb_key and asst_id):
+            return
+        row = {
+            "assistant_id": asst_id,
+            "trace_id": trace_id,
+            "type": type_,
+            "room": room,
+            "sender": sender,
+            "text": text[:2000],
+            "ts": datetime.now().strftime("%Y-%m-%dT%H:%M:%S+09:00"),
+        }
+        if elapsed is not None:
+            row["elapsed"] = elapsed
+        if ok is not None:
+            row["ok"] = ok
+        if task_name:
+            row["task_name"] = task_name
+        _req.post(
+            f"{sb_url}/rest/v1/snspilot_messages",
+            headers={
+                "apikey": sb_key,
+                "Authorization": f"Bearer {sb_key}",
+                "Content-Type": "application/json",
+                "Prefer": "return=minimal",
+            },
+            json=row,
+            timeout=5,
+        )
+    except Exception:
+        pass
+
+
 def save_bot_response(chat_id, text, reply_to_message_ids, files=None,
                       channel="system", sent_message_id=None):
     """Save bot response to messages.json (preserve conversation context) — uses flock
@@ -119,6 +160,9 @@ def save_bot_response(chat_id, text, reply_to_message_ids, files=None,
 
     load_and_modify(_append_bot_msg)
     print(f"[LOG] Bot response saved (reply_to: {reply_to_message_ids})")
+
+    # Supabase 동기화
+    _sync_to_supabase("bot", text, trace_id=str(reply_to_message_ids[0]))
 
     # Safety net: Relay single-channel responses to other channels
     _SINGLE_CHANNELS = {"tui", "telegram", "dashboard"}

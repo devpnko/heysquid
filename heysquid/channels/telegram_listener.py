@@ -508,6 +508,17 @@ async def fetch_new_messages():
                 location_info = f" + location" if msg.get('location') else ""
                 print(f"[MSG] New message: [{msg['timestamp']}] {msg['first_name']}: {text_preview}...{file_info}{location_info}")
 
+                # Supabase 동기화
+                try:
+                    from ._msg_store import _sync_to_supabase
+                    _sync_to_supabase(
+                        "user", msg.get('text', ''),
+                        trace_id=str(msg.get('message_id', '')),
+                        sender=msg.get('first_name', ''),
+                    )
+                except Exception:
+                    pass
+
             # Detect stop commands — process before regular messages
             stop_messages = [m for m in new_messages if m['text'] and _is_stop_command(m['text'])]
             if stop_messages:
