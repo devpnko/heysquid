@@ -87,11 +87,49 @@ def _count_unprocessed() -> int:
                if m.get("type") == "user" and not m.get("processed", False))
 
 
+async def _stop_check() -> bool:
+    """claude 도는 동안 STOP("멈춰") 감시 (session.run_claude 가 호출).
+
+    getUpdates 를 offset 없이 peek 만 — 커서 전진 X (메인 폴링이 그 메시지를 정상 소비하도록).
+    STOP 키워드 발견 시 True → session 이 claude 를 killpg. 실제 interrupted.json/알림은
+    claude 종료 후 메인 루프의 fetch_new_messages → _handle_stop_command 가 처리(멱등).
+
+    별도 폴러를 띄우지 않음: claude 도는 동안 메인 폴링은 멈춰있으므로 이 peek 가
+    유일한 getUpdates consumer → 409 충돌 없음.
+    """
+    try:
+        from telegram import Bot
+        from telegram.request import HTTPXRequest
+        if not getattr(_stop_check, "_bot", None):
+            req = HTTPXRequest(connect_timeout=5, read_timeout=8, pool_timeout=3)
+            _stop_check._bot = Bot(token=tl.BOT_TOKEN, get_updates_request=req)
+        bot = _stop_check._bot
+        # 마지막으로 처리된 update_id 이후만 peek (offset 안 줘서 커서 안 전진)
+        from ..channels._msg_store import get_cursor
+        last = get_cursor("telegram", "last_update_id") or 0
+        updates = await bot.get_updates(offset=last + 1, timeout=1,
+                                        allowed_updates=["message"])
+        for u in updates:
+            m = getattr(u, "message", None)
+            if not m:
+                continue
+            if tl.ALLOWED_USERS and m.from_user and m.from_user.id not in tl.ALLOWED_USERS:
+                continue
+            text = (m.caption or m.text or "")
+            if text and tl._is_stop_command(text):
+                _log(f"[STOP] keyword '{text.strip()}' detected mid-session")
+                return True
+    except Exception as e:
+        _log(f"[WARN] _stop_check failed (non-fatal): {e}")
+    return False
+
+
 async def _drain_sessions():
     """미처리 메시지가 없어질 때까지 claude 세션을 돌림 (씹힘 0 핵심).
 
     첫 세션은 cold('new'), 이후 흡수는 hot('continue').
     각 세션이 끝나면 그 사이 도착한 메시지까지 재확인.
+    claude 도는 동안 _stop_check 로 '멈춰' 긴급 중단 감시.
     """
     mode = "new"
     while _has_unprocessed():
@@ -100,7 +138,12 @@ async def _drain_sessions():
             # 현재 세션이 check_telegram 으로 흡수하거나, 끝나면 다음 루프에서 처리.
             _log("[INFO] working.json active — deferring to current session")
             return
-        ec = await run_claude(mode)
+        ec = await run_claude(mode, stop_check=_stop_check)
+        if ec == -2:
+            # STOP 으로 중단됨 → drain 멈추고 메인 루프로. 다음 fetch_new_messages 가
+            # STOP 메시지를 소비하며 interrupted.json 저장 + 사용자 알림 (멱등).
+            _log("[STOP] session aborted by user — returning to main loop")
+            return
         if ec != 0 and ec != -1:
             _log(f"[WARN] session exit {ec} — stop draining to avoid loop")
             return

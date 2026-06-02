@@ -26,6 +26,7 @@ SPF = os.path.join(PROJECT_ROOT, "CLAUDE.md")
 # claude 세션 타임아웃 (executor.sh 는 무한 wait; 여기선 안전 상한)
 SESSION_TIMEOUT = int(os.getenv("HEYSQUID_SESSION_TIMEOUT", "1800"))  # 30분
 SESSION_END_MARKER = '"type":"result"'  # stream-json 세션 종료 신호
+STOP_POLL_INTERVAL = float(os.getenv("HEYSQUID_STOP_POLL", "2"))  # claude 도는 중 STOP 감시 주기
 
 
 def _log(msg: str):
@@ -73,10 +74,15 @@ PROMPT_CONTINUE = (
 )
 
 
-async def run_claude(mode: str = "new") -> int:
+async def run_claude(mode: str = "new", stop_check=None) -> int:
     """claude PM 세션 1회 실행. mode='new' (cold) | 'continue' (hot -c).
 
-    Return: exit code (0=정상). 세션그룹 전체를 정리하여 standby 자식 잔존 방지.
+    stop_check: async callable () -> bool. claude 도는 동안 STOP_POLL_INTERVAL 마다 호출.
+                True 반환 시 claude 세션그룹을 즉시 종료 (긴급 중단). 반환 -2.
+                (단일 asyncio 프로세스에서 '작업 중 멈춰' 를 받기 위한 경로 —
+                 별도 getUpdates 폴러를 띄우지 않고 claude 도는 동안에만 STOP 감시.)
+
+    Return: exit code (0=정상, -1=timeout, -2=STOP). 세션그룹 정리로 standby 자식 잔존 방지.
     """
     claude = _find_claude()
     if not claude:
@@ -128,7 +134,7 @@ async def run_claude(mode: str = "new") -> int:
 
     pgid = os.getpgid(proc.pid)
     try:
-        ec = await asyncio.wait_for(proc.wait(), timeout=SESSION_TIMEOUT)
+        ec = await _wait_with_stop(proc, pgid, stop_check)
     except asyncio.TimeoutError:
         _log(f"[WARN] session timeout ({SESSION_TIMEOUT}s) — killing session group")
         ec = -1
@@ -140,6 +146,33 @@ async def run_claude(mode: str = "new") -> int:
 
     _log(f"[INFO] claude session done (mode={mode}, exit={ec})")
     return ec if ec is not None else 0
+
+
+async def _wait_with_stop(proc, pgid, stop_check) -> int:
+    """proc.wait() 를 기다리되, stop_check 가 있으면 STOP 도 동시 감시.
+
+    claude 가 도는 동안 STOP_POLL_INTERVAL 마다 stop_check() 호출.
+    True → 세션그룹 즉시 kill 후 -2 반환. stop_check 없으면 단순 timeout wait.
+    """
+    if stop_check is None:
+        return await asyncio.wait_for(proc.wait(), timeout=SESSION_TIMEOUT)
+
+    deadline = time.monotonic() + SESSION_TIMEOUT
+    while True:
+        try:
+            return await asyncio.wait_for(proc.wait(), timeout=STOP_POLL_INTERVAL)
+        except asyncio.TimeoutError:
+            if time.monotonic() >= deadline:
+                raise  # 상위에서 timeout 처리
+            try:
+                hit = await stop_check()
+            except Exception as e:
+                _log(f"[WARN] stop_check error: {e}")
+                hit = False
+            if hit:
+                _log("[STOP] STOP detected during session — killing claude")
+                _kill_group(pgid)
+                return -2
 
 
 def _kill_group(pgid: int):
