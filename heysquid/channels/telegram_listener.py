@@ -198,9 +198,6 @@ async def _handle_stop_command(msg_data):
     if cleared:
         print(f"[STOP] Cleared {cleared} unprocessed messages")
 
-    # Notify user (async — prevent event loop conflicts)
-    from .telegram import send_message
-
     if working_info:
         task_name = working_info.get("instruction_summary", "unknown")
         reply = f"Task stopped.\n\nStopped task: {task_name}\n\nPlease send a new instruction."
@@ -209,8 +206,23 @@ async def _handle_stop_command(msg_data):
     else:
         reply = "No task is currently running."
 
-    await send_message(chat_id, reply)
-    print(f"[STOP] Stop notification sent")
+    # Notify user — 새 Bot 인스턴스로 직접 발신 (stale 싱글톤 _bot 의 'Event loop is closed' 회피).
+    # gateway 의 STOP 경로는 killpg 직후 현재 루프에서 호출되는데, telegram.py 의 _bot
+    # 싱글톤이 다른 루프(register_bot_commands_sync 등)에 묶여 첫 발신이 깨지던 버그 fix.
+    try:
+        from telegram import Bot as _Bot
+        from telegram.request import HTTPXRequest as _Req
+        _b = _Bot(token=BOT_TOKEN, request=_Req(connect_timeout=10, read_timeout=15))
+        try:
+            await _b.send_message(chat_id=chat_id, text=reply, parse_mode=None)
+        finally:
+            try:
+                await _b.shutdown()
+            except Exception:
+                pass
+        print(f"[STOP] Stop notification sent")
+    except Exception as e:
+        print(f"[STOP] Stop notification failed: {e}")
 
 
 def setup_bot_token():
